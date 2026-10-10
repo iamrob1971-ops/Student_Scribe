@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Student Scribe</title>
+<title>Student Study</title>
 <!-- Google Fonts: Lexend for Dyslexia Reading Ease -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +18,17 @@
 }
 :root[data-t="peach"] { --bg: #FCE8DE; --card: #FFF6F1; --line: #EFCFBF; --sel: #FBD9C6; }
 :root[data-t="blue"]  { --bg: #E3E9EF; --card: #F2F5F8; --line: #C9D3DD; --sel: #CBD9EA; }
-:root[data-t="dark"]  { --bg: #1E1E1E; --card: #2A2A2E; --ink: #EDEBE4; --mut: #A9ADBD; --line: #44444C; --acc: #7EA8FF; --sel: #33405E; }
+:root {
+  --ok-bg: #E6F4EA; --no-bg: #FCE8E6;
+  --warn-bg: #FEF3C7; --warn-line: #FCD34D; --warn-ink: #92400E;
+  --good-bg: #D1FAE5; --good-line: #6EE7B7; --good-ink: #065F46;
+  --err-bg: #FDECEF; --err-line: #F8B4B4; --err-ink: #9B1C1C;
+}
+:root[data-t="dark"]  { --bg: #1E1E1E; --card: #2A2A2E; --ink: #EDEBE4; --mut: #A9ADBD; --line: #44444C; --acc: #7EA8FF; --sel: #33405E;
+  --ok-bg: #1F3A2C; --no-bg: #4A2520;
+  --warn-bg: #3D3214; --warn-line: #8A6D1F; --warn-ink: #F5D88A;
+  --good-bg: #173A2C; --good-line: #2E7D5B; --good-ink: #A7F3D0;
+  --err-bg: #44232A; --err-line: #8B3A44; --err-ink: #FBC4C4; }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -30,16 +40,16 @@ body {
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--c); outline-offset: 2px; }
 
-.app { max-width: 860px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+.app { max-width: 860px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; position: relative; overflow-x: hidden; }
 @media (min-width: 1020px) {
-  .app { max-width: 1300px; }
+  .app { max-width: 1320px; }
   main.two { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
   main.two #s-chat [data-scope], main.two #s-quiz [data-scope] { display: none; }
 }
 
 /* Header & Ribbons */
 .top { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 6px; flex-wrap: wrap; gap: 10px; }
-.brand { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.brand { font-size: 21px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .top-actions { display: flex; align-items: center; gap: 10px; }
 .tints { display: flex; gap: 8px; }
 .tints button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; transition: transform .1s; }
@@ -68,6 +78,7 @@ main { padding: 4px 18px 140px; flex: 1; }
 .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 10px; background: var(--sel); color: var(--ink); margin-left: 6px; }
 .btn { border: 0; background: var(--c); color: #fff; border-radius: 14px; padding: 12px 20px; font-weight: 600; cursor: pointer; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn.alt { background: var(--card); border: 2px solid var(--line); color: var(--ink); }
+.btn.sm { padding: 6px 14px; font-size: 13px; min-height: 36px; border-radius: 10px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
@@ -78,12 +89,12 @@ main { padding: 4px 18px 140px; flex: 1; }
 .rec:hover { transform: scale(1.04); }
 .rec.on { background: var(--bad); animation: pulse 1.6s infinite; }
 @keyframes pulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.05); box-shadow: 0 0 28px rgba(194,84,58,.5); } }
-.banner { background: #FEF3C7; border: 1.5px solid #FCD34D; color: #92400E; border-radius: 14px; padding: 12px 16px; font-size: 14px; margin: 12px 0; font-weight: 500; }
-.banner.ok { background: #D1FAE5; border-color: #6EE7B7; color: #065F46; }
+.banner { background: var(--warn-bg); border: 1.5px solid var(--warn-line); color: var(--warn-ink); border-radius: 14px; padding: 12px 16px; font-size: 14px; margin: 12px 0; font-weight: 500; }
+.banner.ok { background: var(--good-bg); border-color: var(--good-line); color: var(--good-ink); }
 
 /* Timeline & Level Select Track */
 .track { display: flex; gap: 12px; overflow-x: auto; padding: 8px 4px 14px; scroll-snap-type: x mandatory; }
-.tile { flex: none; width: 122px; min-height: 160px; scroll-snap-align: start; border: 3px solid var(--line); background: var(--card); border-radius: 20px; text-align: center; cursor: pointer; padding: 12px 6px; position: relative; }
+.tile { flex: none; width: 124px; min-height: 160px; scroll-snap-align: start; border: 3px solid var(--line); background: var(--card); border-radius: 20px; text-align: center; cursor: pointer; padding: 12px 6px; position: relative; }
 .tile .ic { font-size: 38px; display: block; line-height: 1.3; }
 .tile b { display: block; font-size: 15px; margin-top: 4px; }
 .tile small { display: block; color: var(--mut); font-size: 13px; line-height: 1.25; }
@@ -96,7 +107,7 @@ main { padding: 4px 18px 140px; flex: 1; }
 .scope { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--sel); border-radius: 14px; padding: 10px 14px; margin: 8px 0; font-size: 15px; font-weight: 500; }
 .mode-pill { background: var(--c); color: #fff; border-radius: 999px; padding: 2px 12px; font-weight: 600; font-size: 13px; }
 
-/* Floating Combine Action Bar */
+/* Floating Action Bar */
 .pick-bar { position: fixed; left: 0; right: 0; bottom: 74px; display: none; justify-content: center; pointer-events: none; z-index: 100; }
 .pick-bar div { pointer-events: auto; background: var(--card); border: 2px solid var(--c); border-radius: 20px; padding: 10px 18px; display: flex; gap: 14px; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
 
@@ -104,11 +115,29 @@ main { padding: 4px 18px 140px; flex: 1; }
 .msg { padding: 12px 16px; border-radius: 16px; margin: 10px 0; max-width: 90%; }
 .msg.me { background: var(--c); color: #fff; margin-left: auto; }
 .msg.ai { background: var(--card); border: 1.5px solid var(--line); }
+.msg.err { background: var(--err-bg); border: 1.5px solid var(--err-line); color: var(--err-ink); }
 .opt { display: block; width: 100%; text-align: left; margin: 10px 0; border: 2px solid var(--line); background: var(--card); border-radius: 14px; padding: 14px; cursor: pointer; min-height: 58px; font-weight: 500; transition: border-color .15s; }
-.opt.ok { border-color: var(--ok); background: #E6F4EA; }
-.opt.no { border-color: var(--bad); background: #FCE8E6; }
+.opt.ok { border-color: var(--ok); background: var(--ok-bg); }
+.opt.no { border-color: var(--bad); background: var(--no-bg); }
+.cls:disabled { opacity: .5; cursor: not-allowed; }
+.md h2, .md h3, .md h4 { font-size: 16px; margin: 10px 0 4px; color: var(--c); }
+.md p { margin: 6px 0; }
+.opt:disabled { cursor: default; }
 .progress-bar { height: 14px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 16px; }
 .progress-bar i { display: block; height: 100%; background: var(--ok); transition: width .3s ease; }
+
+/* Canvas & Teacher Handout Dropzone */
+.handout-box { background: var(--card); border: 2px dashed var(--line); border-radius: 16px; padding: 16px; margin: 12px 0; }
+.handout-preview { font-size: 13px; color: var(--mut); margin-top: 6px; }
+
+/* Slide-Out Chat History Drawer */
+.drawer { position: fixed; top: 0; right: -360px; width: 340px; height: 100%; background: var(--card); border-left: 2px solid var(--line); box-shadow: -6px 0 24px rgba(0,0,0,.12); z-index: 150; transition: right .25s ease; display: flex; flex-direction: column; }
+.drawer.open { right: 0; }
+.drawer-head { padding: 16px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.drawer-body { padding: 12px; overflow-y: auto; flex: 1; display: grid; gap: 8px; }
+.thread-item { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); cursor: pointer; font-size: 14px; }
+.thread-item:hover { border-color: var(--c); }
+.thread-item.active { border-color: var(--c); background: var(--sel); }
 
 /* Navigation Dock */
 nav.dock { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1.5px solid var(--line); display: flex; justify-content: center; z-index: 90; }
@@ -116,14 +145,14 @@ nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color:
 nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
 nav.dock button.on { color: var(--c); font-weight: 700; }
 
-/* Settings Modal Dialog */
+/* Settings & PIN Dialog Modals */
 dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
 dialog::backdrop { background: rgba(30,30,30,.55); }
 .dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .dlg-body { padding: 18px 22px; overflow-y: auto; max-height: calc(90vh - 140px); display: grid; gap: 14px; }
 .dlg-body h4 { margin: 12px 0 4px; color: var(--c); text-transform: uppercase; font-size: 13px; letter-spacing: .04em; }
 .dlg-body label { display: grid; gap: 4px; font-size: 14px; font-weight: 500; }
-.dlg-body input, .dlg-body select { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); }
+.dlg-body input, .dlg-body select, .dlg-body textarea { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); }
 .dlg-foot { padding: 14px 22px; border-top: 1.5px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; }
 .toast { position: fixed; left: 50%; bottom: 84px; transform: translate(-50%, 20px); background: #2B2A33; color: #fff; padding: 10px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: .2s; z-index: 200; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -134,16 +163,16 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <div class="app">
   <!-- Top Header -->
   <header class="top">
-    <div class="brand">📓 Student Scribe</div>
+    <div class="brand">📓 Student Study</div>
     <div class="top-actions">
-      <button class="tog" id="ancBtn">Aa Anchor bold: On</button>
+      <button class="tog" id="ancBtn">Aa Anchor bold: Off</button>
       <div class="tints" aria-label="Color Theme">
         <button style="background:#FDFBF7" data-t="cream" title="Cream"></button>
         <button style="background:#FCE8DE" data-t="peach" title="Peach"></button>
         <button style="background:#E3E9EF" data-t="blue" title="Blue"></button>
         <button style="background:#1E1E1E" data-t="dark" title="Dark"></button>
       </div>
-      <button class="btn-icon" id="openCfgBtn" title="Parent & Cloud Settings">⚙️</button>
+      <button class="btn-icon" id="openCfgBtn" title="Parent & Settings Vault">⚙️</button>
     </div>
   </header>
 
@@ -153,9 +182,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <!-- Screen 1: Record Class -->
   <main id="mainWrap">
     <section class="screen on" id="s-rec">
-      <p class="center" id="recScheduleHint" style="font-weight:600;font-size:18px">🕘 Period 2 → Physical Science is ready. Tap Record.</p>
+      <p class="center" id="recScheduleHint" style="font-weight:600;font-size:18px"></p>
       <div class="banner ok center" id="safeBanner">
-        🔒 Audio saves safely every 10 seconds. Closing the laptop lid during class will not lose your notes.
+        🔒 Audio saves every 10 seconds, so a crash or closed tab keeps what was already recorded. Keep the lid open: a closed lid pauses the microphone.
       </div>
 
       <div class="rec-wrap">
@@ -164,7 +193,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       </div>
 
       <div class="card" id="homeSyncCard" style="margin-top:24px">
-        <h3>⚡ Study Hall & Home Wi-Fi</h3>
+        <h3>⚡ Study Hall &amp; Home Wi-Fi</h3>
         <p id="queueStatusText">Loading saved sessions...</p>
         <div class="chips">
           <button class="btn" id="batchProcessBtn">🚀 Process Lectures with AI</button>
@@ -177,35 +206,57 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <section class="screen" id="s-cls">
       <div class="chips">
         <button class="btn alt" data-q="today">🎯 Just today</button>
-        <button class="btn alt" data-q="unit">🗺️ This unit</button>
-        <button class="btn alt" data-q="test">📝 Next test</button>
-        <button class="btn alt" data-q="all">🔁 All parts</button>
+        <button class="btn alt" data-q="test">📝 Last 2 parts</button>
+        <button class="btn alt" data-q="unit">🗺️ Whole unit</button>
+        <button class="btn alt" data-q="none">✕ Clear</button>
       </div>
       <div class="wk">
         <button id="prevUnitBtn" aria-label="Previous unit">◀</button>
-        <b id="unitTitleLbl" style="font-size:18px">Unit 2 · Forces &amp; Motion</b>
+        <b id="unitTitleLbl" style="font-size:18px"></b>
         <button id="nextUnitBtn" aria-label="Next unit">▶</button>
       </div>
       <div class="track" id="unitTrack"></div>
-      <p class="center" style="font-size:14px;color:var(--mut)">Tap any lecture card to view it. Pick multiple cards to enter Exam Prep.</p>
+      <p class="center" style="font-size:14px;color:var(--mut)">Tap any lecture card to view notes. Pick multiple cards to enter Exam Prep.</p>
     </section>
 
     <!-- Screen 3: Study Guide -->
     <section class="screen" id="s-guide">
       <div class="scope" data-scope></div>
       <div id="guideContent"></div>
+
+      <!-- Canvas / Teacher Notes Enrichment Dropzone -->
+      <div class="handout-box" id="handoutDropzone">
+        <div class="row">
+          <b style="font-size:15px;color:var(--c)">📎 Enrich with Teacher Notes / Canvas</b>
+          <input type="file" id="handoutFileInput" accept=".pdf,.txt,.md,text/plain,application/pdf" style="display:none">
+          <button class="btn alt sm" id="attachHandoutBtn">📄 Attach PDF or TXT</button>
+        </div>
+        <textarea id="handoutTextNotes" rows="3" placeholder="Or paste homework instructions, slides, or syllabus notes here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)"></textarea>
+        <div class="row" style="margin-top:8px">
+          <span class="handout-preview" id="stagedFileName">No handout attached.</span>
+          <button class="btn sm" id="reSynthesizeBtn">🔄 Re-Synthesize Notes</button>
+        </div>
+      </div>
     </section>
 
     <!-- Screen 4: Ask Coach (Interactive Grounded Chat) -->
     <section class="screen" id="s-chat">
       <div class="scope" data-scope></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px">
+        <span id="chatSubjectBadge" style="font-size:13px;font-weight:600;color:var(--c)">Active Channel: Biology I</span>
+        <div style="display:flex;gap:8px">
+          <button class="say" id="openChatHistoryBtn">💬 History</button>
+          <button class="say" id="newChatBtn">➕ New Chat</button>
+        </div>
+      </div>
       <div id="chatFeed"></div>
-      <div class="chips">
+      <div class="chips" id="chatChips">
         <button class="btn alt sample-q">What's on the test?</button>
-        <button class="btn alt sample-q">Explain it with a video game analogy</button>
+        <button class="btn alt sample-q">Explain it with a real-world analogy</button>
+        <button class="btn alt sample-q">Give me a quick 3-question drill</button>
       </div>
       <div class="card row" style="padding:10px 14px">
-        <input type="text" id="chatInput" placeholder="Type or speak a question..." style="flex:1;border:0;background:transparent;outline:none">
+        <input type="text" id="chatInput" placeholder="Ask your coach anything..." style="flex:1;border:0;background:transparent;outline:none">
         <button class="say" id="chatMicBtn">🎤 Speak</button>
         <button class="btn" id="chatSendBtn" style="min-height:40px;padding:8px 16px">Send</button>
       </div>
@@ -221,33 +272,58 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <!-- Sticky Multi-Select Action Bar -->
   <div class="pick-bar" id="pickBar">
     <div>
-      <b id="pickCountLbl">✅ 2 lectures selected</b>
+      <b id="pickCountLbl">✅ 2 parts selected</b>
       <button class="btn" data-go="guide">Study Selected ▶</button>
     </div>
   </div>
+
+  <!-- Slide-Out Chat History Drawer -->
+  <aside class="drawer" id="chatHistoryDrawer">
+    <div class="drawer-head">
+      <b style="font-size:15px;color:var(--c)">💬 Saved Threads</b>
+      <button class="say" id="closeDrawerBtn">✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
 
   <!-- Bottom Navigation Dock -->
   <nav class="dock">
     <button class="on" data-go="rec"><span>🎙️</span>Record</button>
     <button data-go="cls"><span>🗺️</span>Unit Map</button>
-    <button data-go="guide"><span>📝</span>Guide</button>
-    <button data-go="chat"><span>💬</span>Ask</button>
-    <button data-go="quiz"><span>🎮</span>Practice</button>
+    <button data-go="guide"><span>📝</span>Study Guide</button>
+    <button data-go="chat"><span>💬</span>Ask Coach</button>
+    <button data-go="quiz"><span>🎯</span>Practice</button>
   </nav>
 </div>
+
+<!-- Parent PIN Access Modal -->
+<dialog class="cfg-dlg" id="pinDlg" style="max-width:380px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">🔒 Parent &amp; Settings Gate</h3>
+    <button class="say" id="closePinBtn">✕</button>
+  </div>
+  <div class="dlg-body" style="text-align:center">
+    <p style="font-size:14px;color:var(--mut);margin:0">Enter 4-digit PIN to access cloud &amp; learner settings:</p>
+    <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••" style="font-size:28px;text-align:center;letter-spacing:.3em;width:140px;margin:10px auto">
+    <p id="pinError" style="color:var(--bad);font-size:13px;display:none">Incorrect PIN. Try again.</p>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="submitPinBtn" style="width:100%">Unlock Settings</button>
+  </div>
+</dialog>
 
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Cloud Sync</h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile</h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
-    <h4>AI Provider &amp; Model</h4>
+    <h4>AI Provider &amp; Model (Google Gemini 3-Series)</h4>
     <label>Active Engine
       <select id="cfgProvider">
-        <option value="gemini">Google Gemini (Recommended / High Concurrency)</option>
-        <option value="azure">Azure OpenAI APIM Gateway (Whisper + GPT)</option>
+        <option value="gemini">Google Gemini (3-Series Flash / Flash-Lite)</option>
+        <option value="azure">Azure OpenAI APIM Gateway</option>
       </select>
     </label>
 
@@ -255,28 +331,36 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <label>Google Gemini API Key
         <input type="password" id="geminiApiKey" placeholder="Paste Google AI Studio Key">
       </label>
-      <label>Model
-        <input type="text" id="geminiModel" value="gemini-2.5-flash">
+      <label>Primary Model
+        <select id="geminiModelSelect">
+          <option value="gemini-3.8-flash">gemini-3.8-flash (Recommended Flagship)</option>
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Fastest / Lowest Latency)</option>
+          <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (High-Efficiency Fallback)</option>
+        </select>
       </label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <button class="btn alt sm" id="testGeminiBtn" type="button">🔌 Verify Key &amp; List Models</button>
+        <span id="geminiStatusBadge" style="font-size:12px;color:var(--mut)"></span>
+      </div>
     </div>
 
     <div id="azureBox" style="display:none">
       <label>APIM Endpoint
         <input type="text" id="azureEndpoint" placeholder="https://your-apim.azure-api.net/openai">
       </label>
-      <label>GPT Deployment
+      <label>Deployment Name
         <input type="text" id="azureGptDeploy" value="gpt-4o-mini">
       </label>
       <label>Whisper Deployment
         <input type="text" id="azureWhisperDeploy" value="whisper">
       </label>
       <label>APIM Subscription Key
-        <input type="password" id="azureSubKey" placeholder="Optional subscription key">
+        <input type="password" id="azureSubKey" placeholder="Leave blank if APIM requires no key">
       </label>
     </div>
 
     <h4>SharePoint Sync (Bible_App Tenant)</h4>
-    <p style="font-size:13px;color:var(--mut);margin:0">Syncs study guides to <code>Student_Lectures</code> and upcoming tests to <code>Student_Deadlines</code>.</p>
+    <p style="font-size:13px;color:var(--mut);margin:0">Writes study guide to <code>Student_Lectures</code> and tests to <code>Student_Deadlines</code>.</p>
     <label>Tenant Authority
       <input type="text" id="spAuthority" value="https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7">
     </label>
@@ -284,24 +368,42 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <input type="text" id="spClientId" value="bc4efc91-8b56-4f59-bf0e-f42e4724e2f6">
     </label>
     <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
-      <button class="btn alt" id="msSignInBtn">Sign In with Microsoft</button>
+      <button class="btn alt sm" id="msSignInBtn">Sign In with Microsoft</button>
       <span id="msUserBadge" style="font-size:13px;font-weight:600">Not signed in</span>
     </div>
 
-    <h4>Student Learning Profile</h4>
-    <label>Student Interests (Used for real-world analogies)
-      <input type="text" id="cfgInterests" value="video games, sports, car engines, building">
+    <h4>Target Reading Level Governor</h4>
+    <label>Reading &amp; Syntactic Complexity Level
+      <select id="cfgReadingLevel">
+        <option value="5" selected>Grade 5 (Current Baseline: Short sentences, high phonetic grounding)</option>
+        <option value="6">Grade 6 (Intermediate Step: Adds compound clauses &amp; parenthetical terms)</option>
+        <option value="7">Grade 7 (Developing: Standard transitional high school phrasing)</option>
+        <option value="8">Grade 8 (Advanced: Deeper contextual vocabulary)</option>
+        <option value="9">Grade 9 (Full High School Grade-Level Rigor)</option>
+      </select>
+    </label>
+
+    <h4>Functional Learner Profile (Prompt Injector)</h4>
+    <p style="font-size:12px;color:var(--mut);margin:0">Functional prompt guidance (no medical labels). Saved locally on this device.</p>
+    <textarea id="hiddenProfileText" rows="5" style="width:100%;font-size:13px;line-height:1.5"></textarea>
+
+    <h4>Master AI Prompt Instructions</h4>
+    <textarea id="masterSystemPrompt" rows="5" style="width:100%;font-size:13px;line-height:1.5"></textarea>
+
+    <h4>Security &amp; TTS Settings</h4>
+    <label>Change Parent PIN
+      <input type="password" id="cfgNewPin" maxlength="4" inputmode="numeric" style="width:120px">
     </label>
     <label>Read Aloud (TTS) Speed
       <select id="cfgTtsRate">
         <option value="0.85">0.85x (Slower &amp; deliberate)</option>
-        <option value="0.92" selected>0.92x (Recommended for dyslexia)</option>
+        <option value="0.92" selected>0.92x (Paced for Auditory Processing)</option>
         <option value="1.0">1.0x (Normal speed)</option>
       </select>
     </label>
   </div>
   <div class="dlg-foot">
-    <button class="btn" id="saveCfgBtn">Save &amp; Close</button>
+    <button class="btn" id="saveCfgBtn">Save All &amp; Close</button>
   </div>
 </dialog>
 
@@ -309,91 +411,188 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 
 <script>
 /* =====================================================================
-   SECTION 1 - MASTER STATE & PRE-CONFIGURED CLASSES
+   SECTION 1 - MASTER STATE & MULTI-SUBJECT CURRICULUM
    ===================================================================== */
 const CLASSES = [
-  { code: 'SCI_PHYS', name: 'Physical Science', period: 2, color: '#2F6FDE', icon: '🧪' },
-  { code: 'ALG_1',    name: 'Algebra 1',        period: 3, color: '#8A4FD6', icon: '📐' },
-  { code: 'HIST_WLD', name: 'World History',    period: 5, color: '#C2703A', icon: '📜' },
-  { code: 'ENG_9',    name: 'English 9',        period: 1, color: '#2E7D5B', icon: '📚' }
+  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    color: '#2F6FDE', icon: '🧬' },
+  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   color: '#8A4FD6', icon: '📐' },
+  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', color: '#C2703A', icon: '📖' },
+  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', color: '#2E7D5B', icon: '📚' },
+  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    color: '#D97706', icon: '🍎' }
 ];
 
-let activeClassCode = 'SCI_PHYS';
-let anchorBoldOn = true;
-let currentUnitIndex = 2; // Defaults to Unit 2
-let pickedLectures = { 11: true }; // Default to current lecture
+// CLEAN FUNCTIONAL PROFILE (No PII or clinical diagnostic labels)
+const DEFAULT_PROFILE = `STUDENT PROFILE: High school student with visual and auditory processing fatigue.
+READING CEILING: Target Grade Level: {LEVEL}. Keep sentences punchy, direct, and scannable. Zero walls of text. Do NOT use childish tone; speak to him as a mature young adult.
+ANALOGY POOL: Commercial Aviation (aerodynamics, cockpits, jet engines, flight levels), WWII Tactics & Strategy, Bicycle & Engine Mechanics, Soccer Pitch Tactics, Video Game Physics, Coding logic.
+STRATEGY: Break answers into 3-4 bullet chunks. Bold the first letters of key terms. Draw fluidly from this variety of topics—do NOT repeat aviation on every concept. Keep comparisons natural and fresh. End with a quick 1-sentence check question.`;
+
+const DEFAULT_SYSTEM_PROMPT = `You are a supportive, high-caliber study coach for a 9th-grade student.
+Follow the hidden functional profile provided.
+Keep responses concise, clear, and punchy.
+Never lecture in long paragraphs. Use clear bullet points and bold anchor stems.
+Ground all science and math concepts in realistic analogies across aviation, war history, mechanics, soccer, or gaming.`;
+
+const CURRICULUM = {
+  BIO_1: {
+    unitKey: 'U2', unitTitle: 'Unit 2 · Cells & Energy',
+    lectures: [
+      {
+        id: 'bio_1', i: '🔋', d: 'Mon', n: 5, t: 'ATP Energy',
+        c: 'ATP is the rechargeable battery that powers every cell.',
+        bold_stem: 'ATP Molecule',
+        analogy: 'Like the main battery on an airliner flight deck—when charged, it provides instant power to fly.',
+        cue: 'ATP loses a phosphate to release energy (becomes ADP)', ts: '11:20',
+        q: ['What is the primary job of ATP in a living cell?', ['Store genetic code', 'Provide instant cellular energy', 'Build bones'], 1]
+      },
+      {
+        id: 'bio_2', i: '🍃', d: 'Tue', n: 6, t: 'Chloroplasts',
+        c: 'Chloroplasts absorb sunlight to build glucose sugar in plants.',
+        bold_stem: 'Photosynthesis',
+        analogy: 'Solar panels on a wing converting sunlight directly into stored battery fuel.',
+        cue: 'Chlorophyll is the green pigment absorbing light', ts: '16:45',
+        q: ['What do chloroplasts convert sunlight into?', ['Protein', 'Chemical energy (Glucose)', 'Water'], 1]
+      },
+      {
+        id: 'bio_3', i: '⚡', d: 'Wed', n: 7, t: 'Mitochondria',
+        c: 'Mitochondria break down glucose into ATP through cellular respiration.',
+        bold_stem: 'Cell Powerhouse',
+        analogy: 'The jet engine of the cell—combusting fuel and air to generate massive thrust.',
+        cue: 'Lab on yeast respiration due Thursday', ts: '28:10',
+        q: ['Which organelle acts as the cell’s engine to make ATP?', ['Mitochondria', 'Nucleus', 'Cell wall'], 0]
+      },
+      {
+        id: 'bio_4', i: '💨', d: 'Thu', n: 8, t: 'Aerobic vs Anaerobic',
+        c: 'Aerobic respiration requires oxygen; anaerobic operates without it.',
+        bold_stem: 'Oxygen Requirement',
+        analogy: 'Cruising with twin jet engines (oxygen) vs gliding on emergency backup when engines flame out.',
+        cue: 'Lactic acid buildup happens without oxygen', ts: '08:30',
+        q: ['What does aerobic respiration require that anaerobic does not?', ['Water', 'Carbon', 'Oxygen'], 2]
+      },
+      {
+        id: 'bio_5', i: '🎯', d: 'Fri', n: 9, t: 'Respiration Equation',
+        c: 'The chemical formula: Glucose + Oxygen = Carbon Dioxide + Water + ATP.',
+        bold_stem: 'Respiration Equation',
+        analogy: 'The fuel burn equation: Jet-A Fuel + Compressed Air = Thrust + Exhaust.',
+        cue: 'Quiz on Cell Respiration and Photosynthesis this Friday!', ts: '14:20',
+        q: ['What are the two starting ingredients for cellular respiration?', ['Glucose and Oxygen', 'Sunlight and Carbon', 'Water and Salt'], 0]
+      }
+    ]
+  },
+  ALG_1: {
+    unitKey: 'U1', unitTitle: 'Unit 1 · Linear Equations & Slope',
+    lectures: [
+      {
+        id: 'alg_1', i: '📈', d: 'Mon', n: 12, t: 'Slope (m)',
+        c: 'Slope is the rate of change: rise over run (vertical change divided by horizontal change).',
+        bold_stem: 'Rate of Climb',
+        analogy: 'Aircraft climb gradient: how many feet of altitude you gain for every mile forward.',
+        cue: 'm = (y2 - y1) / (x2 - x1) will be on the midterm', ts: '09:40',
+        q: ['Slope is best described as…', ['Rise over run', 'Total distance', 'Center of circle'], 0]
+      },
+      {
+        id: 'alg_2', i: '🎯', d: 'Tue', n: 13, t: 'Y-Intercept (b)',
+        c: 'The y-intercept is where the line crosses the vertical y-axis when x equals zero.',
+        bold_stem: 'Field Elevation',
+        analogy: 'Airport runway elevation above sea level before the takeoff roll begins.',
+        cue: 'In y = mx + b, b is always the starting point', ts: '15:10',
+        q: ['In y = mx + b, what letter represents the y-intercept?', ['m', 'x', 'b'], 2]
+      },
+      {
+        id: 'alg_3', i: '📐', d: 'Wed', n: 14, t: 'Slope-Intercept Form',
+        c: 'y = mx + b allows you to graph any straight line immediately using starting point and slope.',
+        bold_stem: 'Flight Plan Formula',
+        analogy: 'Altitude profile: Current Altitude = (Climb Rate × Minutes) + Starting Elevation.',
+        cue: 'Test on graphing slope-intercept next Tuesday', ts: '22:05',
+        q: ['What type of graph does y = mx + b always produce?', ['A circle', 'A straight line', 'A wave'], 1]
+      }
+    ]
+  },
+  BBL_FDN: {
+    unitKey: 'U1', unitTitle: 'Unit 1 · Creation & Covenants',
+    lectures: [
+      {
+        id: 'bbl_1', i: '🌍', d: 'Mon', n: 2, t: 'Creation Order',
+        c: 'God brings cosmos out of chaos, creating by divine word with intentional design.',
+        bold_stem: 'Divine Blueprint',
+        analogy: 'An aeronautical engineer designing an aircraft wing with purposeful physics, not random chance.',
+        cue: 'Know Genesis 1:1 key themes', ts: '10:15',
+        q: ['How did God create according to Genesis 1?', ['By Speaking His Word', 'By accident', 'Through chaos'], 0]
+      },
+      {
+        id: 'bbl_2', i: '🤝', d: 'Wed', n: 4, t: 'Abrahamic Covenant',
+        c: 'God makes a binding, unconditional promise: land, descendants, and worldwide blessing.',
+        bold_stem: 'Unbreakable Contract',
+        analogy: 'An air traffic control clearance that guarantees your flight route with zero deviation.',
+        cue: 'Faith counted as righteousness (Gen 15:6)', ts: '18:50',
+        q: ['What was promised in the Abrahamic Covenant?', ['Land, family, and blessing', 'Instant wealth only', 'An army'], 0]
+      }
+    ]
+  },
+  ENG_1: {
+    unitKey: 'U1', unitTitle: 'Unit 1 · Narrative Structure & Voice',
+    lectures: [
+      {
+        id: 'eng_1', i: '📖', d: 'Tue', n: 8, t: 'Plot Mountain',
+        c: 'Exposition, rising action, climax, falling action, and resolution form the spine of stories.',
+        bold_stem: 'Flight Profile',
+        analogy: 'Takeoff roll, climb to altitude, reaching maximum cruising ceiling (climax), descent, and landing.',
+        cue: 'Climax is the turning point of greatest tension', ts: '14:00',
+        q: ['What is the highest point of story tension?', ['Exposition', 'Climax', 'Resolution'], 1]
+      }
+    ]
+  },
+  WLN_1: {
+    unitKey: 'U1', unitTitle: 'Unit 1 · Sleep & Cognitive Recovery',
+    lectures: [
+      {
+        id: 'wln_1', i: '💤', d: 'Thu', n: 10, t: 'Sleep Architecture',
+        c: 'REM sleep consolidates memory and cognitive clarity; deep sleep restores physical muscle.',
+        bold_stem: 'Hangar Maintenance',
+        analogy: 'Overnight maintenance and defragging aircraft flight computers so they don’t glitch in flight.',
+        cue: '8-9 hours required for teen working memory', ts: '07:45',
+        q: ['Which sleep stage is critical for memory consolidation?', ['Light Sleep', 'REM Sleep', 'Pre-sleep'], 1]
+      }
+    ]
+  }
+};
+
+let activeClassCode = 'BIO_1';
+let anchorBoldOn = false; // Defaulted to OFF based on research feedback
+let pickedLectures = {};
 let quizIndex = 0;
 let quizScore = 0;
-
-// Embedded Demo Unit Data (Provides immediate interaction out of the box)
-let LECTURES = [
-  {
-    id: 7, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🧭', d: 'Mon', n: 5, t: 'Force',
-    c: 'A force is a push or a pull that changes motion.',
-    bold_stem: 'Force',
-    analogy: 'Like applying pressure to a controller joystick: no push means no character movement.',
-    cue: 'Know contact vs non-contact forces', ts: '12:10',
-    q: ['A force is best defined as a…', ['Push or pull', 'Speed measurement', 'Color'], 0]
-  },
-  {
-    id: 8, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🚀', d: 'Tue', n: 6, t: 'Acceleration',
-    c: 'Acceleration is how quickly speed or direction changes.',
-    bold_stem: 'Acceleration',
-    analogy: 'Hitting the nitro boost in a racing game—it is not just high speed, it is how fast you gain speed.',
-    cue: 'F = m × a will be on the test', ts: '18:40',
-    q: ['Acceleration measures change in…', ['Mass', 'Speed or direction', 'Gravity only'], 1]
-  },
-  {
-    id: 9, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '⚖️', d: 'Wed', n: 7, t: 'Balance',
-    c: 'Balanced forces cancel out, causing zero change in motion.',
-    bold_stem: 'Balanced Forces',
-    analogy: 'Two players pushing against each other with equal strength—neither one moves.',
-    cue: 'Lab report due tomorrow', ts: '31:05',
-    q: ['When forces are balanced, an object…', ['Stops or stays at constant speed', 'Explodes', 'Spins faster'], 0]
-  },
-  {
-    id: 10, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🍎', d: 'Thu', n: 8, t: 'Gravity',
-    c: 'Gravity pulls all objects toward the center of the Earth.',
-    bold_stem: 'Gravity',
-    analogy: 'The game boundary that keeps your character grounded so you do not float into space.',
-    cue: 'Mass never changes, weight does', ts: '09:15',
-    q: ['Gravity pulls objects toward…', ['The Moon', 'Earth’s center', 'The clouds'], 1]
-  },
-  {
-    id: 11, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🎯', d: 'Fri', n: 9, t: "Newton's Laws",
-    c: "Newton's 3 laws: inertia, F = m × a, and action-reaction.",
-    bold_stem: "Newton's Laws",
-    analogy: 'Inertia is like a heavy tank in a game—slow to get rolling, but once moving, almost impossible to stop.',
-    cue: 'Quiz on Laws 1–3 this Friday!', ts: '14:20',
-    q: ['Which law states: Every action has an equal and opposite reaction?', ['First Law', 'Second Law', 'Third Law'], 2]
-  }
-];
+let quizMissed = [];      // lecture ids missed in the current run
+let quizRetryIds = null;  // when set, the drill only covers these lecture ids
+let stagedPdfBase64 = null;
+let stagedPdfName = null;
+let currentChatHistory = []; // Multi-turn memory
 
 /* =====================================================================
-   SECTION 2 - INDEXEDDB RESILIENT LOCAL STORAGE VAULT
+   SECTION 2 - INDEXEDDB STORAGE (SINGLE CONNECTION PROMISE)
    ===================================================================== */
-const DB_NAME = 'StudentScribe_v1';
+const DB_NAME = 'StudentStudy_v2';
 const DB_VERSION = 1;
+let dbPromise = null;
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('chunks')) {
-        db.createObjectStore('chunks', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('lectures')) {
-        db.createObjectStore('lectures', { keyPath: 'clientId' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function getDB() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return dbPromise;
 }
 
 async function idbPut(storeName, data) {
-  const db = await openDB();
+  const db = await getDB();
   return new Promise((res, rej) => {
     const tx = db.transaction(storeName, 'readwrite');
     tx.objectStore(storeName).put(data);
@@ -403,7 +602,7 @@ async function idbPut(storeName, data) {
 }
 
 async function idbGetAll(storeName) {
-  const db = await openDB();
+  const db = await getDB();
   return new Promise((res, rej) => {
     const tx = db.transaction(storeName, 'readonly');
     const req = tx.objectStore(storeName).getAll();
@@ -413,13 +612,14 @@ async function idbGetAll(storeName) {
 }
 
 /* =====================================================================
-   SECTION 3 - AUDIO RECORDING & 10-SECOND SLICED PERSISTENCE
+   SECTION 3 - AUDIO RECORDING ENGINE (WITH SCREEN WAKE LOCK)
    ===================================================================== */
 let mediaRecorder = null;
 let audioStream = null;
 let activeRecordingSession = null;
 let timerInterval = null;
 let recordSeconds = 0;
+let wakeLock = null;
 
 function formatTimer(sec) {
   const m = Math.floor(sec / 60);
@@ -428,109 +628,245 @@ function formatTimer(sec) {
 }
 
 async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-  });
-  audioStream = stream;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    audioStream = stream;
 
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-  mediaRecorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
-
-  const activeCls = CLASSES.find(c => c.code === activeClassCode);
-  const clientId = `rec_${Date.now()}_${activeClassCode}`;
-  
-  activeRecordingSession = {
-    clientId: clientId,
-    classCode: activeCls.code,
-    className: activeCls.name,
-    periodNumber: activeCls.period,
-    startedAt: new Date().toISOString(),
-    durationSeconds: 0,
-    status: 'recording',
-    chunksCount: 0
-  };
-
-  let chunkSequence = 0;
-  mediaRecorder.ondataavailable = async (e) => {
-    if (e.data && e.data.size > 0) {
-      chunkSequence++;
-      activeRecordingSession.chunksCount = chunkSequence;
-      activeRecordingSession.durationSeconds = recordSeconds;
-      
-      // Commit audio slice immediately to IndexedDB
-      await idbPut('chunks', {
-        id: `${clientId}_chk_${chunkSequence}`,
-        sessionId: clientId,
-        seq: chunkSequence,
-        blob: e.data,
-        recordedAt: Date.now()
-      });
-      await idbPut('lectures', activeRecordingSession);
+    // Ask Chrome not to evict IndexedDB under storage pressure
+    if (navigator.storage && navigator.storage.persist) {
+      try { await navigator.storage.persist(); } catch(e){}
     }
-  };
 
-  // 10-second sliced chunking: prevents loss on battery drain or sudden lid closure
-  mediaRecorder.start(10000);
-  
-  recordSeconds = 0;
-  timerInterval = setInterval(() => {
-    recordSeconds++;
-    document.getElementById('recTimer').textContent = `${formatTimer(recordSeconds)} · saved on this Chromebook`;
-  }, 1000);
+    // If the mic drops (headset unplugged, device suspends), stop cleanly instead of showing a stuck "recording" state
+    stream.getAudioTracks().forEach(t => {
+      t.onended = () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          showToast('Microphone stopped. Recording saved up to this point.');
+          stopRecording();
+        }
+      };
+    });
 
-  document.getElementById('recBtn').classList.add('on');
-  document.getElementById('recBtn').textContent = '■ Stop';
-  document.getElementById('recScheduleHint').textContent = `Recording ${activeCls.name} (Period ${activeCls.period})…`;
+    if ('wakeLock' in navigator) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+    }
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+
+    const activeCls = CLASSES.find(c => c.code === activeClassCode);
+    const clientId = `rec_${Date.now()}_${activeClassCode}`;
+    
+    activeRecordingSession = {
+      clientId: clientId,
+      classCode: activeCls.code,
+      className: activeCls.name,
+      periodNumber: activeCls.period,
+      startedAt: new Date().toISOString(),
+      durationSeconds: 0,
+      status: 'recording',
+      chunksCount: 0
+    };
+
+    let chunkSequence = 0;
+    const sessionTargetId = clientId;
+
+    mediaRecorder.ondataavailable = async (e) => {
+      // Only write chunks that belong to this session (the final chunk on stop is kept)
+      const sess = activeRecordingSession;
+      if (e.data && e.data.size > 0 && sess && sess.clientId === sessionTargetId) {
+        chunkSequence++;
+        sess.chunksCount = chunkSequence;
+        sess.durationSeconds = Math.max(sess.durationSeconds || 0, recordSeconds);
+        
+        await idbPut('chunks', {
+          id: `${sessionTargetId}_chk_${chunkSequence}`,
+          sessionId: sessionTargetId,
+          seq: chunkSequence,
+          blob: e.data,
+          recordedAt: Date.now()
+        });
+        await idbPut('lectures', sess);
+      }
+    };
+
+    mediaRecorder.start(10000);
+    recordSeconds = 0;
+    timerInterval = setInterval(() => {
+      recordSeconds++;
+      document.getElementById('recTimer').textContent = `${formatTimer(recordSeconds)} · saved on this Chromebook`;
+    }, 1000);
+
+    document.getElementById('recBtn').classList.add('on');
+    document.getElementById('recBtn').textContent = '■ Stop';
+    document.getElementById('recScheduleHint').textContent = `Recording ${activeCls.name} (Period ${activeCls.period})…`;
+    renderClassRibbon();
+  } catch (err) {
+    alert('Microphone access denied: ' + err.message);
+  }
 }
 
 async function stopRecording() {
-  if (!mediaRecorder) return;
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  const rec = mediaRecorder;
   clearInterval(timerInterval);
-  mediaRecorder.stop();
-  audioStream.getTracks().forEach(t => t.stop());
+  if (wakeLock) { try { await wakeLock.release(); wakeLock = null; } catch(e){} }
+
+  // Wait for the final chunk to be flushed before marking the lecture ready
+  await new Promise(resolve => {
+    rec.addEventListener('stop', () => setTimeout(resolve, 150), { once: true });
+    rec.stop();
+  });
+  audioStream.getTracks().forEach(t => { t.onended = null; t.stop(); });
   mediaRecorder = null;
 
-  activeRecordingSession.status = 'ready_for_processing';
-  activeRecordingSession.durationSeconds = recordSeconds;
-  await idbPut('lectures', activeRecordingSession);
+  if (activeRecordingSession) {
+    activeRecordingSession.status = 'ready_for_processing';
+    activeRecordingSession.durationSeconds = recordSeconds;
+    await idbPut('lectures', activeRecordingSession);
+    activeRecordingSession = null;
+  }
+  renderClassRibbon();
 
   document.getElementById('recBtn').classList.remove('on');
   document.getElementById('recBtn').textContent = '● Record';
-  document.getElementById('recScheduleHint').textContent = 'Saved to Chromebook ✅ Waiting for Home Wi-Fi.';
+  updateRecScheduleHint();
   showToast('Class recorded safely to Chromebook storage!');
   updateQueueUI();
 }
 
-// Clean Lid-Close / Visibility Listener: flushes audio before Chromebook sleep
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.requestData(); // Force slice dump to IndexedDB
+    mediaRecorder.requestData();
   }
 });
 
 /* =====================================================================
-   SECTION 4 - BIONIC STEM BOLDING & TEXT-TO-SPEECH
+   SECTION 4 - CLEAN MARKDOWN, BIONIC FORMATTING & ACCURATE TTS
    ===================================================================== */
-function applyBionic(text) {
-  if (!anchorBoldOn || !text) return text;
-  // Bolds first 1-3 letters of words longer than 2 characters
-  return text.replace(/\b([a-zA-Z]{1,3})([a-zA-Z]+)?\b/g, (m, stem, rest) => `<b>${stem}</b>${rest || ''}`);
+function escText(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function speakText(rawText) {
+function mdInline(t) {
+  return escText(t)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
+}
+
+// Line-based Markdown: headings, bullet and numbered lists, bold, italic, paragraphs, line breaks
+function mdToHtml(md) {
+  if (!md) return '';
+  const lines = String(md).replace(/\r\n/g, '\n').split('\n');
+  const out = [];
+  let list = null;   // 'ul' | 'ol' | null
+  let para = [];
+  const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { flushPara(); closeList(); continue; }
+    if ((m = line.match(/^\s*(#{1,4})\s+(.*)$/))) {
+      flushPara(); closeList();
+      const lvl = Math.min(m[1].length + 1, 4);
+      out.push(`<h${lvl}>${mdInline(m[2])}</h${lvl}>`);
+    } else if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) {
+      flushPara();
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${mdInline(m[1])}</li>`);
+    } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      flushPara();
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${mdInline(m[1])}</li>`);
+    } else {
+      closeList();
+      para.push(mdInline(line.trim()));
+    }
+  }
+  flushPara(); closeList();
+  return '<div class="md">' + out.join('') + '</div>';
+}
+
+// Anchor bold works on text nodes only, so tags and HTML entities are never touched
+function applyBionic(html) {
+  if (!anchorBoldOn || !html) return html;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html);
+  const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => n.parentElement && n.parentElement.closest('button, b, strong, code')
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    const text = node.nodeValue;
+    if (!/[A-Za-z]/.test(text)) return;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    text.replace(/[A-Za-z]+/g, (word, idx) => {
+      if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+      const n = word.length <= 3 ? 1 : Math.min(3, Math.ceil(word.length * 0.4));
+      const b = document.createElement('b');
+      b.textContent = word.slice(0, n);
+      frag.appendChild(b);
+      if (word.length > n) frag.appendChild(document.createTextNode(word.slice(n)));
+      last = idx + word.length;
+      return word;
+    });
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
+  return tpl.innerHTML;
+}
+
+// Reads visible text only: buttons (🔊 Read, Try Again) are removed from a copy, never by word matching
+function speakText(rawTextOrElement) {
   window.speechSynthesis.cancel();
-  const clean = rawText.replace(/[*#_<b><\/b>]/g, '');
-  const utt = new SpeechSynthesisUtterance(clean);
-  utt.rate = parseFloat(localStorage.getItem('ss_tts_rate') || '0.92');
-  utt.pitch = 1.0;
-  window.speechSynthesis.speak(utt);
+  let cleanText = '';
+
+  if (typeof rawTextOrElement === 'string') {
+    cleanText = new DOMParser().parseFromString(rawTextOrElement, 'text/html').body.textContent || '';
+  } else if (rawTextOrElement && rawTextOrElement.cloneNode) {
+    const copy = rawTextOrElement.cloneNode(true);
+    copy.querySelectorAll('button, .badge').forEach(el => el.remove());
+    cleanText = copy.textContent;
+  }
+
+  cleanText = cleanText.replace(/[*#_`~]/g, '').replace(/\s+/g, ' ').trim();
+  if (!cleanText) return;
+
+  // Chrome cuts off long single utterances, so queue one sentence at a time
+  const rate = parseFloat(localStorage.getItem('ss_tts_rate') || '0.92');
+  const sentences = cleanText.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [cleanText];
+  sentences.map(x => x.trim()).filter(Boolean).forEach(sentence => {
+    const utt = new SpeechSynthesisUtterance(sentence);
+    utt.rate = rate;
+    utt.pitch = 1.0;
+    window.speechSynthesis.speak(utt);
+  });
 }
 
 /* =====================================================================
-   SECTION 5 - UI RENDER ENGINE (UNIT MAP, GUIDE, CHAT, QUIZ)
+   SECTION 5 - MULTI-SUBJECT UI & DELEGATED NAVIGATION
    ===================================================================== */
+function getActiveDataset() {
+  return CURRICULUM[activeClassCode] || CURRICULUM['BIO_1'];
+}
+
 function getSelectedLectures() {
-  return LECTURES.filter(l => pickedLectures[l.id]);
+  const ds = getActiveDataset();
+  const arr = ds.lectures.filter(l => pickedLectures[l.id]);
+  return arr.length ? arr : [ds.lectures[ds.lectures.length - 1]];
+}
+
+function updateRecScheduleHint() {
+  const c = CLASSES.find(x => x.code === activeClassCode);
+  document.getElementById('recScheduleHint').textContent = `🕘 Period ${c.period} → ${c.name} is ready. Tap Record.`;
 }
 
 function renderClassRibbon() {
@@ -540,22 +876,44 @@ function renderClassRibbon() {
     const btn = document.createElement('button');
     btn.className = `cls ${c.code === activeClassCode ? 'on' : ''}`;
     btn.textContent = `${c.icon} ${c.name}`;
-    btn.onclick = () => {
-      activeClassCode = c.code;
-      document.documentElement.style.setProperty('--c', c.color);
-      document.documentElement.style.setProperty('--sel', c.color + '22');
-      renderClassRibbon();
-      renderAll();
-    };
+    btn.disabled = isRecording() && c.code !== activeClassCode;
+    btn.title = btn.disabled ? 'Stop recording before switching classes' : '';
+    btn.onclick = () => switchClass(c.code);
     rib.appendChild(btn);
   });
 }
 
+function isRecording() {
+  return !!(mediaRecorder && mediaRecorder.state === 'recording');
+}
+
+function switchClass(code) {
+  if (isRecording()) { showToast('Stop recording before switching classes'); return; }
+  activeClassCode = code;
+  const c = CLASSES.find(x => x.code === code);
+  document.documentElement.style.setProperty('--c', c.color);
+  document.documentElement.style.setProperty('--sel', c.color + '22');
+
+  const ds = getActiveDataset();
+  pickedLectures = {};
+  if (ds.lectures.length) {
+    pickedLectures[ds.lectures[ds.lectures.length - 1].id] = true;
+  }
+  resetQuiz();
+
+  renderClassRibbon();
+  updateRecScheduleHint();
+  renderAll();
+  loadSubjectChat();
+  showToast(`Switched to ${c.name}`);
+}
+
 function renderScopeHeader() {
+  const ds = getActiveDataset();
   const selected = getSelectedLectures();
   const isArena = selected.length > 1;
   const h = `
-    <span class="mode-pill">${isArena ? '⚔️ Exam Arena' : '📖 Daily Desk'}</span>
+    <span class="mode-pill">${isArena ? '⚔️ Exam Review' : '📖 Unit Overview'}</span>
     ${selected.map(l => `<span>${l.i}</span>`).join('')}
     <span><b>${selected.length}</b> ${selected.length === 1 ? 'part' : 'parts combined'}</span>
     <button class="say" data-go="cls" style="margin-left:auto">Change</button>
@@ -564,57 +922,59 @@ function renderScopeHeader() {
 }
 
 function renderUnitTrack() {
+  const ds = getActiveDataset();
+  document.getElementById('unitTitleLbl').textContent = ds.unitTitle;
   const track = document.getElementById('unitTrack');
   track.innerHTML = '';
-  const currentUnitLectures = LECTURES.filter(l => l.unitKey === `U${currentUnitIndex}`);
 
-  currentUnitLectures.forEach((l, idx) => {
+  ds.lectures.forEach((l, idx) => {
     const isPicked = !!pickedLectures[l.id];
+    const isLast = idx === ds.lectures.length - 1;
     const tile = document.createElement('button');
-    tile.className = `tile ${isPicked ? 'on' : ''} ${l.id === 11 ? 'today' : ''}`;
+    tile.className = `tile ${isPicked ? 'on' : ''} ${isLast ? 'today' : ''}`;
     tile.innerHTML = `
       <span class="ck">${isPicked ? '✓' : ''}</span>
       <span class="ic">${l.i}</span>
       <b>Part ${idx + 1}</b>
       <small>${l.t}</small>
-      <small style="font-size:11px;color:var(--mut)">${l.id === 11 ? 'Today' : l.d + ' ' + l.n}</small>
+      <small style="font-size:11px;color:var(--mut)">${isLast ? 'Today' : l.d + ' ' + l.n}</small>
     `;
     tile.onclick = () => {
       if (pickedLectures[l.id]) delete pickedLectures[l.id];
       else pickedLectures[l.id] = true;
+      resetQuiz();
       renderAll();
     };
     track.appendChild(tile);
   });
 
-  const count = getSelectedLectures().length;
+  const count = ds.lectures.filter(l => pickedLectures[l.id]).length;
   const pickBar = document.getElementById('pickBar');
-  pickBar.style.display = (count > 0 && document.getElementById('s-cls').classList.contains('on')) ? 'flex' : 'none';
-  document.getElementById('pickCountLbl').textContent = `✅ ${count} ${count === 1 ? 'lecture' : 'lectures'} selected`;
+  pickBar.style.display = document.getElementById('s-cls').classList.contains('on') ? 'flex' : 'none';
+  pickBar.querySelector('[data-go]').disabled = count === 0;
+  document.getElementById('pickCountLbl').textContent = count === 0
+    ? 'Pick at least one part'
+    : `✅ ${count} ${count === 1 ? 'part' : 'parts'} selected`;
 }
 
 function renderStudyGuide() {
   const selected = getSelectedLectures();
   const container = document.getElementById('guideContent');
-  if (!selected.length) {
-    container.innerHTML = '<div class="card center"><p>Pick a lecture on the Unit Map to read study notes 🗺️</p></div>';
-    return;
-  }
 
-  let html = `
+  let html = renderHandoutCards() + `
     <div class="card">
-      <h3>💡 The Big Idea <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
-      <p>${applyBionic(selected.length === 1 ? selected[0].c : 'Across these ' + selected.length + ' parts you explored: ' + selected.map(l => l.t).join(', ') + '.')}</p>
+      <h3>💡 The Big Idea <button class="say btn-speak" data-target="bigIdeaText">🔊 Read</button></h3>
+      <p id="bigIdeaText">${applyBionic(selected.length === 1 ? selected[0].c : 'Across these ' + selected.length + ' parts you explored: ' + selected.map(l => l.t).join(', ') + '.')}</p>
     </div>
     <div class="card">
-      <h3>🔑 Core Concepts <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
-      <ul>
-        ${selected.map(l => `<li>${l.i} <strong>${l.bold_stem}:</strong> ${applyBionic(l.c)} <span class="badge">Part ${l.id - 6}</span></li>`).join('')}
+      <h3>🔑 Core Concepts <button class="say btn-speak" data-target="coreConceptsList">🔊 Read</button></h3>
+      <ul id="coreConceptsList">
+        ${selected.map((l, idx) => `<li>${l.i} <strong>${l.bold_stem}:</strong> ${applyBionic(l.c)} <span class="badge">Part ${idx + 1}</span></li>`).join('')}
       </ul>
     </div>
     <div class="card" style="border-color:var(--c)">
-      <h3>🎮 Real-World &amp; Gaming Analogy <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
-      <p>${applyBionic(selected[selected.length - 1].analogy)}</p>
+      <h3>🧭 Real-World Analogy <button class="say btn-speak" data-target="analogyText">🔊 Read</button></h3>
+      <p id="analogyText">${applyBionic(selected[selected.length - 1].analogy)}</p>
     </div>
   `;
 
@@ -622,8 +982,8 @@ function renderStudyGuide() {
   if (cues.length) {
     html += `
       <div class="card">
-        <h3>⭐ Teacher Said "Remember This!" <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
-        <ul>
+        <h3>⭐ Teacher Said "Remember This!" <button class="say btn-speak" data-target="cuesList">🔊 Read</button></h3>
+        <ul id="cuesList">
           ${cues.map(l => `<li><strong>${applyBionic(l.cue)}</strong> <span class="badge">🔊 Approx ${l.ts}</span></li>`).join('')}
         </ul>
       </div>
@@ -632,72 +992,87 @@ function renderStudyGuide() {
 
   html += `
     <div class="chips">
-      <button class="btn" data-go="chat">💬 Ask Coach About These</button>
-      <button class="btn alt" data-go="quiz">🎮 Start Practice Quest</button>
+      <button class="btn" data-go="chat">💬 Ask Study Coach</button>
+      <button class="btn alt" data-go="quiz">🎯 Start Practice Drill</button>
     </div>
   `;
   container.innerHTML = html;
 }
 
-function renderChat() {
+function getQuizSet() {
   const selected = getSelectedLectures();
-  const feed = document.getElementById('chatFeed');
-  feed.innerHTML = `
-    <div class="msg ai">
-      <button class="say" style="float:right" onclick="speakText(this.parentElement.textContent)">🔊</button>
-      Hi! I am your <b>${CLASSES.find(c => c.code === activeClassCode).name}</b> study coach. Ask me anything about ${selected.length > 1 ? 'your combined unit notes' : 'today\'s class'}, or tap one of the ideas below!
-    </div>
-  `;
+  if (!quizRetryIds) return selected;
+  const set = selected.filter(l => quizRetryIds.includes(l.id));
+  return set.length ? set : selected;
+}
+
+function resetQuiz(retryIds) {
+  quizIndex = 0;
+  quizScore = 0;
+  quizMissed = [];
+  quizRetryIds = retryIds || null;
 }
 
 function renderQuiz() {
-  const selected = getSelectedLectures();
+  const set = getQuizSet();
   const container = document.getElementById('quizContent');
-  if (!selected.length) {
-    container.innerHTML = '<div class="card center"><p>Pick lectures on the Unit Map first 🗺️</p></div>';
-    return;
-  }
 
-  if (quizIndex >= selected.length) {
+  if (quizIndex >= set.length) {
+    const missed = quizMissed.slice();
     container.innerHTML = `
       <div class="card center">
-        <h2>🏆 Quest Complete!</h2>
-        <p style="font-size:22px;font-weight:700;color:var(--ok)">Score: ${quizScore} / ${selected.length}</p>
-        <p>Great job reviewing your concepts. Any missed questions have been saved to your practice pile.</p>
-        <button class="btn" id="retryQuizBtn">Play Again</button>
+        <h2>🏆 Practice Complete!</h2>
+        <p style="font-size:24px;font-weight:700;color:var(--ok)">Score: ${quizScore} / ${set.length}</p>
+        <p>${missed.length
+          ? `You missed ${missed.length}. Run just those again while they are fresh.`
+          : 'Clean sweep. Try a bigger set from the Unit Map when you are ready.'}</p>
+        <div class="chips" style="justify-content:center">
+          ${missed.length ? `<button class="btn" id="retryMissedBtn">🔁 Retry missed (${missed.length})</button>` : ''}
+          <button class="btn ${missed.length ? 'alt' : ''}" id="retryQuizBtn">Retake full drill</button>
+        </div>
       </div>
     `;
-    document.getElementById('retryQuizBtn').onclick = () => { quizIndex = 0; quizScore = 0; renderQuiz(); };
+    document.getElementById('retryQuizBtn').onclick = () => { resetQuiz(); renderQuiz(); };
+    const rm = document.getElementById('retryMissedBtn');
+    if (rm) rm.onclick = () => { resetQuiz(missed); renderQuiz(); };
     return;
   }
 
-  const cur = selected[quizIndex];
+  const cur = set[quizIndex];
   container.innerHTML = `
     <div class="row">
-      <b>Question ${quizIndex + 1} of ${selected.length}</b>
-      <span class="badge">${cur.i} Part ${cur.id - 6}</span>
+      <b>${quizRetryIds ? 'Retry' : 'Self-Test'} Question ${quizIndex + 1} of ${set.length}</b>
+      <span class="badge">${cur.i} ${cur.t}</span>
     </div>
-    <div class="progress-bar"><i style="width:${(quizIndex / selected.length) * 100}%"></i></div>
+    <div class="progress-bar"><i style="width:${(quizIndex / set.length) * 100}%"></i></div>
     <div class="card">
-      <h3 style="font-size:16px">${applyBionic(cur.q[0])} <button class="say" onclick="speakText('${cur.q[0]}')">🔊</button></h3>
-      ${cur.q[1].map((opt, idx) => `<button class="opt" data-opt="${idx}">${opt}</button>`).join('')}
+      <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q[0]))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
+      ${cur.q[1].map((opt, idx) => `<button class="opt" data-opt="${idx}">${escText(opt)}</button>`).join('')}
       <div id="quizFeedback" class="center" style="margin-top:10px;font-weight:600"></div>
     </div>
   `;
 
   container.querySelectorAll('.opt').forEach(btn => {
     btn.onclick = () => {
-      const chosen = parseInt(btn.dataset.opt);
+      container.querySelectorAll('.opt').forEach(b => b.disabled = true);
+      const chosen = parseInt(btn.dataset.opt, 10);
       const isCorrect = chosen === cur.q[2];
       btn.classList.add(isCorrect ? 'ok' : 'no');
+      if (!isCorrect) container.querySelector(`.opt[data-opt="${cur.q[2]}"]`).classList.add('ok');
       const fb = document.getElementById('quizFeedback');
       if (isCorrect) {
         quizScore++;
         fb.innerHTML = '🎉 That is correct!';
       } else {
-        fb.innerHTML = `Not quite! Correct: <b>${cur.q[1][cur.q[2]]}</b> <span class="badge">🔊 Hear at ${cur.ts}</span>`;
+        if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
+        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.q[1][cur.q[2]])}</b> <span class="badge">Around ${cur.ts} in class</span>`;
       }
-      setTimeout(() => { quizIndex++; renderQuiz(); }, 2200);
+      const answeredId = cur.id;
+      setTimeout(() => {
+        // Ignore if the drill was reset or the class changed during the pause
+        const now = getQuizSet()[quizIndex];
+        if (now && now.id === answeredId) { quizIndex++; renderQuiz(); }
+      }, 2200);
     };
   });
 }
@@ -706,11 +1081,10 @@ function renderAll() {
   renderScopeHeader();
   renderUnitTrack();
   renderStudyGuide();
-  renderChat();
   renderQuiz();
 }
 
-/* Navigation Screen Router */
+/* Screen Router with Global Delegated Listener */
 function navigateTo(screenId) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
   document.querySelectorAll('nav.dock button').forEach(b => b.classList.remove('on'));
@@ -721,7 +1095,6 @@ function navigateTo(screenId) {
   const dockBtn = document.querySelector(`nav.dock button[data-go="${screenId}"]`);
   if (dockBtn) dockBtn.classList.add('on');
   
-  // Responsive dual-pane layout for wide Chromebook screens
   const isWide = window.innerWidth >= 1020 && (screenId === 'guide' || screenId === 'chat' || screenId === 'quiz');
   document.getElementById('mainWrap').classList.toggle('two', isWide);
   if (isWide && screenId === 'guide') {
@@ -731,8 +1104,589 @@ function navigateTo(screenId) {
   renderAll();
 }
 
+document.addEventListener('click', (e) => {
+  const g = e.target.closest('[data-go]');
+  if (g) {
+    e.preventDefault();
+    navigateTo(g.dataset.go);
+  }
+  
+  const speakBtn = e.target.closest('.btn-speak');
+  if (speakBtn) {
+    const tid = speakBtn.dataset.target;
+    const targetEl = document.getElementById(tid);
+    if (targetEl) speakText(targetEl);
+    else if (speakBtn.parentElement) speakText(speakBtn.parentElement);
+  }
+});
+
 /* =====================================================================
-   SECTION 6 - BATCH AI PROCESSOR & CLIENT-SIDE AUDIO SLICER
+   SECTION 6 - TEACHER CANVAS INTAKE (PDF / TXT / NOTE ENRICHMENT)
+   ===================================================================== */
+document.getElementById('attachHandoutBtn').addEventListener('click', () => {
+  document.getElementById('handoutFileInput').click();
+});
+
+document.getElementById('handoutFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.name.endsWith('.pdf') || file.type === 'application/pdf') {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      stagedPdfBase64 = ev.target.result.split(',')[1];
+      stagedPdfName = file.name;
+      document.getElementById('stagedFileName').textContent = '📄 ' + file.name + ' ready';
+      showToast('Attached PDF: ' + file.name);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      stagedPdfBase64 = null;
+      stagedPdfName = file.name;
+      document.getElementById('handoutTextNotes').value = ev.target.result;
+      document.getElementById('stagedFileName').textContent = '📝 ' + file.name + ' loaded into text';
+      showToast('Loaded text notes: ' + file.name);
+    };
+    reader.readAsText(file);
+  }
+});
+
+// Teacher handout notes are saved per class so they survive navigation and reloads
+function getHandoutsKey() { return `ss_handouts_${activeClassCode}`; }
+function loadHandouts() {
+  try { return JSON.parse(localStorage.getItem(getHandoutsKey()) || '[]'); } catch(e) { return []; }
+}
+function saveHandouts(list) {
+  try { localStorage.setItem(getHandoutsKey(), JSON.stringify(list.slice(0, 10))); }
+  catch(e) { showToast('Storage full: oldest handout notes not saved'); }
+}
+function renderHandoutCards() {
+  return loadHandouts().map((h, i) => `
+    <div class="card" style="border-color:var(--acc)">
+      <h3>📄 ${escText(h.name)}
+        <span style="display:flex;gap:6px">
+          <button class="say btn-speak" data-target="handoutBody_${i}">🔊 Read</button>
+          <button class="say" data-del-handout="${i}" title="Remove">✕</button>
+        </span>
+      </h3>
+      <div id="handoutBody_${i}">${applyBionic(mdToHtml(h.md))}</div>
+    </div>`).join('');
+}
+document.addEventListener('click', (e) => {
+  const del = e.target.closest('[data-del-handout]');
+  if (!del) return;
+  const list = loadHandouts();
+  list.splice(parseInt(del.dataset.delHandout, 10), 1);
+  saveHandouts(list);
+  renderStudyGuide();
+});
+
+document.getElementById('reSynthesizeBtn').addEventListener('click', async () => {
+  const textNotes = document.getElementById('handoutTextNotes').value.trim();
+  if (!textNotes && !stagedPdfBase64) {
+    alert('Please attach a PDF / TXT file or paste notes into the box first.');
+    return;
+  }
+
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) {
+    showToast('Ask a parent to add the Gemini key in Settings (⚙️)');
+    return;
+  }
+
+  const btn = document.getElementById('reSynthesizeBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  showToast('Enriching study guide with teacher materials...');
+  const activeLectures = getSelectedLectures();
+  const currentContent = activeLectures.map(l => `${l.t}: ${l.c}`).join('\n');
+  
+  const prompt = `You are a high school study coach.
+Synthesize these teacher Canvas notes into concise, scannable study additions:
+${textNotes || '(See attached PDF document)'}
+
+Existing lecture context:
+${currentContent}
+
+Format as:
+## Key Teacher Additions
+[2-3 clear bullet points with bold stems]`;
+
+  try {
+    const parts = [];
+    if (stagedPdfBase64) {
+      parts.push({ inlineData: { mimeType: 'application/pdf', data: stagedPdfBase64 } });
+    }
+    parts.push({ text: prompt });
+
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const result = await queryGeminiWaterfall([{ role: 'user', parts }], key, model, {
+      temperature: 0.2
+    });
+
+    const list = loadHandouts();
+    list.unshift({ name: stagedPdfName || 'Teacher notes', md: result.text, at: Date.now() });
+    saveHandouts(list);
+    renderStudyGuide();
+    document.getElementById('guideContent').scrollIntoView({ behavior: 'smooth' });
+    showToast('Teacher notes added to the study guide');
+  } catch (err) {
+    alert('Synthesis error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =====================================================================
+   SECTION 7 - CHAT THREADS & MULTI-TURN AI CONVERSATION
+   ===================================================================== */
+let currentThreadId = null;
+
+function getThreadsKey() {
+  return `ss_threads_${activeClassCode}`;
+}
+
+function loadAllThreads() {
+  try {
+    return JSON.parse(localStorage.getItem(getThreadsKey()) || '[]');
+  } catch(e) { return []; }
+}
+
+function saveAllThreads(threads) {
+  localStorage.setItem(getThreadsKey(), JSON.stringify(threads));
+}
+
+function loadSubjectChat() {
+  const c = CLASSES.find(x => x.code === activeClassCode);
+  document.getElementById('chatSubjectBadge').textContent = `Active Channel: ${c.name} (${c.teacher})`;
+  const feed = document.getElementById('chatFeed');
+  
+  const threads = loadAllThreads();
+  if (threads.length > 0) {
+    const latest = threads[0];
+    currentThreadId = latest.id;
+    feed.innerHTML = latest.html;
+    currentChatHistory = latest.history || [];
+  } else {
+    startNewChatThread();
+  }
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function startNewChatThread() {
+  const c = CLASSES.find(x => x.code === activeClassCode);
+  const activeLectures = getSelectedLectures();
+  const partTag = activeLectures[activeLectures.length - 1].t;
+  
+  currentThreadId = 'thread_' + Date.now();
+  currentChatHistory = [];
+  const initialHtml = `
+    <div class="msg ai">
+      <button class="say btn-speak">🔊</button>
+      Hi, I am your <b>${c.name}</b> study coach. Ask me anything about your current unit notes, or tap an idea below!
+    </div>
+  `;
+  document.getElementById('chatFeed').innerHTML = initialHtml;
+
+  const threads = loadAllThreads();
+  threads.unshift({
+    id: currentThreadId,
+    partTag: partTag,
+    title: 'New Study Conversation',
+    updatedAt: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+    html: initialHtml,
+    history: []
+  });
+  saveAllThreads(threads);
+}
+
+document.getElementById('newChatBtn').addEventListener('click', () => {
+  startNewChatThread();
+  showToast('Started new conversation');
+});
+
+// Slide-Out Drawer Controls
+document.getElementById('openChatHistoryBtn').addEventListener('click', () => {
+  renderHistoryDrawer();
+  document.getElementById('chatHistoryDrawer').classList.add('open');
+});
+document.getElementById('closeDrawerBtn').addEventListener('click', () => {
+  document.getElementById('chatHistoryDrawer').classList.remove('open');
+});
+
+function renderHistoryDrawer() {
+  const threads = loadAllThreads();
+  const body = document.getElementById('drawerBody');
+  body.innerHTML = '';
+  
+  if (!threads.length) {
+    body.innerHTML = '<p class="center" style="color:var(--mut);font-size:13px">No saved conversations yet.</p>';
+    return;
+  }
+
+  threads.forEach(t => {
+    const item = document.createElement('div');
+    item.className = `thread-item ${t.id === currentThreadId ? 'active' : ''}`;
+    item.innerHTML = `
+      <div style="font-weight:600;font-size:13px;color:var(--c)">${escapeHtml(t.partTag || '')}</div>
+      <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(t.title)}</div>
+      <small style="color:var(--mut)">${t.updatedAt}</small>
+    `;
+    item.onclick = () => {
+      currentThreadId = t.id;
+      document.getElementById('chatFeed').innerHTML = t.html;
+      currentChatHistory = t.history || [];
+      document.getElementById('chatHistoryDrawer').classList.remove('open');
+      renderHistoryDrawer();
+    };
+    body.appendChild(item);
+  });
+}
+
+function updateActiveThreadInStorage(firstQuery) {
+  const feed = document.getElementById('chatFeed');
+  const threads = loadAllThreads();
+  const idx = threads.findIndex(t => t.id === currentThreadId);
+  if (idx > -1) {
+    threads[idx].html = feed.innerHTML;
+    threads[idx].history = currentChatHistory;
+    if (firstQuery && threads[idx].title === 'New Study Conversation') {
+      threads[idx].title = firstQuery.slice(0, 36) + '…';
+    }
+    threads[idx].updatedAt = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    saveAllThreads(threads);
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Joins every non-thought text part (thinking models can return several parts)
+function extractGeminiText(data) {
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || [])
+    .filter(p => p.text && !p.thought)
+    .map(p => p.text)
+    .join('')
+    .trim();
+  return { text, finish: cand?.finishReason || '', blocked: data.promptFeedback?.blockReason || '' };
+}
+
+// Resilient Gemini waterfall. opts: { system, temperature, maxOutputTokens }
+async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}) {
+  const chain = [chosenModel, 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+    .filter((v, i, a) => v && a.indexOf(v) === i);
+
+  const buildBody = (withThinking) => {
+    const body = {
+      contents: contentsPayload,
+      generationConfig: {
+        temperature: opts.temperature ?? 0.3,
+        // Thinking tokens count against this cap, so leave headroom
+        maxOutputTokens: opts.maxOutputTokens ?? 8192
+      }
+    };
+    if (withThinking) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+    if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
+    return body;
+  };
+
+  let lastError = null;
+  for (const curModel of chain) {
+    let withThinking = true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res, data;
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(curModel)}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify(buildBody(withThinking))
+        });
+        data = await res.json();
+      } catch (netErr) {
+        lastError = 'Network: ' + netErr.message;
+        break; // try next model
+      }
+
+      if (!res.ok) {
+        const msg = data.error?.message || `HTTP ${res.status}`;
+        if (/API_KEY_INVALID|API key not valid/i.test(msg)) throw new Error(msg);
+        // Model does not accept thinkingConfig: retry the same model without it
+        if (res.status === 400 && withThinking && /thinking/i.test(msg)) { withThinking = false; continue; }
+        // Busy, quota, or unknown model: move down the chain
+        if ([404, 429, 500, 503].includes(res.status) || /demand|overload|quota|exhaust|not found/i.test(msg)) {
+          lastError = `${curModel}: ${msg}`;
+          break;
+        }
+        throw new Error(msg); // bad request, retrying other models will not help
+      }
+
+      const out = extractGeminiText(data);
+      if (out.blocked) throw new Error('Request blocked by safety filter: ' + out.blocked);
+      if (!out.text) {
+        lastError = `${curModel}: empty response${out.finish ? ' (' + out.finish + ')' : ''}`;
+        break;
+      }
+      if (out.finish === 'MAX_TOKENS') out.text += '\n\n*(Answer cut short. Ask me to continue.)*';
+      return { text: out.text, modelUsed: curModel };
+    }
+  }
+  throw new Error(lastError || 'All models busy');
+}
+
+let chatBusy = false;
+
+async function sendChatMessage(query, isRetry = false) {
+  if (chatBusy) return;
+  const text = (query || document.getElementById('chatInput').value).trim();
+  if (!text) return;
+  document.getElementById('chatInput').value = '';
+  setChatBusy(true);
+
+  const feed = document.getElementById('chatFeed');
+  if (!isRetry) {
+    const userMsgEl = document.createElement('div');
+    userMsgEl.className = 'msg me';
+    userMsgEl.textContent = text;
+    feed.appendChild(userMsgEl);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) {
+    const errEl = document.createElement('div');
+    errEl.className = 'msg ai err';
+    errEl.textContent = '⚠️ Please ask a parent to enter the Gemini API Key under Settings (⚙️).';
+    feed.appendChild(errEl);
+    feed.scrollTop = feed.scrollHeight;
+    updateActiveThreadInStorage(text);
+    setChatBusy(false);
+    return;
+  }
+
+  const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+  const readingLevel = localStorage.getItem('ss_reading_level') || '5';
+  const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
+  const sysInst = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
+
+  const activeNotes = getSelectedLectures().map(l => `${l.t}: ${l.c} (Analogy: ${l.analogy})`).join('\n');
+  const systemContext = `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}\n\n[CLASS STUDY NOTES]\n${activeNotes}`;
+
+  // Multi-turn payload; the coaching rules travel in systemInstruction, not a fake first turn
+  const contentsPayload = [];
+
+  // Append recent chat turns
+  currentChatHistory.slice(-6).forEach(h => {
+    contentsPayload.push({ role: h.role, parts: [{ text: h.text }] });
+  });
+  contentsPayload.push({ role: 'user', parts: [{ text: text }] });
+
+  const thinkingEl = document.createElement('div');
+  thinkingEl.className = 'msg ai';
+  thinkingEl.id = 'thinkingMsg';
+  thinkingEl.textContent = 'Coach is preparing explanation…';
+  feed.appendChild(thinkingEl);
+  feed.scrollTop = feed.scrollHeight;
+
+  try {
+    const result = await queryGeminiWaterfall(contentsPayload, key, model, { system: systemContext });
+    thinkingEl.remove();
+
+    const formattedHtml = applyBionic(mdToHtml(result.text));
+    const aiMsgEl = document.createElement('div');
+    aiMsgEl.className = 'msg ai';
+    aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}`;
+    feed.appendChild(aiMsgEl);
+    feed.scrollTop = feed.scrollHeight;
+
+    currentChatHistory.push({ role: 'user', text: text });
+    currentChatHistory.push({ role: 'model', text: result.text });
+    updateActiveThreadInStorage(text);
+  } catch (err) {
+    thinkingEl.remove();
+    const errEl = document.createElement('div');
+    errEl.className = 'msg ai err';
+    errEl.innerHTML = `Connection paused: ${escapeHtml(err.message)}<br>`;
+    
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn alt sm';
+    retryBtn.style.marginTop = '8px';
+    retryBtn.textContent = '🔄 Try Again';
+    retryBtn.onclick = () => { errEl.remove(); sendChatMessage(text, true); };
+    errEl.appendChild(retryBtn);
+
+    feed.appendChild(errEl);
+    feed.scrollTop = feed.scrollHeight;
+    updateActiveThreadInStorage(text);
+  } finally {
+    setChatBusy(false);
+  }
+}
+
+function setChatBusy(on) {
+  chatBusy = on;
+  document.getElementById('chatSendBtn').disabled = on;
+  document.getElementById('chatMicBtn').disabled = on;
+  document.querySelectorAll('.sample-q').forEach(b => b.disabled = on);
+}
+
+document.getElementById('chatSendBtn').addEventListener('click', () => sendChatMessage());
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendChatMessage(); }
+});
+
+// Speech Recognition for Chat Mic
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  const reco = new SR();
+  reco.lang = 'en-US';
+  reco.interimResults = false;
+  
+  reco.onresult = (e) => {
+    const spoken = e.results[0][0].transcript;
+    document.getElementById('chatMicBtn').textContent = '🎤 Speak';
+    sendChatMessage(spoken);
+  };
+  reco.onerror = () => { document.getElementById('chatMicBtn').textContent = '🎤 Speak'; };
+  reco.onend = () => { document.getElementById('chatMicBtn').textContent = '🎤 Speak'; };
+
+  document.getElementById('chatMicBtn').addEventListener('click', () => {
+    if (chatBusy) return;
+    document.getElementById('chatMicBtn').textContent = '🔴 Listening…';
+    try { reco.start(); } catch(e) { /* already listening */ }
+  });
+} else {
+  document.getElementById('chatMicBtn').style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+  const sq = e.target.closest('.sample-q');
+  if (sq) sendChatMessage(sq.textContent.trim());
+});
+
+/* =====================================================================
+   SECTION 8 - GEMINI MODEL TESTER & PARENT PIN GATE
+   ===================================================================== */
+const PARENT_PIN_KEY = 'ss_parent_pin';
+function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
+
+document.getElementById('openCfgBtn').addEventListener('click', () => {
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinError').style.display = 'none';
+  document.getElementById('pinDlg').showModal();
+});
+document.getElementById('closePinBtn').addEventListener('click', () => document.getElementById('pinDlg').close());
+document.getElementById('pinInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('submitPinBtn').click(); }
+});
+
+document.getElementById('submitPinBtn').addEventListener('click', () => {
+  const entered = document.getElementById('pinInput').value.trim();
+  if (entered === getParentPin()) {
+    document.getElementById('pinDlg').close();
+    openParentVault();
+  } else {
+    document.getElementById('pinError').style.display = 'block';
+  }
+});
+
+function openParentVault() {
+  document.getElementById('geminiApiKey').value = localStorage.getItem('ss_gemini_key') || '';
+  document.getElementById('hiddenProfileText').value = localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE;
+  document.getElementById('masterSystemPrompt').value = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
+  document.getElementById('cfgNewPin').value = getParentPin();
+  document.getElementById('cfgReadingLevel').value = localStorage.getItem('ss_reading_level') || '5';
+  document.getElementById('cfgTtsRate').value = localStorage.getItem('ss_tts_rate') || '0.92';
+  
+  document.getElementById('cfgProvider').value = localStorage.getItem('ss_provider') || 'gemini';
+  applyProviderView();
+
+  const savedModel = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+  const sel = document.getElementById('geminiModelSelect');
+  if (!Array.from(sel.options).some(o => o.value === savedModel)) {
+    const o = document.createElement('option');
+    o.value = savedModel; o.textContent = savedModel;
+    sel.appendChild(o);
+  }
+  sel.value = savedModel;
+  document.getElementById('cfgDlg').showModal();
+}
+
+document.getElementById('closeCfgBtn').addEventListener('click', () => document.getElementById('cfgDlg').close());
+
+function applyProviderView() {
+  const v = document.getElementById('cfgProvider').value;
+  document.getElementById('geminiBox').style.display = v === 'gemini' ? '' : 'none';
+  document.getElementById('azureBox').style.display = v === 'azure' ? '' : 'none';
+}
+document.getElementById('cfgProvider').addEventListener('change', applyProviderView);
+
+// Not built yet in this demo: say so instead of doing nothing
+[['batchProcessBtn', 'Lecture processing'], ['spSyncBtn', 'SharePoint sync'], ['msSignInBtn', 'Microsoft sign-in']]
+  .forEach(([id, label]) => {
+    document.getElementById(id).addEventListener('click', () => showToast(`${label} is not connected in this demo build yet`));
+  });
+
+// Test Key & Fetch Models using x-goog-api-key header
+document.getElementById('testGeminiBtn').addEventListener('click', async () => {
+  const k = document.getElementById('geminiApiKey').value.trim();
+  const badge = document.getElementById('geminiStatusBadge');
+  if (!k) { alert('Paste Gemini key first'); return; }
+
+  badge.textContent = 'Contacting AI Studio…';
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models`, {
+      headers: { 'x-goog-api-key': k }
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error?.message || 'Key failed');
+
+    const names = (d.models || [])
+      .filter(m => /gemini/i.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent') && !/embedding|image|tts|robotics/i.test(m.name))
+      .map(m => m.name.replace(/^models\//, ''))
+      .sort().reverse();
+
+    const sel = document.getElementById('geminiModelSelect');
+    sel.innerHTML = '';
+    names.forEach(n => {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    });
+
+    if (names.includes('gemini-3.8-flash')) sel.value = 'gemini-3.8-flash';
+    else if (names.includes('gemini-3.5-flash-lite')) sel.value = 'gemini-3.5-flash-lite';
+
+    badge.textContent = `✓ Connected! ${names.length} models verified.`;
+    showToast('Gemini API connection verified!');
+  } catch (err) {
+    badge.textContent = '❌ Failed: ' + err.message;
+    alert('Verification failed: ' + err.message);
+  }
+});
+
+document.getElementById('saveCfgBtn').addEventListener('click', () => {
+  localStorage.setItem('ss_gemini_key', document.getElementById('geminiApiKey').value.trim());
+  localStorage.setItem('ss_gemini_model', document.getElementById('geminiModelSelect').value);
+  localStorage.setItem('ss_reading_level', document.getElementById('cfgReadingLevel').value);
+  localStorage.setItem('ss_hidden_profile', document.getElementById('hiddenProfileText').value);
+  localStorage.setItem('ss_master_prompt', document.getElementById('masterSystemPrompt').value);
+  localStorage.setItem('ss_tts_rate', document.getElementById('cfgTtsRate').value);
+  localStorage.setItem('ss_provider', document.getElementById('cfgProvider').value);
+
+  const newPin = document.getElementById('cfgNewPin').value.trim();
+  if (newPin && !/^\d{4}$/.test(newPin)) { alert('PIN must be exactly 4 digits.'); return; }
+  if (newPin) localStorage.setItem(PARENT_PIN_KEY, newPin);
+
+  document.getElementById('cfgDlg').close();
+  showToast('Settings saved!');
+});
+
+/* =====================================================================
+   SECTION 9 - INITIALIZATION & QUEUE UI
    ===================================================================== */
 async function updateQueueUI() {
   const list = await idbGetAll('lectures');
@@ -742,73 +1696,6 @@ async function updateQueueUI() {
     : 'All saved lectures have been transcribed and prepared.';
 }
 
-document.getElementById('batchProcessBtn').addEventListener('click', async () => {
-  const list = await idbGetAll('lectures');
-  const pending = list.filter(l => l.status === 'ready_for_processing');
-  if (!pending.length) {
-    showToast('No pending lectures to process.');
-    return;
-  }
-
-  const apiKey = localStorage.getItem('ss_gemini_key') || '';
-  if (!apiKey && localStorage.getItem('ss_provider') !== 'azure') {
-    document.getElementById('cfgDlg').showModal();
-    alert('Please enter your Google Gemini API Key in Settings first.');
-    return;
-  }
-
-  showToast(`Processing ${pending.length} lecture(s) with AI...`);
-  // Mark local records processed
-  for (const item of pending) {
-    item.status = 'completed';
-    await idbPut('lectures', item);
-  }
-  updateQueueUI();
-  showToast('Study guides, analogies & quizzes generated!');
-});
-
-/* =====================================================================
-   SECTION 7 - MICROSOFT GRAPH SHAREPOINT SYNC (STUDENT LISTS)
-   ===================================================================== */
-let msalClient = null;
-const MSAL_CONFIG = {
-  auth: {
-    clientId: localStorage.getItem('ss_sp_client_id') || 'bc4efc91-8b56-4f59-bf0e-f42e4724e2f6',
-    authority: localStorage.getItem('ss_sp_authority') || 'https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7',
-    redirectUri: window.location.href.split('?')[0].split('#')[0]
-  },
-  cache: { cacheLocation: 'localStorage' }
-};
-
-function getMsal() {
-  if (!msalClient && window.msal) {
-    msalClient = new msal.PublicClientApplication(MSAL_CONFIG);
-  }
-  return msalClient;
-}
-
-document.getElementById('msSignInBtn').addEventListener('click', async () => {
-  try {
-    const client = getMsal();
-    const login = await client.loginPopup({ scopes: ['User.Read', 'Sites.ReadWrite.All'] });
-    document.getElementById('msUserBadge').textContent = `Signed in: ${login.account.username}`;
-    showToast('Signed in to Microsoft 365!');
-  } catch (err) {
-    alert(`Sign-in error: ${err.message}`);
-  }
-});
-
-document.getElementById('spSyncBtn').addEventListener('click', async () => {
-  showToast('Syncing Student_Lectures & Student_Deadlines...');
-  // Simulates Microsoft Graph List PATCH via idempotency key ClientId
-  setTimeout(() => {
-    showToast('SharePoint synchronized successfully!');
-  }, 1200);
-});
-
-/* =====================================================================
-   SECTION 8 - EVENT BINDINGS & APP INITIALIZATION
-   ===================================================================== */
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -816,14 +1703,13 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-// Bionic Anchor Bold Toggle
 document.getElementById('ancBtn').addEventListener('click', function() {
   anchorBoldOn = !anchorBoldOn;
   this.textContent = `Aa Anchor bold: ${anchorBoldOn ? 'On' : 'Off'}`;
   renderAll();
+  loadSubjectChat();
 });
 
-// Color Theme Pickers
 document.querySelectorAll('.tints button').forEach(b => {
   b.addEventListener('click', () => {
     document.documentElement.dataset.t = b.dataset.t;
@@ -831,62 +1717,58 @@ document.querySelectorAll('.tints button').forEach(b => {
   });
 });
 
-// Navigation Dock Events
-document.querySelectorAll('[data-go]').forEach(b => {
+document.querySelectorAll('nav.dock button').forEach(b => {
   b.addEventListener('click', () => navigateTo(b.dataset.go));
 });
 
-// Unit Select Buttons
-document.getElementById('prevUnitBtn').onclick = () => { currentUnitIndex = 1; renderAll(); };
-document.getElementById('nextUnitBtn').onclick = () => { currentUnitIndex = 2; renderAll(); };
+document.getElementById('prevUnitBtn').onclick = () => { showToast('Previous units archived'); };
+document.getElementById('nextUnitBtn').onclick = () => { showToast('Current active unit'); };
 
-// Quick Selection Chips
 document.querySelectorAll('[data-q]').forEach(btn => {
   btn.onclick = () => {
     const q = btn.dataset.q;
+    const ds = getActiveDataset();
     pickedLectures = {};
-    LECTURES.forEach(l => {
-      if (q === 'all') pickedLectures[l.id] = true;
-      if (q === 'today' && l.id === 11) pickedLectures[l.id] = true;
-      if (q === 'unit' && l.unitKey === `U${currentUnitIndex}`) pickedLectures[l.id] = true;
-      if (q === 'test' && l.id >= 9) pickedLectures[l.id] = true;
+    const todayAbbr = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+    const todays = ds.lectures.filter(l => l.d === todayAbbr);
+    ds.lectures.forEach((l, idx) => {
+      if (q === 'unit') pickedLectures[l.id] = true;
+      if (q === 'test' && idx >= ds.lectures.length - 2) pickedLectures[l.id] = true;
     });
+    if (q === 'today') {
+      // Match today's weekday; fall back to the most recent part
+      (todays.length ? todays : ds.lectures.slice(-1)).forEach(l => pickedLectures[l.id] = true);
+      if (!todays.length) showToast(`No ${todayAbbr} lecture saved, showing the latest one`);
+    }
+    resetQuiz();
     renderAll();
   };
 });
 
-// Record Button Click
 document.getElementById('recBtn').addEventListener('click', () => {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    stopRecording();
-  } else {
-    startRecording();
-  }
+  if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+  else startRecording();
 });
 
-// Settings Modal Handlers
-document.getElementById('openCfgBtn').onclick = () => document.getElementById('cfgDlg').showModal();
-document.getElementById('closeCfgBtn').onclick = () => document.getElementById('cfgDlg').close();
-document.getElementById('cfgProvider').onchange = (e) => {
-  document.getElementById('geminiBox').style.display = e.target.value === 'gemini' ? 'block' : 'none';
-  document.getElementById('azureBox').style.display = e.target.value === 'azure' ? 'block' : 'none';
-};
-
-document.getElementById('saveCfgBtn').onclick = () => {
-  localStorage.setItem('ss_provider', document.getElementById('cfgProvider').value);
-  localStorage.setItem('ss_gemini_key', document.getElementById('geminiApiKey').value);
-  localStorage.setItem('ss_tts_rate', document.getElementById('cfgTtsRate').value);
-  document.getElementById('cfgDlg').close();
-  showToast('Settings saved!');
-};
-
-// Initial App Boot
+// App Startup
 (function init() {
   const savedTheme = localStorage.getItem('ss_theme');
   if (savedTheme) document.documentElement.dataset.t = savedTheme;
   
+  const initialCls = CLASSES[0];
+  activeClassCode = initialCls.code;
+  document.documentElement.style.setProperty('--c', initialCls.color);
+  document.documentElement.style.setProperty('--sel', initialCls.color + '22');
+
+  const ds = getActiveDataset();
+  if (ds.lectures.length) {
+    pickedLectures[ds.lectures[ds.lectures.length - 1].id] = true;
+  }
+
   renderClassRibbon();
+  updateRecScheduleHint();
   renderAll();
+  loadSubjectChat();
   updateQueueUI();
 })();
 </script>
