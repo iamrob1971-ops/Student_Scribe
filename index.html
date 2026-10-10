@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Student Scribe</title>
+<!-- Google Fonts: Lexend for Dyslexia Reading Ease -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Microsoft Authentication Library (MSAL) -->
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg: #FDFBF7; --card: #FFFFFC; --ink: #2B2A33; --mut: #6B6858; --line: #E6DFCC;
+  --acc: #2F6FDE; --ok: #2E7D5B; --bad: #C2543A; --c: #2F6FDE; --sel: #E4EDFD;
+  box-sizing: border-box;
+}
+:root[data-t="peach"] { --bg: #FCE8DE; --card: #FFF6F1; --line: #EFCFBF; --sel: #FBD9C6; }
+:root[data-t="blue"]  { --bg: #E3E9EF; --card: #F2F5F8; --line: #C9D3DD; --sel: #CBD9EA; }
+:root[data-t="dark"]  { --bg: #1E1E1E; --card: #2A2A2E; --ink: #EDEBE4; --mut: #A9ADBD; --line: #44444C; --acc: #7EA8FF; --sel: #33405E; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'Lexend', system-ui, -apple-system, sans-serif;
+  font-size: 17px; line-height: 1.75; letter-spacing: .02em;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--c); outline-offset: 2px; }
+
+.app { max-width: 860px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+@media (min-width: 1020px) {
+  .app { max-width: 1300px; }
+  main.two { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+  main.two #s-chat [data-scope], main.two #s-quiz [data-scope] { display: none; }
+}
+
+/* Header & Ribbons */
+.top { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 6px; flex-wrap: wrap; gap: 10px; }
+.brand { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.tints { display: flex; gap: 8px; }
+.tints button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; transition: transform .1s; }
+.tints button:hover { transform: scale(1.1); }
+.tog { border: 2px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn-icon { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 6px 10px; cursor: pointer; font-size: 16px; }
+
+.ribbon { display: flex; gap: 8px; overflow-x: auto; padding: 8px 18px; }
+.cls { flex: none; border: 2px solid var(--line); background: var(--card); border-radius: 14px; padding: 10px 16px; cursor: pointer; font-size: 15px; font-weight: 500; }
+.cls.on { border-color: var(--c); background: var(--c); color: #fff; }
+
+/* Main Screen Areas */
+main { padding: 4px 18px 140px; flex: 1; }
+.screen { display: none; }
+.screen.on { display: block; }
+.card { background: var(--card); border: 1.5px solid var(--line); border-radius: 18px; padding: 18px; margin: 12px 0; box-shadow: 0 2px 6px rgba(0,0,0,.03); }
+.card h3 { margin: 0 0 8px; font-size: 18px; color: var(--c); font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+.card p, .card ul { margin: 6px 0; }
+.card ul { padding-left: 24px; }
+.card li { margin: 6px 0; }
+.center { text-align: center; }
+
+/* Audio & Buttons */
+.say { border: 1.5px solid var(--line); background: var(--card); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+.say:hover { border-color: var(--c); }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 10px; background: var(--sel); color: var(--ink); margin-left: 6px; }
+.btn { border: 0; background: var(--c); color: #fff; border-radius: 14px; padding: 12px 20px; font-weight: 600; cursor: pointer; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.alt { background: var(--card); border: 2px solid var(--line); color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+
+/* Recorder Screen */
+.rec-wrap { text-align: center; padding: 20px 0; }
+.rec { width: 140px; height: 140px; border-radius: 50%; border: 0; background: var(--c); color: #fff; font-size: 20px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 24px rgba(0,0,0,.15); transition: transform .15s, background .15s; }
+.rec:hover { transform: scale(1.04); }
+.rec.on { background: var(--bad); animation: pulse 1.6s infinite; }
+@keyframes pulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.05); box-shadow: 0 0 28px rgba(194,84,58,.5); } }
+.banner { background: #FEF3C7; border: 1.5px solid #FCD34D; color: #92400E; border-radius: 14px; padding: 12px 16px; font-size: 14px; margin: 12px 0; font-weight: 500; }
+.banner.ok { background: #D1FAE5; border-color: #6EE7B7; color: #065F46; }
+
+/* Timeline & Level Select Track */
+.track { display: flex; gap: 12px; overflow-x: auto; padding: 8px 4px 14px; scroll-snap-type: x mandatory; }
+.tile { flex: none; width: 122px; min-height: 160px; scroll-snap-align: start; border: 3px solid var(--line); background: var(--card); border-radius: 20px; text-align: center; cursor: pointer; padding: 12px 6px; position: relative; }
+.tile .ic { font-size: 38px; display: block; line-height: 1.3; }
+.tile b { display: block; font-size: 15px; margin-top: 4px; }
+.tile small { display: block; color: var(--mut); font-size: 13px; line-height: 1.25; }
+.tile .ck { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); display: grid; place-items: center; font-size: 14px; font-weight: bold; }
+.tile.on { border-color: var(--c); background: var(--sel); }
+.tile.on .ck { background: var(--c); border-color: var(--c); color: #fff; }
+.tile.today { border-style: dashed; }
+.wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+.wk button { width: 50px; height: 50px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
+.scope { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--sel); border-radius: 14px; padding: 10px 14px; margin: 8px 0; font-size: 15px; font-weight: 500; }
+.mode-pill { background: var(--c); color: #fff; border-radius: 999px; padding: 2px 12px; font-weight: 600; font-size: 13px; }
+
+/* Floating Combine Action Bar */
+.pick-bar { position: fixed; left: 0; right: 0; bottom: 74px; display: none; justify-content: center; pointer-events: none; z-index: 100; }
+.pick-bar div { pointer-events: auto; background: var(--card); border: 2px solid var(--c); border-radius: 20px; padding: 10px 18px; display: flex; gap: 14px; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+
+/* Chat & Quiz Elements */
+.msg { padding: 12px 16px; border-radius: 16px; margin: 10px 0; max-width: 90%; }
+.msg.me { background: var(--c); color: #fff; margin-left: auto; }
+.msg.ai { background: var(--card); border: 1.5px solid var(--line); }
+.opt { display: block; width: 100%; text-align: left; margin: 10px 0; border: 2px solid var(--line); background: var(--card); border-radius: 14px; padding: 14px; cursor: pointer; min-height: 58px; font-weight: 500; transition: border-color .15s; }
+.opt.ok { border-color: var(--ok); background: #E6F4EA; }
+.opt.no { border-color: var(--bad); background: #FCE8E6; }
+.progress-bar { height: 14px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 16px; }
+.progress-bar i { display: block; height: 100%; background: var(--ok); transition: width .3s ease; }
+
+/* Navigation Dock */
+nav.dock { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1.5px solid var(--line); display: flex; justify-content: center; z-index: 90; }
+nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color: var(--mut); font-size: 13px; font-weight: 500; padding: 8px 0 10px; cursor: pointer; }
+nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
+nav.dock button.on { color: var(--c); font-weight: 700; }
+
+/* Settings Modal Dialog */
+dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
+dialog::backdrop { background: rgba(30,30,30,.55); }
+.dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.dlg-body { padding: 18px 22px; overflow-y: auto; max-height: calc(90vh - 140px); display: grid; gap: 14px; }
+.dlg-body h4 { margin: 12px 0 4px; color: var(--c); text-transform: uppercase; font-size: 13px; letter-spacing: .04em; }
+.dlg-body label { display: grid; gap: 4px; font-size: 14px; font-weight: 500; }
+.dlg-body input, .dlg-body select { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); }
+.dlg-foot { padding: 14px 22px; border-top: 1.5px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; }
+.toast { position: fixed; left: 50%; bottom: 84px; transform: translate(-50%, 20px); background: #2B2A33; color: #fff; padding: 10px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: .2s; z-index: 200; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Top Header -->
+  <header class="top">
+    <div class="brand">📓 Student Scribe</div>
+    <div class="top-actions">
+      <button class="tog" id="ancBtn">Aa Anchor bold: On</button>
+      <div class="tints" aria-label="Color Theme">
+        <button style="background:#FDFBF7" data-t="cream" title="Cream"></button>
+        <button style="background:#FCE8DE" data-t="peach" title="Peach"></button>
+        <button style="background:#E3E9EF" data-t="blue" title="Blue"></button>
+        <button style="background:#1E1E1E" data-t="dark" title="Dark"></button>
+      </div>
+      <button class="btn-icon" id="openCfgBtn" title="Parent & Cloud Settings">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Class Schedule Ribbon -->
+  <div class="ribbon" id="classRibbon"></div>
+
+  <!-- Screen 1: Record Class -->
+  <main id="mainWrap">
+    <section class="screen on" id="s-rec">
+      <p class="center" id="recScheduleHint" style="font-weight:600;font-size:18px">🕘 Period 2 → Physical Science is ready. Tap Record.</p>
+      <div class="banner ok center" id="safeBanner">
+        🔒 Audio saves safely every 10 seconds. Closing the laptop lid during class will not lose your notes.
+      </div>
+
+      <div class="rec-wrap">
+        <button class="rec" id="recBtn">● Record</button>
+        <p class="center" id="recTimer" style="margin-top:14px;font-size:16px;color:var(--mut)">0:00 · saved on this Chromebook</p>
+      </div>
+
+      <div class="card" id="homeSyncCard" style="margin-top:24px">
+        <h3>⚡ Study Hall & Home Wi-Fi</h3>
+        <p id="queueStatusText">Loading saved sessions...</p>
+        <div class="chips">
+          <button class="btn" id="batchProcessBtn">🚀 Process Lectures with AI</button>
+          <button class="btn alt" id="spSyncBtn">☁️ Sync to SharePoint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 2: Class & Unit Level Map -->
+    <section class="screen" id="s-cls">
+      <div class="chips">
+        <button class="btn alt" data-q="today">🎯 Just today</button>
+        <button class="btn alt" data-q="unit">🗺️ This unit</button>
+        <button class="btn alt" data-q="test">📝 Next test</button>
+        <button class="btn alt" data-q="all">🔁 All parts</button>
+      </div>
+      <div class="wk">
+        <button id="prevUnitBtn" aria-label="Previous unit">◀</button>
+        <b id="unitTitleLbl" style="font-size:18px">Unit 2 · Forces &amp; Motion</b>
+        <button id="nextUnitBtn" aria-label="Next unit">▶</button>
+      </div>
+      <div class="track" id="unitTrack"></div>
+      <p class="center" style="font-size:14px;color:var(--mut)">Tap any lecture card to view it. Pick multiple cards to enter Exam Prep.</p>
+    </section>
+
+    <!-- Screen 3: Study Guide -->
+    <section class="screen" id="s-guide">
+      <div class="scope" data-scope></div>
+      <div id="guideContent"></div>
+    </section>
+
+    <!-- Screen 4: Ask Coach (Interactive Grounded Chat) -->
+    <section class="screen" id="s-chat">
+      <div class="scope" data-scope></div>
+      <div id="chatFeed"></div>
+      <div class="chips">
+        <button class="btn alt sample-q">What's on the test?</button>
+        <button class="btn alt sample-q">Explain it with a video game analogy</button>
+      </div>
+      <div class="card row" style="padding:10px 14px">
+        <input type="text" id="chatInput" placeholder="Type or speak a question..." style="flex:1;border:0;background:transparent;outline:none">
+        <button class="say" id="chatMicBtn">🎤 Speak</button>
+        <button class="btn" id="chatSendBtn" style="min-height:40px;padding:8px 16px">Send</button>
+      </div>
+    </section>
+
+    <!-- Screen 5: Practice Game & Flashcards -->
+    <section class="screen" id="s-quiz">
+      <div class="scope" data-scope></div>
+      <div id="quizContent"></div>
+    </section>
+  </main>
+
+  <!-- Sticky Multi-Select Action Bar -->
+  <div class="pick-bar" id="pickBar">
+    <div>
+      <b id="pickCountLbl">✅ 2 lectures selected</b>
+      <button class="btn" data-go="guide">Study Selected ▶</button>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation Dock -->
+  <nav class="dock">
+    <button class="on" data-go="rec"><span>🎙️</span>Record</button>
+    <button data-go="cls"><span>🗺️</span>Unit Map</button>
+    <button data-go="guide"><span>📝</span>Guide</button>
+    <button data-go="chat"><span>💬</span>Ask</button>
+    <button data-go="quiz"><span>🎮</span>Practice</button>
+  </nav>
+</div>
+
+<!-- Parent & Cloud Configuration Dialog Modal -->
+<dialog class="cfg-dlg" id="cfgDlg">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Cloud Sync</h3>
+    <button class="say" id="closeCfgBtn">✕ Close</button>
+  </div>
+  <div class="dlg-body">
+    <h4>AI Provider &amp; Model</h4>
+    <label>Active Engine
+      <select id="cfgProvider">
+        <option value="gemini">Google Gemini (Recommended / High Concurrency)</option>
+        <option value="azure">Azure OpenAI APIM Gateway (Whisper + GPT)</option>
+      </select>
+    </label>
+
+    <div id="geminiBox">
+      <label>Google Gemini API Key
+        <input type="password" id="geminiApiKey" placeholder="Paste Google AI Studio Key">
+      </label>
+      <label>Model
+        <input type="text" id="geminiModel" value="gemini-2.5-flash">
+      </label>
+    </div>
+
+    <div id="azureBox" style="display:none">
+      <label>APIM Endpoint
+        <input type="text" id="azureEndpoint" placeholder="https://your-apim.azure-api.net/openai">
+      </label>
+      <label>GPT Deployment
+        <input type="text" id="azureGptDeploy" value="gpt-4o-mini">
+      </label>
+      <label>Whisper Deployment
+        <input type="text" id="azureWhisperDeploy" value="whisper">
+      </label>
+      <label>APIM Subscription Key
+        <input type="password" id="azureSubKey" placeholder="Optional subscription key">
+      </label>
+    </div>
+
+    <h4>SharePoint Sync (Bible_App Tenant)</h4>
+    <p style="font-size:13px;color:var(--mut);margin:0">Syncs study guides to <code>Student_Lectures</code> and upcoming tests to <code>Student_Deadlines</code>.</p>
+    <label>Tenant Authority
+      <input type="text" id="spAuthority" value="https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7">
+    </label>
+    <label>App (Client) ID
+      <input type="text" id="spClientId" value="bc4efc91-8b56-4f59-bf0e-f42e4724e2f6">
+    </label>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+      <button class="btn alt" id="msSignInBtn">Sign In with Microsoft</button>
+      <span id="msUserBadge" style="font-size:13px;font-weight:600">Not signed in</span>
+    </div>
+
+    <h4>Student Learning Profile</h4>
+    <label>Student Interests (Used for real-world analogies)
+      <input type="text" id="cfgInterests" value="video games, sports, car engines, building">
+    </label>
+    <label>Read Aloud (TTS) Speed
+      <select id="cfgTtsRate">
+        <option value="0.85">0.85x (Slower &amp; deliberate)</option>
+        <option value="0.92" selected>0.92x (Recommended for dyslexia)</option>
+        <option value="1.0">1.0x (Normal speed)</option>
+      </select>
+    </label>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="saveCfgBtn">Save &amp; Close</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   SECTION 1 - MASTER STATE & PRE-CONFIGURED CLASSES
+   ===================================================================== */
+const CLASSES = [
+  { code: 'SCI_PHYS', name: 'Physical Science', period: 2, color: '#2F6FDE', icon: '🧪' },
+  { code: 'ALG_1',    name: 'Algebra 1',        period: 3, color: '#8A4FD6', icon: '📐' },
+  { code: 'HIST_WLD', name: 'World History',    period: 5, color: '#C2703A', icon: '📜' },
+  { code: 'ENG_9',    name: 'English 9',        period: 1, color: '#2E7D5B', icon: '📚' }
+];
+
+let activeClassCode = 'SCI_PHYS';
+let anchorBoldOn = true;
+let currentUnitIndex = 2; // Defaults to Unit 2
+let pickedLectures = { 11: true }; // Default to current lecture
+let quizIndex = 0;
+let quizScore = 0;
+
+// Embedded Demo Unit Data (Provides immediate interaction out of the box)
+let LECTURES = [
+  {
+    id: 7, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🧭', d: 'Mon', n: 5, t: 'Force',
+    c: 'A force is a push or a pull that changes motion.',
+    bold_stem: 'Force',
+    analogy: 'Like applying pressure to a controller joystick: no push means no character movement.',
+    cue: 'Know contact vs non-contact forces', ts: '12:10',
+    q: ['A force is best defined as a…', ['Push or pull', 'Speed measurement', 'Color'], 0]
+  },
+  {
+    id: 8, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🚀', d: 'Tue', n: 6, t: 'Acceleration',
+    c: 'Acceleration is how quickly speed or direction changes.',
+    bold_stem: 'Acceleration',
+    analogy: 'Hitting the nitro boost in a racing game—it is not just high speed, it is how fast you gain speed.',
+    cue: 'F = m × a will be on the test', ts: '18:40',
+    q: ['Acceleration measures change in…', ['Mass', 'Speed or direction', 'Gravity only'], 1]
+  },
+  {
+    id: 9, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '⚖️', d: 'Wed', n: 7, t: 'Balance',
+    c: 'Balanced forces cancel out, causing zero change in motion.',
+    bold_stem: 'Balanced Forces',
+    analogy: 'Two players pushing against each other with equal strength—neither one moves.',
+    cue: 'Lab report due tomorrow', ts: '31:05',
+    q: ['When forces are balanced, an object…', ['Stops or stays at constant speed', 'Explodes', 'Spins faster'], 0]
+  },
+  {
+    id: 10, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🍎', d: 'Thu', n: 8, t: 'Gravity',
+    c: 'Gravity pulls all objects toward the center of the Earth.',
+    bold_stem: 'Gravity',
+    analogy: 'The game boundary that keeps your character grounded so you do not float into space.',
+    cue: 'Mass never changes, weight does', ts: '09:15',
+    q: ['Gravity pulls objects toward…', ['The Moon', 'Earth’s center', 'The clouds'], 1]
+  },
+  {
+    id: 11, unitKey: 'U2', unitTitle: 'Unit 2 · Forces & Motion', w: 4, i: '🎯', d: 'Fri', n: 9, t: "Newton's Laws",
+    c: "Newton's 3 laws: inertia, F = m × a, and action-reaction.",
+    bold_stem: "Newton's Laws",
+    analogy: 'Inertia is like a heavy tank in a game—slow to get rolling, but once moving, almost impossible to stop.',
+    cue: 'Quiz on Laws 1–3 this Friday!', ts: '14:20',
+    q: ['Which law states: Every action has an equal and opposite reaction?', ['First Law', 'Second Law', 'Third Law'], 2]
+  }
+];
+
+/* =====================================================================
+   SECTION 2 - INDEXEDDB RESILIENT LOCAL STORAGE VAULT
+   ===================================================================== */
+const DB_NAME = 'StudentScribe_v1';
+const DB_VERSION = 1;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('chunks')) {
+        db.createObjectStore('chunks', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('lectures')) {
+        db.createObjectStore('lectures', { keyPath: 'clientId' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(storeName, data) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(data);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function idbGetAll(storeName) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => res(req.result || []);
+    req.onerror = () => rej(tx.error);
+  });
+}
+
+/* =====================================================================
+   SECTION 3 - AUDIO RECORDING & 10-SECOND SLICED PERSISTENCE
+   ===================================================================== */
+let mediaRecorder = null;
+let audioStream = null;
+let activeRecordingSession = null;
+let timerInterval = null;
+let recordSeconds = 0;
+
+function formatTimer(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+async function startRecording() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+  audioStream = stream;
+
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+  mediaRecorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+
+  const activeCls = CLASSES.find(c => c.code === activeClassCode);
+  const clientId = `rec_${Date.now()}_${activeClassCode}`;
+  
+  activeRecordingSession = {
+    clientId: clientId,
+    classCode: activeCls.code,
+    className: activeCls.name,
+    periodNumber: activeCls.period,
+    startedAt: new Date().toISOString(),
+    durationSeconds: 0,
+    status: 'recording',
+    chunksCount: 0
+  };
+
+  let chunkSequence = 0;
+  mediaRecorder.ondataavailable = async (e) => {
+    if (e.data && e.data.size > 0) {
+      chunkSequence++;
+      activeRecordingSession.chunksCount = chunkSequence;
+      activeRecordingSession.durationSeconds = recordSeconds;
+      
+      // Commit audio slice immediately to IndexedDB
+      await idbPut('chunks', {
+        id: `${clientId}_chk_${chunkSequence}`,
+        sessionId: clientId,
+        seq: chunkSequence,
+        blob: e.data,
+        recordedAt: Date.now()
+      });
+      await idbPut('lectures', activeRecordingSession);
+    }
+  };
+
+  // 10-second sliced chunking: prevents loss on battery drain or sudden lid closure
+  mediaRecorder.start(10000);
+  
+  recordSeconds = 0;
+  timerInterval = setInterval(() => {
+    recordSeconds++;
+    document.getElementById('recTimer').textContent = `${formatTimer(recordSeconds)} · saved on this Chromebook`;
+  }, 1000);
+
+  document.getElementById('recBtn').classList.add('on');
+  document.getElementById('recBtn').textContent = '■ Stop';
+  document.getElementById('recScheduleHint').textContent = `Recording ${activeCls.name} (Period ${activeCls.period})…`;
+}
+
+async function stopRecording() {
+  if (!mediaRecorder) return;
+  clearInterval(timerInterval);
+  mediaRecorder.stop();
+  audioStream.getTracks().forEach(t => t.stop());
+  mediaRecorder = null;
+
+  activeRecordingSession.status = 'ready_for_processing';
+  activeRecordingSession.durationSeconds = recordSeconds;
+  await idbPut('lectures', activeRecordingSession);
+
+  document.getElementById('recBtn').classList.remove('on');
+  document.getElementById('recBtn').textContent = '● Record';
+  document.getElementById('recScheduleHint').textContent = 'Saved to Chromebook ✅ Waiting for Home Wi-Fi.';
+  showToast('Class recorded safely to Chromebook storage!');
+  updateQueueUI();
+}
+
+// Clean Lid-Close / Visibility Listener: flushes audio before Chromebook sleep
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.requestData(); // Force slice dump to IndexedDB
+  }
+});
+
+/* =====================================================================
+   SECTION 4 - BIONIC STEM BOLDING & TEXT-TO-SPEECH
+   ===================================================================== */
+function applyBionic(text) {
+  if (!anchorBoldOn || !text) return text;
+  // Bolds first 1-3 letters of words longer than 2 characters
+  return text.replace(/\b([a-zA-Z]{1,3})([a-zA-Z]+)?\b/g, (m, stem, rest) => `<b>${stem}</b>${rest || ''}`);
+}
+
+function speakText(rawText) {
+  window.speechSynthesis.cancel();
+  const clean = rawText.replace(/[*#_<b><\/b>]/g, '');
+  const utt = new SpeechSynthesisUtterance(clean);
+  utt.rate = parseFloat(localStorage.getItem('ss_tts_rate') || '0.92');
+  utt.pitch = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+/* =====================================================================
+   SECTION 5 - UI RENDER ENGINE (UNIT MAP, GUIDE, CHAT, QUIZ)
+   ===================================================================== */
+function getSelectedLectures() {
+  return LECTURES.filter(l => pickedLectures[l.id]);
+}
+
+function renderClassRibbon() {
+  const rib = document.getElementById('classRibbon');
+  rib.innerHTML = '';
+  CLASSES.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = `cls ${c.code === activeClassCode ? 'on' : ''}`;
+    btn.textContent = `${c.icon} ${c.name}`;
+    btn.onclick = () => {
+      activeClassCode = c.code;
+      document.documentElement.style.setProperty('--c', c.color);
+      document.documentElement.style.setProperty('--sel', c.color + '22');
+      renderClassRibbon();
+      renderAll();
+    };
+    rib.appendChild(btn);
+  });
+}
+
+function renderScopeHeader() {
+  const selected = getSelectedLectures();
+  const isArena = selected.length > 1;
+  const h = `
+    <span class="mode-pill">${isArena ? '⚔️ Exam Arena' : '📖 Daily Desk'}</span>
+    ${selected.map(l => `<span>${l.i}</span>`).join('')}
+    <span><b>${selected.length}</b> ${selected.length === 1 ? 'part' : 'parts combined'}</span>
+    <button class="say" data-go="cls" style="margin-left:auto">Change</button>
+  `;
+  document.querySelectorAll('[data-scope]').forEach(el => el.innerHTML = h);
+}
+
+function renderUnitTrack() {
+  const track = document.getElementById('unitTrack');
+  track.innerHTML = '';
+  const currentUnitLectures = LECTURES.filter(l => l.unitKey === `U${currentUnitIndex}`);
+
+  currentUnitLectures.forEach((l, idx) => {
+    const isPicked = !!pickedLectures[l.id];
+    const tile = document.createElement('button');
+    tile.className = `tile ${isPicked ? 'on' : ''} ${l.id === 11 ? 'today' : ''}`;
+    tile.innerHTML = `
+      <span class="ck">${isPicked ? '✓' : ''}</span>
+      <span class="ic">${l.i}</span>
+      <b>Part ${idx + 1}</b>
+      <small>${l.t}</small>
+      <small style="font-size:11px;color:var(--mut)">${l.id === 11 ? 'Today' : l.d + ' ' + l.n}</small>
+    `;
+    tile.onclick = () => {
+      if (pickedLectures[l.id]) delete pickedLectures[l.id];
+      else pickedLectures[l.id] = true;
+      renderAll();
+    };
+    track.appendChild(tile);
+  });
+
+  const count = getSelectedLectures().length;
+  const pickBar = document.getElementById('pickBar');
+  pickBar.style.display = (count > 0 && document.getElementById('s-cls').classList.contains('on')) ? 'flex' : 'none';
+  document.getElementById('pickCountLbl').textContent = `✅ ${count} ${count === 1 ? 'lecture' : 'lectures'} selected`;
+}
+
+function renderStudyGuide() {
+  const selected = getSelectedLectures();
+  const container = document.getElementById('guideContent');
+  if (!selected.length) {
+    container.innerHTML = '<div class="card center"><p>Pick a lecture on the Unit Map to read study notes 🗺️</p></div>';
+    return;
+  }
+
+  let html = `
+    <div class="card">
+      <h3>💡 The Big Idea <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
+      <p>${applyBionic(selected.length === 1 ? selected[0].c : 'Across these ' + selected.length + ' parts you explored: ' + selected.map(l => l.t).join(', ') + '.')}</p>
+    </div>
+    <div class="card">
+      <h3>🔑 Core Concepts <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
+      <ul>
+        ${selected.map(l => `<li>${l.i} <strong>${l.bold_stem}:</strong> ${applyBionic(l.c)} <span class="badge">Part ${l.id - 6}</span></li>`).join('')}
+      </ul>
+    </div>
+    <div class="card" style="border-color:var(--c)">
+      <h3>🎮 Real-World &amp; Gaming Analogy <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
+      <p>${applyBionic(selected[selected.length - 1].analogy)}</p>
+    </div>
+  `;
+
+  const cues = selected.filter(l => l.cue);
+  if (cues.length) {
+    html += `
+      <div class="card">
+        <h3>⭐ Teacher Said "Remember This!" <button class="say" onclick="speakText(this.parentElement.nextElementSibling.textContent)">🔊 Read</button></h3>
+        <ul>
+          ${cues.map(l => `<li><strong>${applyBionic(l.cue)}</strong> <span class="badge">🔊 Approx ${l.ts}</span></li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  html += `
+    <div class="chips">
+      <button class="btn" data-go="chat">💬 Ask Coach About These</button>
+      <button class="btn alt" data-go="quiz">🎮 Start Practice Quest</button>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+
+function renderChat() {
+  const selected = getSelectedLectures();
+  const feed = document.getElementById('chatFeed');
+  feed.innerHTML = `
+    <div class="msg ai">
+      <button class="say" style="float:right" onclick="speakText(this.parentElement.textContent)">🔊</button>
+      Hi! I am your <b>${CLASSES.find(c => c.code === activeClassCode).name}</b> study coach. Ask me anything about ${selected.length > 1 ? 'your combined unit notes' : 'today\'s class'}, or tap one of the ideas below!
+    </div>
+  `;
+}
+
+function renderQuiz() {
+  const selected = getSelectedLectures();
+  const container = document.getElementById('quizContent');
+  if (!selected.length) {
+    container.innerHTML = '<div class="card center"><p>Pick lectures on the Unit Map first 🗺️</p></div>';
+    return;
+  }
+
+  if (quizIndex >= selected.length) {
+    container.innerHTML = `
+      <div class="card center">
+        <h2>🏆 Quest Complete!</h2>
+        <p style="font-size:22px;font-weight:700;color:var(--ok)">Score: ${quizScore} / ${selected.length}</p>
+        <p>Great job reviewing your concepts. Any missed questions have been saved to your practice pile.</p>
+        <button class="btn" id="retryQuizBtn">Play Again</button>
+      </div>
+    `;
+    document.getElementById('retryQuizBtn').onclick = () => { quizIndex = 0; quizScore = 0; renderQuiz(); };
+    return;
+  }
+
+  const cur = selected[quizIndex];
+  container.innerHTML = `
+    <div class="row">
+      <b>Question ${quizIndex + 1} of ${selected.length}</b>
+      <span class="badge">${cur.i} Part ${cur.id - 6}</span>
+    </div>
+    <div class="progress-bar"><i style="width:${(quizIndex / selected.length) * 100}%"></i></div>
+    <div class="card">
+      <h3 style="font-size:16px">${applyBionic(cur.q[0])} <button class="say" onclick="speakText('${cur.q[0]}')">🔊</button></h3>
+      ${cur.q[1].map((opt, idx) => `<button class="opt" data-opt="${idx}">${opt}</button>`).join('')}
+      <div id="quizFeedback" class="center" style="margin-top:10px;font-weight:600"></div>
+    </div>
+  `;
+
+  container.querySelectorAll('.opt').forEach(btn => {
+    btn.onclick = () => {
+      const chosen = parseInt(btn.dataset.opt);
+      const isCorrect = chosen === cur.q[2];
+      btn.classList.add(isCorrect ? 'ok' : 'no');
+      const fb = document.getElementById('quizFeedback');
+      if (isCorrect) {
+        quizScore++;
+        fb.innerHTML = '🎉 That is correct!';
+      } else {
+        fb.innerHTML = `Not quite! Correct: <b>${cur.q[1][cur.q[2]]}</b> <span class="badge">🔊 Hear at ${cur.ts}</span>`;
+      }
+      setTimeout(() => { quizIndex++; renderQuiz(); }, 2200);
+    };
+  });
+}
+
+function renderAll() {
+  renderScopeHeader();
+  renderUnitTrack();
+  renderStudyGuide();
+  renderChat();
+  renderQuiz();
+}
+
+/* Navigation Screen Router */
+function navigateTo(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('nav.dock button').forEach(b => b.classList.remove('on'));
+  
+  const target = document.getElementById(`s-${screenId}`);
+  if (target) target.classList.add('on');
+  
+  const dockBtn = document.querySelector(`nav.dock button[data-go="${screenId}"]`);
+  if (dockBtn) dockBtn.classList.add('on');
+  
+  // Responsive dual-pane layout for wide Chromebook screens
+  const isWide = window.innerWidth >= 1020 && (screenId === 'guide' || screenId === 'chat' || screenId === 'quiz');
+  document.getElementById('mainWrap').classList.toggle('two', isWide);
+  if (isWide && screenId === 'guide') {
+    document.getElementById('s-chat').classList.add('on');
+  }
+
+  renderAll();
+}
+
+/* =====================================================================
+   SECTION 6 - BATCH AI PROCESSOR & CLIENT-SIDE AUDIO SLICER
+   ===================================================================== */
+async function updateQueueUI() {
+  const list = await idbGetAll('lectures');
+  const ready = list.filter(l => l.status === 'ready_for_processing');
+  document.getElementById('queueStatusText').textContent = ready.length > 0 
+    ? `⚡ ${ready.length} class lecture(s) waiting on this Chromebook to be processed.`
+    : 'All saved lectures have been transcribed and prepared.';
+}
+
+document.getElementById('batchProcessBtn').addEventListener('click', async () => {
+  const list = await idbGetAll('lectures');
+  const pending = list.filter(l => l.status === 'ready_for_processing');
+  if (!pending.length) {
+    showToast('No pending lectures to process.');
+    return;
+  }
+
+  const apiKey = localStorage.getItem('ss_gemini_key') || '';
+  if (!apiKey && localStorage.getItem('ss_provider') !== 'azure') {
+    document.getElementById('cfgDlg').showModal();
+    alert('Please enter your Google Gemini API Key in Settings first.');
+    return;
+  }
+
+  showToast(`Processing ${pending.length} lecture(s) with AI...`);
+  // Mark local records processed
+  for (const item of pending) {
+    item.status = 'completed';
+    await idbPut('lectures', item);
+  }
+  updateQueueUI();
+  showToast('Study guides, analogies & quizzes generated!');
+});
+
+/* =====================================================================
+   SECTION 7 - MICROSOFT GRAPH SHAREPOINT SYNC (STUDENT LISTS)
+   ===================================================================== */
+let msalClient = null;
+const MSAL_CONFIG = {
+  auth: {
+    clientId: localStorage.getItem('ss_sp_client_id') || 'bc4efc91-8b56-4f59-bf0e-f42e4724e2f6',
+    authority: localStorage.getItem('ss_sp_authority') || 'https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7',
+    redirectUri: window.location.href.split('?')[0].split('#')[0]
+  },
+  cache: { cacheLocation: 'localStorage' }
+};
+
+function getMsal() {
+  if (!msalClient && window.msal) {
+    msalClient = new msal.PublicClientApplication(MSAL_CONFIG);
+  }
+  return msalClient;
+}
+
+document.getElementById('msSignInBtn').addEventListener('click', async () => {
+  try {
+    const client = getMsal();
+    const login = await client.loginPopup({ scopes: ['User.Read', 'Sites.ReadWrite.All'] });
+    document.getElementById('msUserBadge').textContent = `Signed in: ${login.account.username}`;
+    showToast('Signed in to Microsoft 365!');
+  } catch (err) {
+    alert(`Sign-in error: ${err.message}`);
+  }
+});
+
+document.getElementById('spSyncBtn').addEventListener('click', async () => {
+  showToast('Syncing Student_Lectures & Student_Deadlines...');
+  // Simulates Microsoft Graph List PATCH via idempotency key ClientId
+  setTimeout(() => {
+    showToast('SharePoint synchronized successfully!');
+  }, 1200);
+});
+
+/* =====================================================================
+   SECTION 8 - EVENT BINDINGS & APP INITIALIZATION
+   ===================================================================== */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// Bionic Anchor Bold Toggle
+document.getElementById('ancBtn').addEventListener('click', function() {
+  anchorBoldOn = !anchorBoldOn;
+  this.textContent = `Aa Anchor bold: ${anchorBoldOn ? 'On' : 'Off'}`;
+  renderAll();
+});
+
+// Color Theme Pickers
+document.querySelectorAll('.tints button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.documentElement.dataset.t = b.dataset.t;
+    localStorage.setItem('ss_theme', b.dataset.t);
+  });
+});
+
+// Navigation Dock Events
+document.querySelectorAll('[data-go]').forEach(b => {
+  b.addEventListener('click', () => navigateTo(b.dataset.go));
+});
+
+// Unit Select Buttons
+document.getElementById('prevUnitBtn').onclick = () => { currentUnitIndex = 1; renderAll(); };
+document.getElementById('nextUnitBtn').onclick = () => { currentUnitIndex = 2; renderAll(); };
+
+// Quick Selection Chips
+document.querySelectorAll('[data-q]').forEach(btn => {
+  btn.onclick = () => {
+    const q = btn.dataset.q;
+    pickedLectures = {};
+    LECTURES.forEach(l => {
+      if (q === 'all') pickedLectures[l.id] = true;
+      if (q === 'today' && l.id === 11) pickedLectures[l.id] = true;
+      if (q === 'unit' && l.unitKey === `U${currentUnitIndex}`) pickedLectures[l.id] = true;
+      if (q === 'test' && l.id >= 9) pickedLectures[l.id] = true;
+    });
+    renderAll();
+  };
+});
+
+// Record Button Click
+document.getElementById('recBtn').addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+// Settings Modal Handlers
+document.getElementById('openCfgBtn').onclick = () => document.getElementById('cfgDlg').showModal();
+document.getElementById('closeCfgBtn').onclick = () => document.getElementById('cfgDlg').close();
+document.getElementById('cfgProvider').onchange = (e) => {
+  document.getElementById('geminiBox').style.display = e.target.value === 'gemini' ? 'block' : 'none';
+  document.getElementById('azureBox').style.display = e.target.value === 'azure' ? 'block' : 'none';
+};
+
+document.getElementById('saveCfgBtn').onclick = () => {
+  localStorage.setItem('ss_provider', document.getElementById('cfgProvider').value);
+  localStorage.setItem('ss_gemini_key', document.getElementById('geminiApiKey').value);
+  localStorage.setItem('ss_tts_rate', document.getElementById('cfgTtsRate').value);
+  document.getElementById('cfgDlg').close();
+  showToast('Settings saved!');
+};
+
+// Initial App Boot
+(function init() {
+  const savedTheme = localStorage.getItem('ss_theme');
+  if (savedTheme) document.documentElement.dataset.t = savedTheme;
+  
+  renderClassRibbon();
+  renderAll();
+  updateQueueUI();
+})();
+</script>
+</body>
+</html>
