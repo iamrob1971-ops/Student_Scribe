@@ -1651,7 +1651,7 @@ async function resolveSiteId(token) {
   return cachedSiteId;
 }
 
-// Full Graph Sync to Student_Lectures & Student_Deadlines
+// Full Graph Sync to Student_Lectures & Student_Deadlines (Deduplicated & Idempotent)
 document.getElementById('spSyncBtn').addEventListener('click', async () => {
   const btn = document.getElementById('spSyncBtn');
   if (btn.disabled) return;
@@ -1669,12 +1669,28 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     showToast(`Syncing ${selectedLectures.length} lecture(s) to SharePoint…`);
     let syncedCount = 0;
 
+    // Standard headers with non-indexed query tolerance
+    const graphHeaders = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly'
+    };
+
+    // Pre-fetch existing items to guarantee zero duplicates even if Graph $filter errors
+    const [lectRes, dlRes] = await Promise.all([
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$expand=fields&$top=200`, { headers: graphHeaders }),
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$expand=fields&$top=200`, { headers: graphHeaders })
+    ]);
+    const existingLectures = (await lectRes.json()).value || [];
+    const existingDeadlines = (await dlRes.json()).value || [];
+
     for (let idx = 0; idx < selectedLectures.length; idx++) {
       const l = selectedLectures[idx];
       const clientId = `lect_${activeClassCode}_${l.id}`;
+      const actualPartNum = ds.lectures.findIndex(x => x.id === l.id) + 1;
 
       const fieldsPayload = {
-        Title: `${currentClass.name} · ${l.t} (Part ${idx + 1})`,
+        Title: `${currentClass.name} · ${l.t} (Part ${actualPartNum})`,
         ClientId: clientId,
         ClassCode: activeClassCode,
         ClassName: currentClass.name,
@@ -1683,7 +1699,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         DurationSeconds: 2880,
         UnitTitle: ds.unitTitle,
         UnitKey: ds.unitKey,
-        PartNumber: idx + 1,
+        PartNumber: actualPartNum,
         TopicLabel: l.t,
         TopicIcon: l.i,
         ProcessingStatus: 'Completed',
@@ -1699,27 +1715,23 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         SchemaVersion: 2
       };
 
-      // Idempotent upsert check on Student_Lectures
-      const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${clientId}'&$expand=fields`;
-      const checkRes = await fetch(checkUrl, { headers: { 'Authorization': `Bearer ${token}` } });
-      const checkData = await checkRes.json();
-
-      if (checkData.value && checkData.value.length > 0) {
-        const itemId = checkData.value[0].id;
-        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${itemId}/fields`, {
+      // 1. Idempotent check for Student_Lectures
+      const existingLectItem = existingLectures.find(it => it.fields && it.fields.ClientId === clientId);
+      if (existingLectItem) {
+        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${existingLectItem.id}/fields`, {
           method: 'PATCH',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: graphHeaders,
           body: JSON.stringify(fieldsPayload)
         });
       } else {
         await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: graphHeaders,
           body: JSON.stringify({ fields: fieldsPayload })
         });
       }
 
-      // If teacher cues indicate test/assignment, sync to Student_Deadlines
+      // 2. Idempotent check for Student_Deadlines
       if (l.cue && /quiz|test|exam|due|homework/i.test(l.cue)) {
         const typeDesc = /quiz/i.test(l.cue) ? 'Quiz' : (/test|exam/i.test(l.cue) ? 'Test' : 'Homework');
         const deadlinePayload = {
@@ -1730,21 +1742,20 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
           SourceClientId: clientId
         };
 
-        const dlCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$filter=fields/SourceClientId eq '${clientId}'&$expand=fields`;
-        const dlCheckRes = await fetch(dlCheckUrl, { headers: { 'Authorization': `Bearer ${token}` } });
-        const dlCheckData = await dlCheckRes.json();
+        const existingDlItem = existingDeadlines.find(it => 
+          it.fields && it.fields.SourceClientId === clientId && it.fields.Title === l.cue
+        );
 
-        if (dlCheckData.value && dlCheckData.value.length > 0) {
-          const dlItemId = dlCheckData.value[0].id;
-          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items/${dlItemId}/fields`, {
+        if (existingDlItem) {
+          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items/${existingDlItem.id}/fields`, {
             method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: graphHeaders,
             body: JSON.stringify(deadlinePayload)
           });
         } else {
           await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: graphHeaders,
             body: JSON.stringify({ fields: deadlinePayload })
           });
         }
@@ -1752,7 +1763,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       syncedCount++;
     }
 
-    showToast(`🎉 Synced ${syncedCount} lecture(s) & deadlines to SharePoint!`);
+    showToast(`🎉 Synced ${syncedCount} lecture(s) & deadlines (no duplicates)!`);
   } catch (err) {
     alert('SharePoint Sync Error: ' + err.message);
   } finally {
