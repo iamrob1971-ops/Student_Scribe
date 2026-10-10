@@ -362,10 +362,10 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <h4>SharePoint Sync (Bible_App Tenant)</h4>
     <p style="font-size:13px;color:var(--mut);margin:0">Writes study guide to <code>Student_Lectures</code> and tests to <code>Student_Deadlines</code>.</p>
     <label>Tenant Authority
-      <input type="text" id="spAuthority" value="https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7">
+      <input type="text" id="spAuthority" placeholder="https://login.microsoftonline.com/<Directory tenant ID>">
     </label>
     <label>App (Client) ID
-      <input type="text" id="spClientId" value="bc4efc91-8b56-4f59-bf0e-f42e4724e2f6">
+      <input type="text" id="spClientId" placeholder="Paste Application (client) ID">
     </label>
     <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
       <button class="btn alt sm" id="msSignInBtn">Sign In with Microsoft</button>
@@ -558,15 +558,15 @@ const CURRICULUM = {
 };
 
 let activeClassCode = 'BIO_1';
-let anchorBoldOn = false; // Defaulted to OFF based on research feedback
+let anchorBoldOn = false;
 let pickedLectures = {};
 let quizIndex = 0;
 let quizScore = 0;
-let quizMissed = [];      // lecture ids missed in the current run
-let quizRetryIds = null;  // when set, the drill only covers these lecture ids
+let quizMissed = [];
+let quizRetryIds = null;
 let stagedPdfBase64 = null;
 let stagedPdfName = null;
-let currentChatHistory = []; // Multi-turn memory
+let currentChatHistory = [];
 
 /* =====================================================================
    SECTION 2 - INDEXEDDB STORAGE (SINGLE CONNECTION PROMISE)
@@ -634,12 +634,10 @@ async function startRecording() {
     });
     audioStream = stream;
 
-    // Ask Chrome not to evict IndexedDB under storage pressure
     if (navigator.storage && navigator.storage.persist) {
       try { await navigator.storage.persist(); } catch(e){}
     }
 
-    // If the mic drops (headset unplugged, device suspends), stop cleanly instead of showing a stuck "recording" state
     stream.getAudioTracks().forEach(t => {
       t.onended = () => {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -674,7 +672,6 @@ async function startRecording() {
     const sessionTargetId = clientId;
 
     mediaRecorder.ondataavailable = async (e) => {
-      // Only write chunks that belong to this session (the final chunk on stop is kept)
       const sess = activeRecordingSession;
       if (e.data && e.data.size > 0 && sess && sess.clientId === sessionTargetId) {
         chunkSequence++;
@@ -714,7 +711,6 @@ async function stopRecording() {
   clearInterval(timerInterval);
   if (wakeLock) { try { await wakeLock.release(); wakeLock = null; } catch(e){} }
 
-  // Wait for the final chunk to be flushed before marking the lecture ready
   await new Promise(resolve => {
     rec.addEventListener('stop', () => setTimeout(resolve, 150), { once: true });
     rec.stop();
@@ -756,12 +752,11 @@ function mdInline(t) {
     .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
 }
 
-// Line-based Markdown: headings, bullet and numbered lists, bold, italic, paragraphs, line breaks
 function mdToHtml(md) {
   if (!md) return '';
   const lines = String(md).replace(/\r\n/g, '\n').split('\n');
   const out = [];
-  let list = null;   // 'ul' | 'ol' | null
+  let list = null;
   let para = [];
   const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
   const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
@@ -791,7 +786,6 @@ function mdToHtml(md) {
   return '<div class="md">' + out.join('') + '</div>';
 }
 
-// Anchor bold works on text nodes only, so tags and HTML entities are never touched
 function applyBionic(html) {
   if (!anchorBoldOn || !html) return html;
   const tpl = document.createElement('template');
@@ -824,7 +818,6 @@ function applyBionic(html) {
   return tpl.innerHTML;
 }
 
-// Reads visible text only: buttons (🔊 Read, Try Again) are removed from a copy, never by word matching
 function speakText(rawTextOrElement) {
   window.speechSynthesis.cancel();
   let cleanText = '';
@@ -840,7 +833,6 @@ function speakText(rawTextOrElement) {
   cleanText = cleanText.replace(/[*#_`~]/g, '').replace(/\s+/g, ' ').trim();
   if (!cleanText) return;
 
-  // Chrome cuts off long single utterances, so queue one sentence at a time
   const rate = parseFloat(localStorage.getItem('ss_tts_rate') || '0.92');
   const sentences = cleanText.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [cleanText];
   sentences.map(x => x.trim()).filter(Boolean).forEach(sentence => {
@@ -1069,7 +1061,6 @@ function renderQuiz() {
       }
       const answeredId = cur.id;
       setTimeout(() => {
-        // Ignore if the drill was reset or the class changed during the pause
         const now = getQuizSet()[quizIndex];
         if (now && now.id === answeredId) { quizIndex++; renderQuiz(); }
       }, 2200);
@@ -1153,7 +1144,6 @@ document.getElementById('handoutFileInput').addEventListener('change', (e) => {
   }
 });
 
-// Teacher handout notes are saved per class so they survive navigation and reloads
 function getHandoutsKey() { return `ss_handouts_${activeClassCode}`; }
 function loadHandouts() {
   try { return JSON.parse(localStorage.getItem(getHandoutsKey()) || '[]'); } catch(e) { return []; }
@@ -1307,7 +1297,6 @@ document.getElementById('newChatBtn').addEventListener('click', () => {
   showToast('Started new conversation');
 });
 
-// Slide-Out Drawer Controls
 document.getElementById('openChatHistoryBtn').addEventListener('click', () => {
   renderHistoryDrawer();
   document.getElementById('chatHistoryDrawer').classList.add('open');
@@ -1364,7 +1353,6 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Joins every non-thought text part (thinking models can return several parts)
 function extractGeminiText(data) {
   const cand = data.candidates?.[0];
   const text = (cand?.content?.parts || [])
@@ -1375,7 +1363,6 @@ function extractGeminiText(data) {
   return { text, finish: cand?.finishReason || '', blocked: data.promptFeedback?.blockReason || '' };
 }
 
-// Resilient Gemini waterfall. opts: { system, temperature, maxOutputTokens }
 async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}) {
   const chain = [chosenModel, 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
     .filter((v, i, a) => v && a.indexOf(v) === i);
@@ -1385,7 +1372,6 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
       contents: contentsPayload,
       generationConfig: {
         temperature: opts.temperature ?? 0.3,
-        // Thinking tokens count against this cap, so leave headroom
         maxOutputTokens: opts.maxOutputTokens ?? 8192
       }
     };
@@ -1408,20 +1394,18 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
         data = await res.json();
       } catch (netErr) {
         lastError = 'Network: ' + netErr.message;
-        break; // try next model
+        break;
       }
 
       if (!res.ok) {
         const msg = data.error?.message || `HTTP ${res.status}`;
         if (/API_KEY_INVALID|API key not valid/i.test(msg)) throw new Error(msg);
-        // Model does not accept thinkingConfig: retry the same model without it
         if (res.status === 400 && withThinking && /thinking/i.test(msg)) { withThinking = false; continue; }
-        // Busy, quota, or unknown model: move down the chain
         if ([404, 429, 500, 503].includes(res.status) || /demand|overload|quota|exhaust|not found/i.test(msg)) {
           lastError = `${curModel}: ${msg}`;
           break;
         }
-        throw new Error(msg); // bad request, retrying other models will not help
+        throw new Error(msg);
       }
 
       const out = extractGeminiText(data);
@@ -1475,10 +1459,7 @@ async function sendChatMessage(query, isRetry = false) {
   const activeNotes = getSelectedLectures().map(l => `${l.t}: ${l.c} (Analogy: ${l.analogy})`).join('\n');
   const systemContext = `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}\n\n[CLASS STUDY NOTES]\n${activeNotes}`;
 
-  // Multi-turn payload; the coaching rules travel in systemInstruction, not a fake first turn
   const contentsPayload = [];
-
-  // Append recent chat turns
   currentChatHistory.slice(-6).forEach(h => {
     contentsPayload.push({ role: h.role, parts: [{ text: h.text }] });
   });
@@ -1538,7 +1519,6 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendChatMessage(); }
 });
 
-// Speech Recognition for Chat Mic
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
   const reco = new SR();
@@ -1547,6 +1527,7 @@ if (SR) {
   
   reco.onresult = (e) => {
     const spoken = e.results[0][0].transcript;
+    document.getElementById('chatInput').value = spoken;
     document.getElementById('chatMicBtn').textContent = '🎤 Speak';
     sendChatMessage(spoken);
   };
@@ -1556,7 +1537,7 @@ if (SR) {
   document.getElementById('chatMicBtn').addEventListener('click', () => {
     if (chatBusy) return;
     document.getElementById('chatMicBtn').textContent = '🔴 Listening…';
-    try { reco.start(); } catch(e) { /* already listening */ }
+    try { reco.start(); } catch(e) { }
   });
 } else {
   document.getElementById('chatMicBtn').style.display = 'none';
@@ -1568,7 +1549,219 @@ document.addEventListener('click', (e) => {
 });
 
 /* =====================================================================
-   SECTION 8 - GEMINI MODEL TESTER & PARENT PIN GATE
+   SECTION 8 - MICROSOFT GRAPH SYNC & MSAL 2.x ENGINE
+   ===================================================================== */
+const GRAPH_SCOPES = ["User.Read", "Sites.ReadWrite.All"];
+const SHAREPOINT_DOMAIN = "rmr1971.sharepoint.com";
+const SITE_PATH = "/sites/Bible_App";
+
+let msalApp = null;
+let cachedSiteId = null;
+
+function getMsalClient() {
+  if (msalApp) return msalApp;
+  const clientId = (localStorage.getItem('ss_sp_client_id') || '').trim();
+  const authority = (localStorage.getItem('ss_sp_authority') || '').trim();
+  if (!clientId || !authority || !window.msal) return null;
+
+  try {
+    msalApp = new msal.PublicClientApplication({
+      auth: {
+        clientId: clientId,
+        authority: authority,
+        redirectUri: window.location.href.split('?')[0].split('#')[0]
+      },
+      cache: {
+        cacheLocation: "localStorage",
+        storeAuthStateInCookie: false
+      }
+    });
+    return msalApp;
+  } catch (err) {
+    console.warn('MSAL configuration error:', err);
+    return null;
+  }
+}
+
+async function getMsalToken() {
+  const client = getMsalClient();
+  if (!client) throw new Error('Microsoft App ID and Tenant Authority must be set in Settings (⚙️).');
+
+  const accounts = client.getAllAccounts();
+  const activeAccount = accounts[0];
+
+  if (!activeAccount) {
+    const res = await client.loginPopup({ scopes: GRAPH_SCOPES, prompt: 'select_account' });
+    updateUserBadge(res.account);
+    return res.accessToken;
+  }
+
+  try {
+    const silent = await client.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: activeAccount });
+    updateUserBadge(activeAccount);
+    return silent.accessToken;
+  } catch (err) {
+    const pop = await client.loginPopup({ scopes: GRAPH_SCOPES, prompt: 'select_account' });
+    updateUserBadge(pop.account);
+    return pop.accessToken;
+  }
+}
+
+function updateUserBadge(acc) {
+  const badge = document.getElementById('msUserBadge');
+  const btn = document.getElementById('msSignInBtn');
+  if (acc) {
+    badge.textContent = `Signed in: ${acc.username || acc.name}`;
+    btn.textContent = 'Sign Out';
+  } else {
+    badge.textContent = 'Not signed in';
+    btn.textContent = 'Sign In with Microsoft';
+  }
+}
+
+document.getElementById('msSignInBtn').addEventListener('click', async () => {
+  const client = getMsalClient();
+  if (!client) {
+    alert('Please enter your App (Client) ID and Tenant Authority in Settings first.');
+    return;
+  }
+  const accounts = client.getAllAccounts();
+  if (accounts.length > 0) {
+    await client.logoutPopup();
+    updateUserBadge(null);
+    showToast('Signed out of Microsoft 365');
+  } else {
+    try {
+      await getMsalToken();
+      showToast('Signed in successfully!');
+    } catch (err) {
+      alert('Sign in failed: ' + err.message);
+    }
+  }
+});
+
+async function resolveSiteId(token) {
+  if (cachedSiteId) return cachedSiteId;
+  const res = await fetch(`https://graph.microsoft.com/v1.0/sites/${SHAREPOINT_DOMAIN}:${SITE_PATH}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error('Failed to resolve SharePoint site: ' + (data.error?.message || res.status));
+  cachedSiteId = data.id;
+  return cachedSiteId;
+}
+
+// Full Graph Sync to Student_Lectures & Student_Deadlines
+document.getElementById('spSyncBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('spSyncBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+
+  try {
+    showToast('Connecting to Microsoft Graph…');
+    const token = await getMsalToken();
+    const siteId = await resolveSiteId(token);
+
+    const ds = getActiveDataset();
+    const currentClass = CLASSES.find(c => c.code === activeClassCode);
+    const selectedLectures = getSelectedLectures();
+
+    showToast(`Syncing ${selectedLectures.length} lecture(s) to SharePoint…`);
+    let syncedCount = 0;
+
+    for (let idx = 0; idx < selectedLectures.length; idx++) {
+      const l = selectedLectures[idx];
+      const clientId = `lect_${activeClassCode}_${l.id}`;
+
+      const fieldsPayload = {
+        Title: `${currentClass.name} · ${l.t} (Part ${idx + 1})`,
+        ClientId: clientId,
+        ClassCode: activeClassCode,
+        ClassName: currentClass.name,
+        PeriodNumber: currentClass.period,
+        RecordedDate: new Date().toISOString(),
+        DurationSeconds: 2880,
+        UnitTitle: ds.unitTitle,
+        UnitKey: ds.unitKey,
+        PartNumber: idx + 1,
+        TopicLabel: l.t,
+        TopicIcon: l.i,
+        ProcessingStatus: 'Completed',
+        StudyPayload_JSON: JSON.stringify({
+          big_idea: l.c,
+          core_concepts: [{ bold_stem: l.bold_stem, text: l.c }],
+          analogy: l.analogy,
+          teacher_cues: l.cue ? [{ cue: l.cue, ts: l.ts }] : []
+        }),
+        PracticePayload_JSON: JSON.stringify({
+          quiz: [{ q: l.q[0], options: l.q[1], correct: l.q[2], cue_ts: l.ts }]
+        }),
+        SchemaVersion: 2
+      };
+
+      // Idempotent upsert check on Student_Lectures
+      const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${clientId}'&$expand=fields`;
+      const checkRes = await fetch(checkUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+      const checkData = await checkRes.json();
+
+      if (checkData.value && checkData.value.length > 0) {
+        const itemId = checkData.value[0].id;
+        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${itemId}/fields`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(fieldsPayload)
+        });
+      } else {
+        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: fieldsPayload })
+        });
+      }
+
+      // If teacher cues indicate test/assignment, sync to Student_Deadlines
+      if (l.cue && /quiz|test|exam|due|homework/i.test(l.cue)) {
+        const typeDesc = /quiz/i.test(l.cue) ? 'Quiz' : (/test|exam/i.test(l.cue) ? 'Test' : 'Homework');
+        const deadlinePayload = {
+          Title: l.cue,
+          Class: currentClass.name,
+          ClassCode: activeClassCode,
+          TypeDesc: typeDesc,
+          SourceClientId: clientId
+        };
+
+        const dlCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$filter=fields/SourceClientId eq '${clientId}'&$expand=fields`;
+        const dlCheckRes = await fetch(dlCheckUrl, { headers: { 'Authorization': `Bearer ${token}` } });
+        const dlCheckData = await dlCheckRes.json();
+
+        if (dlCheckData.value && dlCheckData.value.length > 0) {
+          const dlItemId = dlCheckData.value[0].id;
+          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items/${dlItemId}/fields`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(deadlinePayload)
+          });
+        } else {
+          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: deadlinePayload })
+          });
+        }
+      }
+      syncedCount++;
+    }
+
+    showToast(`🎉 Synced ${syncedCount} lecture(s) & deadlines to SharePoint!`);
+  } catch (err) {
+    alert('SharePoint Sync Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =====================================================================
+   SECTION 9 - GEMINI MODEL TESTER & PARENT PIN GATE
    ===================================================================== */
 const PARENT_PIN_KEY = 'ss_parent_pin';
 function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
@@ -1600,6 +1793,8 @@ function openParentVault() {
   document.getElementById('cfgNewPin').value = getParentPin();
   document.getElementById('cfgReadingLevel').value = localStorage.getItem('ss_reading_level') || '5';
   document.getElementById('cfgTtsRate').value = localStorage.getItem('ss_tts_rate') || '0.92';
+  document.getElementById('spAuthority').value = localStorage.getItem('ss_sp_authority') || 'https://login.microsoftonline.com/daa6322e-b4e5-415c-8cc7-258c866f29d7';
+  document.getElementById('spClientId').value = localStorage.getItem('ss_sp_client_id') || 'bc4efc91-8b56-4f59-bf0e-f42e4724e2f6';
   
   document.getElementById('cfgProvider').value = localStorage.getItem('ss_provider') || 'gemini';
   applyProviderView();
@@ -1612,6 +1807,13 @@ function openParentVault() {
     sel.appendChild(o);
   }
   sel.value = savedModel;
+
+  const client = getMsalClient();
+  if (client) {
+    const accs = client.getAllAccounts();
+    updateUserBadge(accs.length ? accs[0] : null);
+  }
+
   document.getElementById('cfgDlg').showModal();
 }
 
@@ -1624,13 +1826,10 @@ function applyProviderView() {
 }
 document.getElementById('cfgProvider').addEventListener('change', applyProviderView);
 
-// Not built yet in this demo: say so instead of doing nothing
-[['batchProcessBtn', 'Lecture processing'], ['spSyncBtn', 'SharePoint sync'], ['msSignInBtn', 'Microsoft sign-in']]
-  .forEach(([id, label]) => {
-    document.getElementById(id).addEventListener('click', () => showToast(`${label} is not connected in this demo build yet`));
-  });
+document.getElementById('batchProcessBtn').addEventListener('click', () => {
+  showToast('Lecture processing is not connected in this demo build yet');
+});
 
-// Test Key & Fetch Models using x-goog-api-key header
 document.getElementById('testGeminiBtn').addEventListener('click', async () => {
   const k = document.getElementById('geminiApiKey').value.trim();
   const badge = document.getElementById('geminiStatusBadge');
@@ -1676,6 +1875,12 @@ document.getElementById('saveCfgBtn').addEventListener('click', () => {
   localStorage.setItem('ss_master_prompt', document.getElementById('masterSystemPrompt').value);
   localStorage.setItem('ss_tts_rate', document.getElementById('cfgTtsRate').value);
   localStorage.setItem('ss_provider', document.getElementById('cfgProvider').value);
+  localStorage.setItem('ss_sp_authority', document.getElementById('spAuthority').value.trim());
+  localStorage.setItem('ss_sp_client_id', document.getElementById('spClientId').value.trim());
+
+  // Reset MSAL client so it picks up any new IDs
+  msalApp = null;
+  cachedSiteId = null;
 
   const newPin = document.getElementById('cfgNewPin').value.trim();
   if (newPin && !/^\d{4}$/.test(newPin)) { alert('PIN must be exactly 4 digits.'); return; }
@@ -1686,7 +1891,7 @@ document.getElementById('saveCfgBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
-   SECTION 9 - INITIALIZATION & QUEUE UI
+   SECTION 10 - INITIALIZATION & QUEUE UI
    ===================================================================== */
 async function updateQueueUI() {
   const list = await idbGetAll('lectures');
@@ -1736,7 +1941,6 @@ document.querySelectorAll('[data-q]').forEach(btn => {
       if (q === 'test' && idx >= ds.lectures.length - 2) pickedLectures[l.id] = true;
     });
     if (q === 'today') {
-      // Match today's weekday; fall back to the most recent part
       (todays.length ? todays : ds.lectures.slice(-1)).forEach(l => pickedLectures[l.id] = true);
       if (!todays.length) showToast(`No ${todayAbbr} lecture saved, showing the latest one`);
     }
@@ -1770,6 +1974,13 @@ document.getElementById('recBtn').addEventListener('click', () => {
   renderAll();
   loadSubjectChat();
   updateQueueUI();
+
+  // Pre-load MSAL if credentials exist in localStorage
+  const client = getMsalClient();
+  if (client) {
+    const accs = client.getAllAccounts();
+    if (accs.length) updateUserBadge(accs[0]);
+  }
 })();
 </script>
 </body>
