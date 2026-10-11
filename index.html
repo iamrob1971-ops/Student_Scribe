@@ -2049,7 +2049,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     const siteId = await resolveSiteId(token);
 
     showToast('Checking for unsynced lectures, deadlines, schedules & chats…');
-    let syncedLectures = 0, syncedDeadlines = 0, syncedChats = 0;
+    let syncedLectures = 0, syncedDeadlines = 0, syncedChatsCount = 0;
 
     // 1. SYNC ALL DIRTY LECTURES
     const allLectures = await idbGetAll('lectures');
