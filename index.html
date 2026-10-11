@@ -78,6 +78,7 @@ main { padding: 4px 18px 140px; flex: 1; }
 .say:hover { border-color: var(--c); }
 .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 10px; background: var(--sel); color: var(--ink); margin-left: 6px; }
 .src-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 2px 8px; background: var(--bg); border: 1px solid var(--line); color: var(--mut); margin-bottom: 6px; }
+.demo-banner { background: #FEF3C7; border: 1.5px solid #F59E0B; color: #B45309; border-radius: 12px; padding: 8px 14px; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .btn { border: 0; background: var(--c); color: #fff; border-radius: 14px; padding: 12px 20px; font-weight: 600; cursor: pointer; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn.alt { background: var(--card); border: 2px solid var(--line); color: var(--ink); }
 .btn.sm { padding: 6px 14px; font-size: 13px; min-height: 36px; border-radius: 10px; }
@@ -185,6 +186,11 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <!-- Screen 1: Dual-Intake Station (Main Screen) -->
   <main id="mainWrap">
     <section class="screen on" id="s-rec">
+      <div id="demoBannerBox" style="display:none" class="demo-banner">
+        <span>🧪 Sample Demo Deck Active (Isolated from SharePoint Sync)</span>
+        <button class="say sm" id="clearDemoBannerBtn" style="background:#fff">Clear Demo Deck</button>
+      </div>
+
       <p class="center" id="recScheduleHint" style="font-weight:600;font-size:18px"></p>
 
       <!-- DUAL INTAKE GRID -->
@@ -368,11 +374,12 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <span id="msUserBadge" style="font-size:13px;font-weight:600">Not signed in</span>
     </div>
 
-    <h4>Schedule &amp; Semester Management</h4>
+    <h4>Schedule &amp; Data Utilities</h4>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn alt sm" id="pullClassesBtn">☁️ Pull Schedule from SharePoint</button>
       <button class="btn alt sm" id="seedDemoBtn">🧪 Seed Demo Data</button>
-      <button class="btn alt sm" id="wipeDataBtn" style="color:var(--bad)">🧹 Wipe Local Vault</button>
+      <button class="btn alt sm" id="removeDemoBtn">🧹 Remove Demo Data</button>
+      <button class="btn alt sm" id="wipeDataBtn" style="color:var(--bad)">⚠️ Wipe All Local Data</button>
     </div>
 
     <h4>Target Reading Level Governor</h4>
@@ -414,14 +421,14 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 
 <script>
 /* =====================================================================
-   SECTION 1 - MASTER STATE & DEFAULT CURRICULUM
+   SECTION 1 - MASTER STATE & SCHEDULE CONFIGURATION
    ===================================================================== */
 let CLASSES = [
-  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    color: '#2F6FDE', icon: '🧬' },
-  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   color: '#8A4FD6', icon: '📐' },
-  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', color: '#C2703A', icon: '📖' },
-  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', color: '#2E7D5B', icon: '📚' },
-  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    color: '#D97706', icon: '🍎' }
+  { code: 'ALG_1',   name: 'Algebra I',            period: 1, start: '08:00', end: '08:50', teacher: 'Erhart',   color: '#8A4FD6', icon: '📐' },
+  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, start: '08:55', end: '09:45', teacher: 'Gambrell', color: '#C2703A', icon: '📖' },
+  { code: 'BIO_1',   name: 'Biology I',            period: 3, start: '09:50', end: '10:40', teacher: 'Smith',    color: '#2F6FDE', icon: '🧬' },
+  { code: 'ENG_1',   name: 'English I',            period: 4, start: '10:45', end: '11:35', teacher: 'Piersant', color: '#2E7D5B', icon: '📚' },
+  { code: 'WLN_1',   name: 'Wellness',             period: 5, start: '11:40', end: '12:30', teacher: 'Craft',    color: '#D97706', icon: '🍎' }
 ];
 
 const DEFAULT_PROFILE = `STUDENT PROFILE: High school student with visual and auditory processing fatigue.
@@ -435,48 +442,21 @@ Keep responses concise, clear, and punchy.
 Never lecture in long paragraphs. Use clear bullet points and bold anchor stems.
 Ground all science and math concepts in realistic analogies across aviation, war history, mechanics, soccer, or gaming.`;
 
-// Demo Fallback Curriculum Data
+// Standalone Mock Demo Deck (Loaded ONLY when requested)
 const DEMO_CURRICULUM = {
   BIO_1: {
     unitKey: 'U2', unitTitle: 'Unit 2 · Cells & Energy',
     lectures: [
-      { id: 'bio_1', i: '🔋', d: 'Mon', n: 5, t: 'ATP Energy', src: 'Audio', c: 'ATP is the rechargeable battery that powers every cell.', bold_stem: 'ATP Molecule', analogy: 'Like the main battery on an airliner flight deck—delivers immediate power to vital systems.', cue: 'ATP loses a phosphate to release energy (becomes ADP)', ts: '11:20', q: ['What is the primary job of ATP in a living cell?', ['Store genetic code', 'Provide instant cellular energy', 'Build bones'], 1] },
-      { id: 'bio_2', i: '🍃', d: 'Tue', n: 6, t: 'Chloroplasts', src: 'Handout', c: 'Chloroplasts absorb sunlight to build glucose sugar in plants.', bold_stem: 'Photosynthesis', analogy: 'Solar panels on an aircraft wing converting sunlight directly into fuel.', cue: 'Chlorophyll is the green pigment absorbing light', ts: '16:45', q: ['What do chloroplasts convert sunlight into?', ['Protein', 'Chemical energy (Glucose)', 'Water'], 1] },
-      { id: 'bio_3', i: '⚡', d: 'Wed', n: 7, t: 'Mitochondria', src: 'Mixed', c: 'Mitochondria break down glucose into ATP through cellular respiration.', bold_stem: 'Cell Powerhouse', analogy: 'The jet engine of the cell—combusting fuel and air to generate massive thrust.', cue: 'Lab on yeast respiration due Thursday', ts: '28:10', q: ['Which organelle acts as the cell’s engine to make ATP?', ['Mitochondria', 'Nucleus', 'Cell wall'], 0] },
-      { id: 'bio_4', i: '💨', d: 'Thu', n: 8, t: 'Aerobic vs Anaerobic', src: 'Audio', c: 'Aerobic respiration requires oxygen; anaerobic operates without it.', bold_stem: 'Oxygen Requirement', analogy: 'Cruising with twin jet engines (oxygen) vs gliding on emergency backup when engines flame out.', cue: 'Lactic acid buildup happens without oxygen', ts: '08:30', q: ['What does aerobic respiration require that anaerobic does not?', ['Water', 'Carbon', 'Oxygen'], 2] },
-      { id: 'bio_5', i: '🎯', d: 'Fri', n: 9, t: 'Respiration Equation', src: 'Mixed', c: 'The chemical formula: Glucose + Oxygen = Carbon Dioxide + Water + ATP.', bold_stem: 'Respiration Equation', analogy: 'The flight fuel burn equation: Jet-A Fuel + Compressed Air = Thrust + Exhaust.', cue: 'Quiz on Cell Respiration and Photosynthesis this Friday!', ts: '14:20', q: ['What are the two starting ingredients for cellular respiration?', ['Glucose and Oxygen', 'Sunlight and Carbon', 'Water and Salt'], 0] }
-    ]
-  },
-  ALG_1: {
-    unitKey: 'U1', unitTitle: 'Unit 1 · Linear Equations & Slope',
-    lectures: [
-      { id: 'alg_1', i: '📈', d: 'Mon', n: 12, t: 'Slope (m)', src: 'Audio', c: 'Slope is the rate of change: rise over run (vertical change divided by horizontal change).', bold_stem: 'Rate of Climb', analogy: 'Aircraft climb gradient: how many feet of altitude you gain for every mile forward.', cue: 'm = (y2 - y1) / (x2 - x1) will be on the midterm', ts: '09:40', q: ['Slope is best described as…', ['Rise over run', 'Total distance', 'Center of circle'], 0] },
-      { id: 'alg_2', i: '🎯', d: 'Tue', n: 13, t: 'Y-Intercept (b)', src: 'Handout', c: 'The y-intercept is where the line crosses the vertical y-axis when x equals zero.', bold_stem: 'Field Elevation', analogy: 'Airport elevation above sea level before the takeoff roll begins.', cue: 'In y = mx + b, b is always the starting point', ts: '15:10', q: ['In y = mx + b, what letter represents the y-intercept?', ['m', 'x', 'b'], 2] },
-      { id: 'alg_3', i: '📐', d: 'Wed', n: 14, t: 'Slope-Intercept Form', src: 'Mixed', c: 'y = mx + b allows you to graph any straight line immediately using starting point and slope.', bold_stem: 'Flight Plan Formula', analogy: 'Altitude profile: Current Altitude = (Climb Rate × Minutes) + Starting Elevation.', cue: 'Test on graphing slope-intercept next Tuesday', ts: '22:05', q: ['What type of graph does y = mx + b always produce?', ['A circle', 'A straight line', 'A wave'], 1] }
-    ]
-  },
-  BBL_FDN: {
-    unitKey: 'U1', unitTitle: 'Unit 1 · Creation & Covenants',
-    lectures: [
-      { id: 'bbl_1', i: '🌍', d: 'Mon', n: 2, t: 'Creation Order', src: 'Audio', c: 'God brings cosmos out of chaos, creating by divine word with intentional design.', bold_stem: 'Divine Blueprint', analogy: 'An aeronautical engineer designing an aircraft wing with purposeful physics, not random chance.', cue: 'Know Genesis 1:1 key themes', ts: '10:15', q: ['How did God create according to Genesis 1?', ['By Speaking His Word', 'By accident', 'Through chaos'], 0] },
-      { id: 'bbl_2', i: '🤝', d: 'Wed', n: 4, t: 'Abrahamic Covenant', src: 'Handout', c: 'God makes a binding, unconditional promise: land, descendants, and worldwide blessing.', bold_stem: 'Unbreakable Contract', analogy: 'An air traffic control clearance that guarantees your flight route with zero deviation.', cue: 'Faith counted as righteousness (Gen 15:6)', ts: '18:50', q: ['What was promised in the Abrahamic Covenant?', ['Land, family, and blessing', 'Instant wealth only', 'An army'], 0] }
-    ]
-  },
-  ENG_1: {
-    unitKey: 'U1', unitTitle: 'Unit 1 · Narrative Structure & Voice',
-    lectures: [
-      { id: 'eng_1', i: '📖', d: 'Tue', n: 8, t: 'Plot Mountain', src: 'Handout', c: 'Exposition, rising action, climax, falling action, and resolution form the spine of stories.', bold_stem: 'Flight Profile', analogy: 'Takeoff roll, climb to altitude, reaching maximum cruising ceiling (climax), descent, and landing.', cue: 'Climax is the turning point of greatest tension', ts: '14:00', q: ['What is the highest point of story tension?', ['Exposition', 'Climax', 'Resolution'], 1] }
-    ]
-  },
-  WLN_1: {
-    unitKey: 'U1', unitTitle: 'Unit 1 · Sleep & Cognitive Recovery',
-    lectures: [
-      { id: 'wln_1', i: '💤', d: 'Thu', n: 10, t: 'Sleep Architecture', src: 'Handout', c: 'REM sleep consolidates memory and cognitive clarity; deep sleep restores physical muscle.', bold_stem: 'Hangar Maintenance', analogy: 'Overnight maintenance and defragging aircraft flight computers so they don’t glitch in flight.', cue: '8-9 hours required for teen working memory', ts: '07:45', q: ['Which sleep stage is critical for memory consolidation?', ['Light Sleep', 'REM Sleep', 'Pre-sleep'], 1] }
+      { id: 'demo_bio_1', isDemo: true, i: '🔋', d: 'Mon', n: 5, t: 'ATP Energy', src: 'Audio', c: 'ATP is the rechargeable battery that powers every cell.', bold_stem: 'ATP Molecule', analogy: 'Like the main battery on an airliner flight deck—delivers immediate power to vital systems.', cue: 'ATP loses a phosphate to release energy (becomes ADP)', ts: '11:20', q: ['What is the primary job of ATP in a living cell?', ['Store genetic code', 'Provide instant cellular energy', 'Build bones'], 1] },
+      { id: 'demo_bio_2', isDemo: true, i: '🍃', d: 'Tue', n: 6, t: 'Chloroplasts', src: 'Handout', c: 'Chloroplasts absorb sunlight to build glucose sugar in plants.', bold_stem: 'Photosynthesis', analogy: 'Solar panels on an aircraft wing converting sunlight directly into fuel.', cue: 'Chlorophyll is the green pigment absorbing light', ts: '16:45', q: ['What do chloroplasts convert sunlight into?', ['Protein', 'Chemical energy (Glucose)', 'Water'], 1] },
+      { id: 'demo_bio_3', isDemo: true, i: '⚡', d: 'Wed', n: 7, t: 'Mitochondria', src: 'Mixed', c: 'Mitochondria break down glucose into ATP through cellular respiration.', bold_stem: 'Cell Powerhouse', analogy: 'The jet engine of the cell—combusting fuel and air to generate massive thrust.', cue: 'Lab on yeast respiration due Thursday', ts: '28:10', q: ['Which organelle acts as the cell’s engine to make ATP?', ['Mitochondria', 'Nucleus', 'Cell wall'], 0] },
+      { id: 'demo_bio_4', isDemo: true, i: '💨', d: 'Thu', n: 8, t: 'Aerobic vs Anaerobic', src: 'Audio', c: 'Aerobic respiration requires oxygen; anaerobic operates without it.', bold_stem: 'Oxygen Requirement', analogy: 'Cruising with twin jet engines (oxygen) vs gliding on emergency backup when engines flame out.', cue: 'Lactic acid buildup happens without oxygen', ts: '08:30', q: ['What does aerobic respiration require that anaerobic does not?', ['Water', 'Carbon', 'Oxygen'], 2] },
+      { id: 'demo_bio_5', isDemo: true, i: '🎯', d: 'Fri', n: 9, t: 'Respiration Equation', src: 'Mixed', c: 'The chemical formula: Glucose + Oxygen = Carbon Dioxide + Water + ATP.', bold_stem: 'Respiration Equation', analogy: 'The flight fuel burn equation: Jet-A Fuel + Compressed Air = Thrust + Exhaust.', cue: 'Quiz on Cell Respiration and Photosynthesis this Friday!', ts: '14:20', q: ['What are the two starting ingredients for cellular respiration?', ['Glucose and Oxygen', 'Sunlight and Carbon', 'Water and Salt'], 0] }
     ]
   }
 };
 
-let CURRICULUM = JSON.parse(JSON.stringify(DEMO_CURRICULUM));
+let CURRICULUM = {};
 let activeClassCode = 'BIO_1';
 let anchorBoldOn = false;
 let pickedLectures = {};
@@ -486,14 +466,13 @@ let quizMissed = [];
 let quizRetryIds = null;
 let currentChatHistory = [];
 
-// Staged Intake Materials (Audio, PDF, TXT, Photo)
 let stagedFileBase64 = null;
 let stagedFileMime = null;
 let stagedFileName = null;
-let stagedFileType = null; // 'pdf' | 'image' | 'text'
+let stagedFileType = null;
 
 /* =====================================================================
-   SECTION 2 - INDEXEDDB STORAGE (PERSISTENT CHROMOSOME VAULT)
+   SECTION 2 - INDEXEDDB STORAGE (CHROMIUM PERSISTENT VAULT)
    ===================================================================== */
 const DB_NAME = 'StudentStudy_v3';
 const DB_VERSION = 1;
@@ -507,7 +486,6 @@ function getDB() {
         const db = e.target.result;
         if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
-        if (!db.objectStoreNames.contains('handouts')) db.createObjectStore('handouts', { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -536,6 +514,16 @@ async function idbGetAll(storeName) {
   });
 }
 
+async function idbDelete(storeName, key) {
+  const db = await getDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
 async function idbClear(storeName) {
   const db = await getDB();
   return new Promise((res, rej) => {
@@ -543,6 +531,27 @@ async function idbClear(storeName) {
     tx.objectStore(storeName).clear();
     tx.oncomplete = () => res();
     tx.onerror = () => rej(tx.error);
+  });
+}
+
+// Rebuild in-memory CURRICULUM from real IndexedDB records at boot
+async function loadLecturesFromDB() {
+  const records = await idbGetAll('lectures');
+  CURRICULUM = {};
+  
+  CLASSES.forEach(c => {
+    CURRICULUM[c.code] = { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
+  });
+
+  records.forEach(r => {
+    if (!CURRICULUM[r.classCode]) {
+      CURRICULUM[r.classCode] = { unitKey: r.unitKey || 'U1', unitTitle: r.unitTitle || 'Unit 1', lectures: [] };
+    }
+    const lData = r.studyPayload ? JSON.parse(r.studyPayload) : r;
+    lData.recordedDate = r.recordedDate;
+    lData.clientId = r.clientId;
+    lData.isDemo = !!r.isDemo;
+    CURRICULUM[r.classCode].lectures.push(lData);
   });
 }
 
@@ -775,14 +784,31 @@ function speakText(rawTextOrElement) {
 }
 
 /* =====================================================================
-   SECTION 5 - MULTI-SUBJECT UI & DELEGATED NAVIGATION
+   SECTION 5 - SCHEDULE AUTO-DETECTION & UI RENDER ENGINE
    ===================================================================== */
+function autoDetectBellSchedule() {
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return 'BIO_1'; // Weekend default
+
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  for (const c of CLASSES) {
+    const [sh, sm] = c.start.split(':').map(Number);
+    const [eh, em] = c.end.split(':').map(Number);
+    const sMin = sh * 60 + sm;
+    const eMin = eh * 60 + em;
+    if (nowMin >= sMin - 5 && nowMin <= eMin) return c.code;
+  }
+  return 'BIO_1';
+}
+
 function getActiveDataset() {
-  return CURRICULUM[activeClassCode] || CURRICULUM['BIO_1'];
+  return CURRICULUM[activeClassCode] || { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
 }
 
 function getSelectedLectures() {
   const ds = getActiveDataset();
+  if (!ds.lectures.length) return [];
   const arr = ds.lectures.filter(l => pickedLectures[l.id]);
   return arr.length ? arr : [ds.lectures[ds.lectures.length - 1]];
 }
@@ -829,7 +855,6 @@ function switchClass(code) {
 }
 
 function renderScopeHeader() {
-  const ds = getActiveDataset();
   const selected = getSelectedLectures();
   const isArena = selected.length > 1;
   const h = `
@@ -847,6 +872,15 @@ function renderUnitTrack() {
   const track = document.getElementById('unitTrack');
   track.innerHTML = '';
 
+  const hasDemo = ds.lectures.some(l => l.isDemo);
+  document.getElementById('demoBannerBox').style.display = hasDemo ? 'flex' : 'none';
+
+  if (!ds.lectures.length) {
+    track.innerHTML = '<div style="padding:20px;color:var(--mut);font-size:14px">No lectures or materials in this unit yet. Drop a Canvas PDF or paste notes on the Intake screen.</div>';
+    document.getElementById('pickBar').style.display = 'none';
+    return;
+  }
+
   ds.lectures.forEach((l, idx) => {
     const isPicked = !!pickedLectures[l.id];
     const isLast = idx === ds.lectures.length - 1;
@@ -857,7 +891,7 @@ function renderUnitTrack() {
       <span class="ic">${l.i}</span>
       <b>Part ${idx + 1}</b>
       <small>${l.t}</small>
-      <small style="font-size:11px;color:var(--mut)">${isLast ? 'Today' : l.d + ' ' + l.n}</small>
+      <small style="font-size:11px;color:var(--mut)">${l.d || ''} ${l.n || ''}</small>
     `;
     tile.onclick = () => {
       if (pickedLectures[l.id]) delete pickedLectures[l.id];
@@ -891,11 +925,17 @@ function renderStudyGuide() {
   const selected = getSelectedLectures();
   const container = document.getElementById('guideContent');
 
+  if (!selected.length) {
+    container.innerHTML = '<div class="card center"><p style="color:var(--mut)">No notes available yet. Ingest materials on the Intake screen.</p></div>';
+    return;
+  }
+
   let html = '';
   selected.forEach((l, idx) => {
     html += `
       <div class="card">
         ${getSourceBadgeHtml(l.src || 'Notes')}
+        ${l.isDemo ? '<span class="badge" style="background:#FEF3C7;color:#B45309">Sample Demo</span>' : ''}
         <h3>💡 The Big Idea <button class="say btn-speak" data-target="bigIdeaText_${l.id}">🔊 Read</button></h3>
         <p id="bigIdeaText_${l.id}">${applyBionic(l.c)}</p>
       </div>
@@ -950,6 +990,11 @@ function renderQuiz() {
   const set = getQuizSet();
   const container = document.getElementById('quizContent');
 
+  if (!set.length) {
+    container.innerHTML = '<div class="card center"><p style="color:var(--mut)">No quiz questions available. Generate study notes first.</p></div>';
+    return;
+  }
+
   if (quizIndex >= set.length) {
     const missed = quizMissed.slice();
     container.innerHTML = `
@@ -998,7 +1043,7 @@ function renderQuiz() {
         fb.innerHTML = '🎉 That is correct!';
       } else {
         if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
-        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.q[1][cur.q[2]])}</b> <span class="badge">Around ${cur.ts} in class</span>`;
+        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.q[1][cur.q[2]])}</b> <span class="badge">Around ${cur.ts}</span>`;
       }
       const answeredId = cur.id;
       setTimeout(() => {
@@ -1093,7 +1138,6 @@ function handleIntakeFile(file) {
     };
     reader.readAsDataURL(file);
   } else {
-    // Plain text / notepad
     const reader = new FileReader();
     reader.onload = (ev) => {
       stagedFileBase64 = null;
@@ -1132,7 +1176,7 @@ function clearStagedFile() {
 document.getElementById('clearStagedFileBtn').addEventListener('click', clearStagedFile);
 
 /* =====================================================================
-   SECTION 7 - REAL AI MULTIMODAL INTAKE PIPELINE (GEMINI 3-SERIES)
+   SECTION 7 - REAL AI INTAKE ENGINE (BLOCKED AUDIO-ONLY UNTIL TRANSCRIPTION READY)
    ===================================================================== */
 document.getElementById('generateIntakeBtn').addEventListener('click', async () => {
   const pastedNotes = document.getElementById('mainPastedNotes').value.trim();
@@ -1140,8 +1184,14 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const hasFile = !!stagedFileBase64;
   const hasNotes = !!pastedNotes;
 
-  if (!hasAudio && !hasFile && !hasNotes) {
-    alert('Please record classroom audio, attach a PDF/Photo, or paste notes first.');
+  // BLOCK AUDIO-ONLY GENERATION UNTIL AUDIO TRANSCRIBER IS FULLY WIRED
+  if (hasAudio && !hasFile && !hasNotes) {
+    alert('Audio transcription pipeline is in setup. Please attach a Canvas PDF, photo, or paste notes to generate the study guide.');
+    return;
+  }
+
+  if (!hasFile && !hasNotes) {
+    alert('Please attach a Canvas PDF / Photo or paste teacher notes first.');
     return;
   }
 
@@ -1163,19 +1213,19 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const currentClass = CLASSES.find(c => c.code === activeClassCode);
 
   const prompt = `You are an expert high school study coach creating study materials for a student in ${currentClass.name}.
-Analyze all attached materials (audio transcripts, Canvas handouts, whiteboard photos, or teacher notes).
+Analyze all attached materials (Canvas handouts, whiteboard photos, or teacher notes).
 
 Return your response strictly as valid, raw JSON (no conversational text, no markdown backticks):
 {
   "topic_label": "Concise Topic Name (e.g. Cellular Respiration)",
   "topic_icon": "Single appropriate emoji",
-  "source_type": "${hasAudio && (hasFile || hasNotes) ? 'Mixed' : (hasAudio ? 'Audio' : (stagedFileType === 'image' ? 'Photo' : 'Handout'))}",
+  "source_type": "${stagedFileType === 'image' ? 'Photo' : 'Handout'}",
   "big_idea": "Core central takeaway in 1-2 punchy sentences.",
   "bold_stem": "Key anchor phrase",
   "core_concept_text": "Clear explanation adhering to Grade ${readingLevel} reading level.",
   "analogy": "Relatable comparison using aviation, mechanics, WWII strategy, soccer tactics, or gaming physics.",
   "teacher_cue": "Any test hint, deadline, or 'remember this' cue found in materials.",
-  "cue_approx_time": "Approx timestamp or Handout Section",
+  "cue_approx_time": "Handout Section",
   "quiz_question": "One active recall check question",
   "quiz_options": ["Option A", "Option B", "Option C"],
   "quiz_correct_index": 0,
@@ -1200,7 +1250,6 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       temperature: 0.2
     });
 
-    // Parse returned JSON cleanly
     let parsed = null;
     try {
       const cleanJson = res.text.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -1213,6 +1262,7 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
     const newId = `${activeClassCode.toLowerCase()}_${Date.now()}`;
     const newLecture = {
       id: newId,
+      isDemo: false,
       i: parsed.topic_icon || '📖',
       d: new Date().toLocaleDateString('en-US', { weekday: 'short' }),
       n: new Date().getDate(),
@@ -1229,7 +1279,7 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
     ds.lectures.push(newLecture);
     pickedLectures = { [newId]: true };
 
-    // Commit new lecture to IndexedDB
+    // Commit new real lecture to IndexedDB
     await idbPut('lectures', {
       clientId: `lect_${activeClassCode}_${newId}`,
       classCode: activeClassCode,
@@ -1242,6 +1292,7 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       topicLabel: newLecture.t,
       topicIcon: newLecture.i,
       processingStatus: 'Completed',
+      isDemo: false,
       studyPayload: JSON.stringify(newLecture)
     });
 
@@ -1261,16 +1312,16 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
 });
 
 /* =====================================================================
-   SECTION 8 - MULTI-TURN CHAT & ISOLATED THREADS
+   SECTION 8 - MULTI-TURN CHAT & SCOPED THREADS
    ===================================================================== */
 let currentThreadId = null;
 
-function getThreadsKey() { return `ss_threads_${activeClassCode}`; }
-function loadAllThreads() {
-  try { return JSON.parse(localStorage.getItem(getThreadsKey()) || '[]'); } catch(e) { return []; }
+function getThreadsKey(classCode) { return `ss_threads_${classCode || activeClassCode}`; }
+function loadAllThreadsForClass(classCode) {
+  try { return JSON.parse(localStorage.getItem(getThreadsKey(classCode)) || '[]'); } catch(e) { return []; }
 }
-function saveAllThreads(threads) {
-  localStorage.setItem(getThreadsKey(), JSON.stringify(threads));
+function saveAllThreadsForClass(classCode, threads) {
+  localStorage.setItem(getThreadsKey(classCode), JSON.stringify(threads));
 }
 
 function loadSubjectChat() {
@@ -1278,7 +1329,7 @@ function loadSubjectChat() {
   document.getElementById('chatSubjectBadge').textContent = `Active Channel: ${c.name} (${c.teacher})`;
   const feed = document.getElementById('chatFeed');
   
-  const threads = loadAllThreads();
+  const threads = loadAllThreadsForClass(activeClassCode);
   if (threads.length > 0) {
     const latest = threads[0];
     currentThreadId = latest.id;
@@ -1292,8 +1343,9 @@ function loadSubjectChat() {
 
 function startNewChatThread() {
   const c = CLASSES.find(x => x.code === activeClassCode);
-  const activeLectures = getSelectedLectures();
-  const partTag = activeLectures[activeLectures.length - 1].t;
+  const selected = getSelectedLectures();
+  const partTag = selected.length ? selected[selected.length - 1].t : 'General';
+  const ds = getActiveDataset();
   
   currentThreadId = 'th_' + Date.now();
   currentChatHistory = [];
@@ -1305,16 +1357,21 @@ function startNewChatThread() {
   `;
   document.getElementById('chatFeed').innerHTML = initialHtml;
 
-  const threads = loadAllThreads();
+  const threads = loadAllThreadsForClass(activeClassCode);
   threads.unshift({
     id: currentThreadId,
+    classCode: activeClassCode,
+    unitKey: ds.unitKey,
+    scopeClientIds: selected.map(l => l.clientId || `lect_${activeClassCode}_${l.id}`),
+    scopeType: selected.length > 1 ? 'Arena' : 'Desk',
     partTag: partTag,
     title: 'New Study Conversation',
+    lastMessageAt: new Date().toISOString(),
     updatedAt: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
     html: initialHtml,
     history: []
   });
-  saveAllThreads(threads);
+  saveAllThreadsForClass(activeClassCode, threads);
 }
 
 document.getElementById('newChatBtn').addEventListener('click', () => {
@@ -1331,7 +1388,7 @@ document.getElementById('closeDrawerBtn').addEventListener('click', () => {
 });
 
 function renderHistoryDrawer() {
-  const threads = loadAllThreads();
+  const threads = loadAllThreadsForClass(activeClassCode);
   const body = document.getElementById('drawerBody');
   body.innerHTML = '';
   
@@ -1361,16 +1418,17 @@ function renderHistoryDrawer() {
 
 function updateActiveThreadInStorage(firstQuery) {
   const feed = document.getElementById('chatFeed');
-  const threads = loadAllThreads();
+  const threads = loadAllThreadsForClass(activeClassCode);
   const idx = threads.findIndex(t => t.id === currentThreadId);
   if (idx > -1) {
     threads[idx].html = feed.innerHTML;
     threads[idx].history = currentChatHistory;
+    threads[idx].lastMessageAt = new Date().toISOString();
     if (firstQuery && threads[idx].title === 'New Study Conversation') {
       threads[idx].title = firstQuery.slice(0, 36) + '…';
     }
     threads[idx].updatedAt = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    saveAllThreads(threads);
+    saveAllThreadsForClass(activeClassCode, threads);
   }
 }
 
@@ -1573,7 +1631,7 @@ document.addEventListener('click', (e) => {
 });
 
 /* =====================================================================
-   SECTION 9 - MICROSOFT GRAPH SYNC (LECTURES, DEADLINES & CHATS)
+   SECTION 9 - MICROSOFT GRAPH SYNC (SAFE UPSERTS & NO DEMO LEAKAGE)
    ===================================================================== */
 const GRAPH_SCOPES = ["User.Read", "Sites.ReadWrite.All"];
 const SHAREPOINT_DOMAIN = "rmr1971.sharepoint.com";
@@ -1675,7 +1733,7 @@ async function resolveSiteId(token) {
   return cachedSiteId;
 }
 
-// Complete Graph Sync: Lectures, Deadlines, and Chats
+// Complete Graph Sync (Deduplicated, checks res.ok, guards against demo rows)
 document.getElementById('spSyncBtn').addEventListener('click', async () => {
   const btn = document.getElementById('spSyncBtn');
   if (btn.disabled) return;
@@ -1699,7 +1757,6 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       'Prefer': 'HonorNonIndexedQueriesWarningMayFailRandomly'
     };
 
-    // Pre-fetch existing rows to guarantee zero duplicates
     const [lectRes, dlRes, chatRes] = await Promise.all([
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$expand=fields&$top=200`, { headers: graphHeaders }),
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$expand=fields&$top=200`, { headers: graphHeaders }),
@@ -1709,11 +1766,13 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     const existingDeadlines = (await dlRes.json()).value || [];
     const existingChats = (await chatRes.json()).value || [];
 
-    // 1. Sync Selected Lectures
+    // 1. Sync Selected Real Lectures
     for (let idx = 0; idx < selectedLectures.length; idx++) {
       const l = selectedLectures[idx];
+      if (l.isDemo) continue; // GUARD: Never sync demo/mock rows!
+
       const actualPartNum = ds.lectures.findIndex(x => x.id === l.id) + 1;
-      const clientId = `lect_${activeClassCode}_${l.id}`;
+      const clientId = l.clientId || `lect_${activeClassCode}_${l.id}`;
 
       const fieldsPayload = {
         Title: `${currentClass.name} · ${l.t} (Part ${actualPartNum})`,
@@ -1721,8 +1780,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         ClassCode: activeClassCode,
         ClassName: currentClass.name,
         PeriodNumber: currentClass.period,
-        RecordedDate: new Date().toISOString(),
-        DurationSeconds: 2880,
+        RecordedDate: l.recordedDate || new Date().toISOString(),
+        DurationSeconds: l.durationSeconds || 2880,
         UnitTitle: ds.unitTitle,
         UnitKey: ds.unitKey,
         PartNumber: actualPartNum,
@@ -1739,22 +1798,27 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         PracticePayload_JSON: JSON.stringify({
           quiz: [{ q: l.q[0], options: l.q[1], correct: l.q[2], cue_ts: l.ts }]
         }),
-        SchemaVersion: 2
+        SchemaVersion: 3
       };
 
       const existingLectItem = existingLectures.find(it => it.fields && it.fields.ClientId === clientId);
+      let rMut;
       if (existingLectItem) {
-        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${existingLectItem.id}/fields`, {
+        rMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${existingLectItem.id}/fields`, {
           method: 'PATCH',
           headers: graphHeaders,
           body: JSON.stringify(fieldsPayload)
         });
       } else {
-        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
+        rMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
           method: 'POST',
           headers: graphHeaders,
           body: JSON.stringify({ fields: fieldsPayload })
         });
+      }
+      if (!rMut.ok) {
+        const errJson = await rMut.json();
+        throw new Error(errJson.error?.message || 'Error writing to Student_Lectures');
       }
 
       // 2. Sync Deadlines if cue detected
@@ -1772,58 +1836,69 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
           it.fields && it.fields.SourceClientId === clientId && it.fields.Title === l.cue
         );
 
+        let dlMut;
         if (existingDlItem) {
-          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items/${existingDlItem.id}/fields`, {
+          dlMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items/${existingDlItem.id}/fields`, {
             method: 'PATCH',
             headers: graphHeaders,
             body: JSON.stringify(deadlinePayload)
           });
         } else {
-          await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items`, {
+          dlMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items`, {
             method: 'POST',
             headers: graphHeaders,
             body: JSON.stringify({ fields: deadlinePayload })
           });
         }
+        if (!dlMut.ok) {
+          const errJson = await dlMut.json();
+          throw new Error(errJson.error?.message || 'Error writing to Student_Deadlines');
+        }
       }
       syncedCount++;
     }
 
-    // 3. Sync Student_Chats (Using ThreadId as primary key)
-    const localThreads = loadAllThreads();
+    // 3. Sync Student_Chats across ALL classes using scoped thread data
     let syncedChatsCount = 0;
+    for (const c of CLASSES) {
+      const classThreads = loadAllThreadsForClass(c.code);
+      for (const th of classThreads) {
+        const chatPayload = {
+          Title: `${c.name} · ${th.partTag || 'Study'} · ${th.title.slice(0, 30)}`,
+          ClassCode: th.classCode || c.code,
+          UnitKey: th.unitKey || 'U1',
+          ThreadId: th.id,
+          ScopeClientIds: JSON.stringify(th.scopeClientIds || []),
+          ScopeType: th.scopeType || 'Desk',
+          MessageCount: th.history ? th.history.length : 2,
+          LastMessageAt: th.lastMessageAt || new Date().toISOString(),
+          Thread_JSON: JSON.stringify(th.history || [])
+        };
 
-    for (const th of localThreads) {
-      const chatPayload = {
-        Title: `${currentClass.name} · ${th.partTag || 'Study'} · ${th.title.slice(0, 30)}`,
-        ClassCode: activeClassCode,
-        UnitKey: ds.unitKey,
-        ThreadId: th.id,
-        ScopeClientIds: JSON.stringify(selectedLectures.map(x => `lect_${activeClassCode}_${x.id}`)),
-        ScopeType: selectedLectures.length > 1 ? 'Arena' : 'Desk',
-        MessageCount: th.history ? th.history.length : 2,
-        LastMessageAt: new Date().toISOString(),
-        Thread_JSON: JSON.stringify(th.history || [])
-      };
-
-      const existingChatItem = existingChats.find(it => it.fields && it.fields.ThreadId === th.id);
-      if (existingChatItem) {
-        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Chats/items/${existingChatItem.id}/fields`, {
-          method: 'PATCH',
-          headers: graphHeaders,
-          body: JSON.stringify(chatPayload)
-        });
-      } else {
-        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Chats/items`, {
-          method: 'POST',
-          headers: graphHeaders,
-          body: JSON.stringify({ fields: chatPayload })
-        });
+        const existingChatItem = existingChats.find(it => it.fields && it.fields.ThreadId === th.id);
+        let chMut;
+        if (existingChatItem) {
+          chMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Chats/items/${existingChatItem.id}/fields`, {
+            method: 'PATCH',
+            headers: graphHeaders,
+            body: JSON.stringify(chatPayload)
+          });
+        } else {
+          chMut = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Chats/items`, {
+            method: 'POST',
+            headers: graphHeaders,
+            body: JSON.stringify({ fields: chatPayload })
+          });
+        }
+        if (!chMut.ok) {
+          const errJson = await chMut.json();
+          throw new Error(errJson.error?.message || 'Error writing to Student_Chats');
+        }
+        syncedChatsCount++;
       }
-      syncedChatsCount++;
     }
 
-    showToast(`🎉 Synced ${syncedCount} lecture(s), deadlines & ${syncedChatsCount} chat thread(s)!`);
+    showToast(`🎉 Synced ${syncedCount} real lecture(s), deadlines & ${syncedChatsCount} chat thread(s)!`);
   } catch (err) {
     alert('SharePoint Sync Error: ' + err.message);
   } finally {
@@ -1832,7 +1907,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
 });
 
 /* =====================================================================
-   SECTION 10 - PARENT VAULT, PIN GATE & SCHEDULE MANAGEMENT
+   SECTION 10 - PARENT VAULT, PIN GATE & DATA MANAGEMENT
    ===================================================================== */
 const PARENT_PIN_KEY = 'ss_parent_pin';
 function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
@@ -1887,7 +1962,7 @@ function openParentVault() {
 
 document.getElementById('closeCfgBtn').addEventListener('click', () => document.getElementById('cfgDlg').close());
 
-// Pull Classes from SharePoint Student_Classes list
+// Pull Classes dynamically from SharePoint Student_Classes list
 document.getElementById('pullClassesBtn').addEventListener('click', async () => {
   try {
     showToast('Pulling classes from SharePoint…');
@@ -1909,6 +1984,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
           code: f.ClassCode,
           name: f.Title,
           period: f.PeriodNumber || 1,
+          start: '08:00', end: '08:50',
           teacher: f.TeacherName || '',
           color: f.ColorHex || '#2F6FDE',
           icon: f.IconEmoji || '📚'
@@ -1919,7 +1995,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
         localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
         renderClassRibbon();
         switchClass(CLASSES[0].code);
-        showToast(`Loaded ${CLASSES.length} classes from SharePoint!`);
+        showToast(`Loaded ${CLASSES.length} active classes from SharePoint!`);
       }
     }
   } catch (err) {
@@ -1927,24 +2003,65 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
   }
 });
 
-// Seed Demo Flight Deck Data
-document.getElementById('seedDemoBtn').addEventListener('click', () => {
-  CURRICULUM = JSON.parse(JSON.stringify(DEMO_CURRICULUM));
+// Seed Demo Deck explicitly (tagged with isDemo: true)
+document.getElementById('seedDemoBtn').addEventListener('click', async () => {
+  for (const cCode in DEMO_CURRICULUM) {
+    const deck = DEMO_CURRICULUM[cCode];
+    for (const l of deck.lectures) {
+      await idbPut('lectures', {
+        clientId: `demo_${l.id}`,
+        classCode: cCode,
+        className: 'Biology I',
+        periodNumber: 3,
+        recordedDate: new Date().toISOString(),
+        unitKey: deck.unitKey,
+        unitTitle: deck.unitTitle,
+        partNumber: 1,
+        topicLabel: l.t,
+        topicIcon: l.i,
+        processingStatus: 'Completed',
+        isDemo: true,
+        studyPayload: JSON.stringify(l)
+      });
+    }
+  }
+  await loadLecturesFromDB();
   renderAll();
   showToast('Sample Demo Flight Deck loaded!');
 });
 
-// Wipe Local Data Vault
+// Remove Demo Data Only
+async function removeDemoDataOnly() {
+  const all = await idbGetAll('lectures');
+  let removed = 0;
+  for (const r of all) {
+    if (r.isDemo) {
+      await idbDelete('lectures', r.clientId);
+      removed++;
+    }
+  }
+  await loadLecturesFromDB();
+  renderAll();
+  showToast(`Removed ${removed} demo lecture(s).`);
+}
+
+document.getElementById('removeDemoBtn').addEventListener('click', removeDemoDataOnly);
+document.getElementById('clearDemoBannerBtn').addEventListener('click', removeDemoDataOnly);
+
+// Wipe All Local Data Vault (Prompt with counts)
 document.getElementById('wipeDataBtn').addEventListener('click', async () => {
-  if (!confirm('Wipe all local recordings, handouts, and cached lectures?')) return;
+  const lectures = await idbGetAll('lectures');
+  const chunks = await idbGetAll('chunks');
+  const msg = `Are you sure you want to wipe all local data?\n\nThis Chromebook currently holds:\n• ${lectures.length} lecture study guides\n• ${chunks.length} audio chunks\n\nThis cannot be undone.`;
+  if (!confirm(msg)) return;
+
   await idbClear('lectures');
   await idbClear('chunks');
-  await idbClear('handouts');
-  CLASSES.forEach(c => localStorage.removeItem(`ss_threads_${c.code}`));
-  CURRICULUM = { [activeClassCode]: { unitKey: 'U1', unitTitle: 'Unit 1', lectures: [] } };
+  CLASSES.forEach(c => localStorage.removeItem(getThreadsKey(c.code)));
+  await loadLecturesFromDB();
   pickedLectures = {};
   renderAll();
-  showToast('Local vault cleaned cleanly!');
+  showToast('Local vault wiped clean.');
 });
 
 // Test Gemini Key
@@ -2007,7 +2124,7 @@ document.getElementById('saveCfgBtn').addEventListener('click', () => {
 });
 
 /* =====================================================================
-   SECTION 11 - INITIALIZATION
+   SECTION 11 - INITIALIZATION & STARTUP
    ===================================================================== */
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -2050,7 +2167,7 @@ document.querySelectorAll('[data-q]').forEach(btn => {
     });
     if (q === 'today') {
       (todays.length ? todays : ds.lectures.slice(-1)).forEach(l => pickedLectures[l.id] = true);
-      if (!todays.length) showToast(`No ${todayAbbr} lecture saved, showing the latest one`);
+      if (!todays.length && ds.lectures.length) showToast(`No ${todayAbbr} lecture saved, showing latest`);
     }
     resetQuiz();
     renderAll();
@@ -2062,18 +2179,22 @@ document.getElementById('recBtn').addEventListener('click', () => {
   else startRecording();
 });
 
-(function init() {
+(async function init() {
   const savedTheme = localStorage.getItem('ss_theme');
   if (savedTheme) document.documentElement.dataset.t = savedTheme;
 
-  // Restore custom schedule from local storage if previously pulled
+  // Restore custom schedule from storage if previously pulled
   const customClasses = localStorage.getItem('ss_classes_custom');
   if (customClasses) {
     try { CLASSES = JSON.parse(customClasses); } catch(e){}
   }
-  
-  const initialCls = CLASSES[0];
-  activeClassCode = initialCls.code;
+
+  // Load real saved lectures from IndexedDB
+  await loadLecturesFromDB();
+
+  // Auto-detect bell schedule or default to Period 3 (Biology)
+  activeClassCode = autoDetectBellSchedule();
+  const initialCls = CLASSES.find(c => c.code === activeClassCode) || CLASSES[0];
   document.documentElement.style.setProperty('--c', initialCls.color);
   document.documentElement.style.setProperty('--sel', initialCls.color + '22');
 
