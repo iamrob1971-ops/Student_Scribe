@@ -1,3 +1,4 @@
+html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -101,6 +102,10 @@ main { padding: 4px 18px 140px; flex: 1; }
 .dropzone:hover, .dropzone.dragover { border-color: var(--c); background: var(--sel); }
 .staged-file-card { background: var(--sel); border: 1px solid var(--c); border-radius: 10px; padding: 8px 12px; margin-top: 10px; font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
 
+/* Date Picker Control */
+.date-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
+.date-row input[type="date"] { border: 1.5px solid var(--line); border-radius: 8px; padding: 4px 10px; background: var(--bg); font-size: 13px; }
+
 /* Banners */
 .banner { background: var(--warn-bg); border: 1.5px solid var(--warn-line); color: var(--warn-ink); border-radius: 14px; padding: 12px 16px; font-size: 14px; margin: 12px 0; font-weight: 500; }
 .banner.ok { background: var(--good-bg); border-color: var(--good-line); color: var(--good-ink); }
@@ -116,8 +121,13 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tile.on { border-color: var(--c); background: var(--sel); }
 .tile.on .ck { background: var(--c); border-color: var(--c); color: #fff; }
 .tile.today { border-style: dashed; }
-.wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
-.wk button { width: 50px; height: 50px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
+
+/* FIXED: Arrow-specific square class so #startNewUnitBtn renders as a clean pill */
+.wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; gap: 12px; }
+.wk button.wk-arrow { width: 50px; height: 50px; flex: none; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
+.wk-center { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#startNewUnitBtn { width: auto; height: 36px; padding: 4px 14px; white-space: nowrap; font-size: 13px; border-radius: 999px; }
+
 .scope { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--sel); border-radius: 14px; padding: 10px 14px; margin: 8px 0; font-size: 15px; font-weight: 500; }
 .mode-pill { background: var(--c); color: #fff; border-radius: 999px; padding: 2px 12px; font-weight: 600; font-size: 13px; }
 
@@ -173,7 +183,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <div class="brand">📓 Student Study</div>
     <div class="top-actions">
       <!-- Option C: Global Flight Radar Pill -->
-      <div class="radar-pill" id="globalRadarPill" title="Tap to teleport to upcoming test">
+      <div class="radar-pill" id="globalRadarPill" title="Tap to jump to upcoming test">
         <span id="radarPillText">🎯 Next Exam: Loading…</span>
       </div>
       <button class="tog" id="ancBtn">Aa Anchor bold: Off</button>
@@ -224,6 +234,13 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <!-- INTAKE B: CANVAS & PHOTOS -->
         <div class="intake-panel">
           <h4>📄 Canvas Slides, Handouts &amp; Photos</h4>
+          
+          <!-- Class Date Selector for Backdating -->
+          <div class="date-row">
+            <span>📅 Class Date:</span>
+            <input type="date" id="intakeClassDate" title="Date when this class actually took place">
+          </div>
+
           <input type="file" id="mainIntakeFileInput" accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp,text/plain,application/pdf,image/*" style="display:none">
           <div class="dropzone" id="mainDropzone">
             <span style="font-size:22px">📁</span>
@@ -241,7 +258,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <!-- MAIN ACTION BANNER -->
       <div class="card center" style="margin-top:16px;background:var(--card)">
         <h3 style="justify-content:center;margin-bottom:4px">⚡ Prepare Study Materials</h3>
-        <p style="font-size:14px;color:var(--mut);margin:0 0 14px">Mac Robinson High-yield Study Application.</p>
+        <p style="font-size:14px;color:var(--mut);margin:0 0 14px">Turns class notes and handouts into a high-yield study guide and practice drill.</p>
         <div class="chips" style="justify-content:center">
           <button class="btn" id="generateIntakeBtn">🚀 Generate Study Guide &amp; Practice Drill</button>
           <button class="btn alt" id="spSyncBtn">☁️ Sync to SharePoint</button>
@@ -255,15 +272,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button class="btn alt" data-q="today">🎯 Just today</button>
         <button class="btn alt" data-q="test">📝 Last 2 parts</button>
         <button class="btn alt" data-q="unit">🗺️ Whole unit</button>
-        <button class="btn alt" data-q="none">✕ Clear</button>
+        <button class="btn alt" data-q="none">✕ Deselect All</button>
       </div>
       <div class="wk">
-        <button id="prevUnitBtn" aria-label="Previous unit">◀</button>
-        <div style="display:flex;align-items:center;gap:8px">
+        <button class="wk-arrow" id="prevUnitBtn" aria-label="Previous unit">◀</button>
+        <div class="wk-center">
           <b id="unitTitleLbl" style="font-size:18px"></b>
           <button class="say sm" id="startNewUnitBtn" title="Start a new Unit chapter">➕ Start Unit</button>
         </div>
-        <button id="nextUnitBtn" aria-label="Next unit">▶</button>
+        <button class="wk-arrow" id="nextUnitBtn" aria-label="Next unit">▶</button>
       </div>
       <div class="track" id="unitTrack"></div>
       <p class="center" style="font-size:14px;color:var(--mut)">Tap any lecture card to view notes. Pick multiple cards to enter Exam Prep.</p>
@@ -367,6 +384,18 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
 </dialog>
 
+<!-- Schedule Editor Modal -->
+<dialog class="cfg-dlg" id="scheduleDlg" style="max-width:540px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">📅 Edit Class Schedule</h3>
+    <button class="say" id="closeScheduleBtn">✕</button>
+  </div>
+  <div class="dlg-body" id="scheduleEditorBody"></div>
+  <div class="dlg-foot">
+    <button class="btn" id="saveScheduleBtn">Save Schedule Changes</button>
+  </div>
+</dialog>
+
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
@@ -414,6 +443,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 
     <h4>Schedule &amp; Data Utilities</h4>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn alt sm" id="openScheduleEditorBtn">📅 Edit Schedule &amp; Days</button>
       <button class="btn alt sm" id="pullClassesBtn">☁️ Pull Schedule from SharePoint</button>
       <button class="btn alt sm" id="seedDemoBtn">🧪 Seed Demo Data</button>
       <button class="btn alt sm" id="removeDemoBtn">🧹 Remove Demo Data</button>
@@ -459,14 +489,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 
 <script>
 /* =====================================================================
-   SECTION 1 - MASTER STATE & SCHEDULE CONFIGURATION
+   SECTION 1 - MASTER STATE & MAC'S EXACT FALL 26/27 SCHEDULE
    ===================================================================== */
 let CLASSES = [
-  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   color: '#8A4FD6', icon: '📐' },
-  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', color: '#C2703A', icon: '📖' },
-  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    color: '#2F6FDE', icon: '🧬' },
-  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', color: '#2E7D5B', icon: '📚' },
-  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    color: '#D97706', icon: '🍎' }
+  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   days: 'Tue, Thu, Fri', time: '08:00 - 08:50', color: '#8A4FD6', icon: '📐', needsScribe: true, term: 'Fall 26/27' },
+  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', days: 'Mon, Wed, Fri', time: '08:55 - 09:45', color: '#C2703A', icon: '📖', needsScribe: true, term: 'Fall 26/27' },
+  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    days: 'Mon, Wed, Fri', time: '09:50 - 10:40', color: '#2F6FDE', icon: '🧬', needsScribe: true, term: 'Fall 26/27' },
+  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', days: 'Mon, Wed, Fri', time: '10:45 - 11:35', color: '#2E7D5B', icon: '📚', needsScribe: true, term: 'Fall 26/27' },
+  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    days: 'Tue, Thu, Fri', time: '11:40 - 12:30', color: '#D97706', icon: '🍎', needsScribe: true, term: 'Fall 26/27' },
+  { code: 'STR_CND', name: 'Strength & Cond.',     period: 6, teacher: '',         days: 'Tue, Thu, Fri', time: '12:35 - 01:25', color: '#64748B', icon: '🏋️', needsScribe: false, term: 'Fall 26/27' }
 ];
 
 const DEFAULT_PROFILE = `STUDENT PROFILE: High school student with visual and auditory processing fatigue.
@@ -523,7 +554,6 @@ function getDB() {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        // SEPARATE STORE FOR RAW SESSIONS (Prevents broken tiles in lectures store)
         if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
@@ -576,12 +606,11 @@ async function idbClear(storeName) {
   });
 }
 
-// Rebuild CURRICULUM from real lectures in IndexedDB on boot
 async function loadLecturesFromDB() {
   const records = await idbGetAll('lectures');
   CURRICULUM = {};
   
-  CLASSES.forEach(c => {
+  CLASSES.filter(c => c.needsScribe !== false).forEach(c => {
     CURRICULUM[c.code] = { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
   });
 
@@ -596,7 +625,6 @@ async function loadLecturesFromDB() {
     CURRICULUM[r.classCode].lectures.push(lData);
   });
 
-  // Load cached deadlines
   cachedDeadlines = await idbGetAll('deadlines');
 }
 
@@ -674,7 +702,6 @@ async function startRecording() {
           blob: e.data,
           recordedAt: Date.now()
         });
-        // SAVES STRICTLY TO SESSIONS STORE (NEVER POLLUTES LECTURES)
         await idbPut('sessions', sess);
       }
     };
@@ -845,20 +872,19 @@ function getSelectedLectures() {
 
 function updateRecScheduleHint() {
   const c = CLASSES.find(x => x.code === activeClassCode);
-  document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher})`;
+  document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
 
 function renderClassRibbon() {
   const rib = document.getElementById('classRibbon');
   rib.innerHTML = '';
-  // Sorted strictly by Period Number
-  const sorted = CLASSES.slice().sort((a,b) => (a.period || 1) - (b.period || 1));
-  sorted.forEach(c => {
+  const visibleClasses = CLASSES.filter(c => c.needsScribe !== false).sort((a,b) => (a.period || 1) - (b.period || 1));
+  visibleClasses.forEach(c => {
     const btn = document.createElement('button');
     btn.className = `cls ${c.code === activeClassCode ? 'on' : ''}`;
     btn.textContent = `${c.icon} ${c.name} (P${c.period})`;
     btn.disabled = isRecording() && c.code !== activeClassCode;
-    btn.title = btn.disabled ? 'Stop recording before switching classes' : '';
+    btn.title = `${c.days || ''} ${c.time || ''}`;
     btn.onclick = () => switchClass(c.code);
     rib.appendChild(btn);
   });
@@ -1137,7 +1163,6 @@ function renderQuiz() {
         fb.innerHTML = '🎉 That is correct!';
       } else {
         if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
-        // LOG MISSED QUESTION INTO DIAGNOSTIC EXCHANGE HISTORY
         recordExchange(cur.id, `Missed Drill Question: ${cur.q[0]}`, `Correct: ${cur.q[1][cur.q[2]]}`, true);
         fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.q[1][cur.q[2]])}</b> <span class="badge">${cur.ts}</span>`;
       }
@@ -1194,7 +1219,7 @@ document.addEventListener('click', (e) => {
 });
 
 /* =====================================================================
-   SECTION 6 - DUAL INTAKE ATTACHMENTS (PDF, TXT, WHITEBOARD PHOTOS)
+   SECTION 6 - DUAL INTAKE ATTACHMENTS (WITH CLASS DATE PICKER)
    ===================================================================== */
 const mainDropzone = document.getElementById('mainDropzone');
 const mainFileInput = document.getElementById('mainIntakeFileInput');
@@ -1281,9 +1306,8 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const hasFile = !!stagedFileBase64;
   const hasNotes = !!pastedNotes;
 
-  // BLOCK AUDIO-ONLY GENERATION UNTIL AUDIO SLICER TRANSCRIBER IS WIRED
   if (hasAudio && !hasFile && !hasNotes) {
-    alert('Audio transcription pipeline is currently being configured. For today, please attach a Canvas PDF, photo, or paste teacher notes to generate your study guide.');
+    alert('Audio transcription pipeline is in setup. Please attach a Canvas PDF, photo, or paste teacher notes to generate your study guide.');
     return;
   }
 
@@ -1308,6 +1332,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
   const sysInst = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
   const currentClass = CLASSES.find(c => c.code === activeClassCode);
+
+  // Read the backdated or today's date picker
+  const pickedDateVal = document.getElementById('intakeClassDate').value;
+  const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
 
   const prompt = `You are an expert high school study coach creating study materials for a student in ${currentClass.name}.
 Analyze all attached materials (Canvas handouts, whiteboard photos, or teacher notes).
@@ -1362,15 +1390,15 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
 
     const ds = getActiveDataset();
     const newId = `${activeClassCode.toLowerCase()}_${Date.now()}`;
-    const nowIso = new Date().toISOString();
+    const dateIso = classDateObj.toISOString();
 
     const newLecture = {
       id: newId,
       clientId: `lect_${activeClassCode}_${newId}`,
       isDemo: false,
       i: parsed.topic_icon || '📖',
-      d: new Date().toLocaleDateString('en-US', { weekday: 'short' }),
-      n: new Date().getDate(),
+      d: classDateObj.toLocaleDateString('en-US', { weekday: 'short' }),
+      n: classDateObj.getDate(),
       t: parsed.topic_label || 'New Topic',
       src: parsed.source_type || 'Handout',
       c: parsed.big_idea || '',
@@ -1378,20 +1406,19 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       analogy: parsed.analogy || '',
       cue: parsed.teacher_cue || null,
       ts: parsed.cue_approx_time || 'Class note',
-      recordedDate: nowIso, // Real creation date preserved on in-memory object
+      recordedDate: dateIso,
       q: [parsed.quiz_question, parsed.quiz_options, parsed.quiz_correct_index]
     };
 
     ds.lectures.push(newLecture);
     pickedLectures = { [newId]: true };
 
-    // Commit new real lecture to IndexedDB
     await idbPut('lectures', {
       clientId: newLecture.clientId,
       classCode: activeClassCode,
       className: currentClass.name,
       periodNumber: currentClass.period,
-      recordedDate: nowIso,
+      recordedDate: dateIso,
       unitKey: ds.unitKey,
       unitTitle: ds.unitTitle,
       partNumber: ds.lectures.length,
@@ -1403,7 +1430,6 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       studyPayload: JSON.stringify(newLecture)
     });
 
-    // If deadline extracted, commit to local deadlines
     if (parsed.deadline_item && parsed.deadline_item.title) {
       const dl = {
         deadlineId: `dl_${activeClassCode}_${Date.now()}`,
@@ -1437,7 +1463,7 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
 });
 
 /* =====================================================================
-   SECTION 8 - EXCHANGE-BASED CHAT (SCOPED TO LECTURE OR CLASS REVIEW)
+   SECTION 8 - MULTI-TURN CHAT & SCOPED EXCHANGES
    ===================================================================== */
 function getActiveChatTargetKey() {
   const selected = getSelectedLectures();
@@ -1473,7 +1499,7 @@ function recordExchange(targetKey, qText, aText, isMiss = false) {
 function loadSubjectChat() {
   const c = CLASSES.find(x => x.code === activeClassCode);
   const targetKey = getActiveChatTargetKey();
-  document.getElementById('chatSubjectBadge').textContent = `Active: ${c.name} (${c.teacher})`;
+  document.getElementById('chatSubjectBadge').textContent = `Active: ${c.name} (${c.teacher || 'Class'})`;
   const feed = document.getElementById('chatFeed');
   
   const exchanges = loadExchangesForTarget(targetKey);
@@ -1522,7 +1548,7 @@ function renderHistoryDrawer() {
     return;
   }
 
-  exchanges.forEach((ex, idx) => {
+  exchanges.forEach(ex => {
     const item = document.createElement('div');
     item.className = 'thread-item';
     item.innerHTML = `
@@ -1670,7 +1696,6 @@ async function sendChatMessage(query, isRetry = false) {
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
 
-    // Record exchange to lecture or review key
     recordExchange(targetKey, text, result.text, false);
   } catch (err) {
     thinkingEl.remove();
@@ -1746,9 +1771,7 @@ async function generateWeakSpotDrill() {
 
   showToast('Gathering past questions and missed drills…');
   const selected = getSelectedLectures();
-  const ds = getActiveDataset();
 
-  // Gather Q&A across selected lectures + review row
   const exchanges = [];
   selected.forEach(l => {
     const lKey = l.clientId || `lect_${activeClassCode}_${l.id}`;
@@ -1782,7 +1805,6 @@ Return strictly valid, raw JSON array (no markdown backticks):
     const cleanJson = res.text.replace(/```json/gi, '').replace(/```/g, '').trim();
     const questions = JSON.parse(cleanJson);
 
-    // Launch custom drill directly
     const container = document.getElementById('quizContent');
     let drillIdx = 0, drillScore = 0;
 
@@ -1941,7 +1963,6 @@ async function resolveSiteId(token) {
   return cachedSiteId;
 }
 
-// Graph Request Helper with Retry-After Handling & strict res.ok checks
 async function fetchGraphWithRetry(url, options = {}, token) {
   options.headers = options.headers || {};
   options.headers['Authorization'] = `Bearer ${token}`;
@@ -1963,7 +1984,7 @@ async function fetchGraphWithRetry(url, options = {}, token) {
   throw new Error('Graph request exceeded retries.');
 }
 
-// One-Pass Complete Sync across all classes
+// Complete Graph Sync (Deduplicated, checks res.ok, guards against demo rows)
 document.getElementById('spSyncBtn').addEventListener('click', async () => {
   const btn = document.getElementById('spSyncBtn');
   if (btn.disabled) return;
@@ -1974,13 +1995,13 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     const token = await getMsalToken();
     const siteId = await resolveSiteId(token);
 
-    showToast('Checking for unsynced lectures, deadlines & chats…');
+    showToast('Checking for unsynced lectures, deadlines, schedules & chats…');
     let syncedLectures = 0, syncedDeadlines = 0, syncedChats = 0;
 
-    // 1. SYNC ALL DIRTY LECTURES ACROSS ALL CLASSES
+    // 1. SYNC ALL DIRTY LECTURES
     const allLectures = await idbGetAll('lectures');
     for (const r of allLectures) {
-      if (r.isDemo) continue; // NEVER SYNC DEMO ENTRIES!
+      if (r.isDemo) continue;
 
       const fieldsPayload = {
         Title: `${r.className} · ${r.topicLabel} (Part ${r.partNumber || 1})`,
@@ -1989,7 +2010,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         ClassName: r.className,
         PeriodNumber: r.periodNumber,
         RecordedDate: r.recordedDate,
-        DurationSeconds: r.durationSeconds || null, // null if no audio
+        DurationSeconds: r.durationSeconds || null,
         UnitTitle: r.unitTitle,
         UnitKey: r.unitKey,
         PartNumber: r.partNumber || 1,
@@ -2000,7 +2021,6 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         SchemaVersion: 4
       };
 
-      // Direct indexed lookup on ClientId
       const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${r.clientId}'&$expand=fields`;
       const checkRes = await fetchGraphWithRetry(checkUrl, { method: 'GET' }, token);
       const checkData = await checkRes.json();
@@ -2061,7 +2081,6 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
 
     // 3. SYNC CHATS USING DETERMINISTIC ThreadId KEYS
     for (const c of CLASSES) {
-      // Find all exchange keys for this class
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k.startsWith('ss_dirty_chat_') && k.includes(c.code)) {
@@ -2072,7 +2091,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
             const chatPayload = {
               Title: `${c.name} · ${targetKey}`,
               ClassCode: c.code,
-              ThreadId: targetKey, // Deterministic indexed key
+              ThreadId: targetKey,
               MessageCount: exchanges.length,
               LastMessageAt: exchanges[exchanges.length - 1].ts || new Date().toISOString(),
               Thread_JSON: JSON.stringify(exchanges)
@@ -2101,7 +2120,44 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       }
     }
 
-    // Pull down any new deadlines from SharePoint to update Flight Radar
+    // 4. SYNC CLASSES / SCHEDULE IF CHANGED
+    if (localStorage.getItem('ss_dirty_classes') === 'true') {
+      for (const cls of CLASSES) {
+        const clsPayload = {
+          Title: cls.name,
+          ClassCode: cls.code,
+          TeacherName: cls.teacher || '',
+          PeriodNumber: cls.period,
+          MeetingDays: cls.days || '',
+          MeetingTime: cls.time || '',
+          ColorHex: cls.color || '#2F6FDE',
+          IconEmoji: cls.icon || '📚',
+          NeedsScribe: cls.needsScribe !== false,
+          SortOrder: cls.period,
+          Term: cls.term || 'Fall 26/27',
+          IsActive: true
+        };
+
+        const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
+        const cCheckRes = await fetchGraphWithRetry(cCheckUrl, { method: 'GET' }, token);
+        const cCheckData = await cCheckRes.json();
+
+        if (cCheckData.value && cCheckData.value.length > 0) {
+          await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items/${cCheckData.value[0].id}/fields`, {
+            method: 'PATCH',
+            body: JSON.stringify(clsPayload)
+          }, token);
+        } else {
+          await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items`, {
+            method: 'POST',
+            body: JSON.stringify({ fields: clsPayload })
+          }, token);
+        }
+      }
+      localStorage.removeItem('ss_dirty_classes');
+    }
+
+    // Refresh remote deadlines to update Flight Radar
     const remoteDlRes = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$expand=fields&$top=50`, { method: 'GET' }, token);
     const remoteDlData = await remoteDlRes.json();
     if (remoteDlData.value) {
@@ -2128,7 +2184,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
 });
 
 /* =====================================================================
-   SECTION 11 - PARENT VAULT & START NEW UNIT MODALS
+   SECTION 11 - PARENT VAULT, PIN GATE & IN-APP SCHEDULE EDITOR
    ===================================================================== */
 const PARENT_PIN_KEY = 'ss_parent_pin';
 function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
@@ -2209,7 +2265,49 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
   showToast(`Started ${title}!`);
 });
 
-// Pull Classes dynamically from SharePoint Student_Classes list
+// In-App Schedule Editor
+document.getElementById('openScheduleEditorBtn').addEventListener('click', () => {
+  const body = document.getElementById('scheduleEditorBody');
+  body.innerHTML = '';
+  CLASSES.forEach((c, idx) => {
+    body.innerHTML += `
+      <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b>${c.icon} ${c.name} (P${c.period})</b>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="schedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <label style="font-size:11px">Teacher: <input type="text" id="schedTeacher_${idx}" value="${c.teacher || ''}"></label>
+          <label style="font-size:11px">Days: <input type="text" id="schedDays_${idx}" value="${c.days || ''}"></label>
+          <label style="font-size:11px">Time: <input type="text" id="schedTime_${idx}" value="${c.time || ''}"></label>
+          <label style="font-size:11px">Period: <input type="number" id="schedPeriod_${idx}" value="${c.period}"></label>
+        </div>
+      </div>
+    `;
+  });
+  document.getElementById('scheduleDlg').showModal();
+});
+document.getElementById('closeScheduleBtn').addEventListener('click', () => document.getElementById('scheduleDlg').close());
+
+document.getElementById('saveScheduleBtn').addEventListener('click', () => {
+  CLASSES.forEach((c, idx) => {
+    c.teacher = document.getElementById(`schedTeacher_${idx}`).value.trim();
+    c.days = document.getElementById(`schedDays_${idx}`).value.trim();
+    c.time = document.getElementById(`schedTime_${idx}`).value.trim();
+    c.period = parseInt(document.getElementById(`schedPeriod_${idx}`).value, 10) || c.period;
+    c.needsScribe = document.getElementById(`schedScribe_${idx}`).checked;
+  });
+  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+  localStorage.setItem('ss_dirty_classes', 'true');
+  renderClassRibbon();
+  updateRecScheduleHint();
+  document.getElementById('scheduleDlg').close();
+  showToast('Schedule updated & marked for SharePoint sync!');
+});
+
+// Pull Classes from SharePoint
 document.getElementById('pullClassesBtn').addEventListener('click', async () => {
   try {
     showToast('Pulling classes from SharePoint…');
@@ -2222,15 +2320,19 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
     if (data.value && data.value.length > 0) {
       const loaded = data.value
         .map(x => x.fields)
-        .filter(f => f.NeedsScribe !== false && f.IsActive !== false)
+        .filter(f => f.IsActive !== false)
         .sort((a,b) => (a.PeriodNumber || 1) - (b.PeriodNumber || 1))
         .map(f => ({
           code: f.ClassCode,
           name: f.Title,
           period: f.PeriodNumber || 1,
           teacher: f.TeacherName || '',
+          days: f.MeetingDays || '',
+          time: f.MeetingTime || '',
           color: f.ColorHex || '#2F6FDE',
-          icon: f.IconEmoji || '📚'
+          icon: f.IconEmoji || '📚',
+          needsScribe: f.NeedsScribe !== false,
+          term: f.Term || 'Fall 26/27'
         }));
 
       if (loaded.length) {
@@ -2238,7 +2340,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
         localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
         renderClassRibbon();
         switchClass(CLASSES[0].code);
-        showToast(`Loaded ${CLASSES.length} active classes from SharePoint!`);
+        showToast(`Loaded ${CLASSES.length} classes from SharePoint!`);
       }
     }
   } catch (err) {
@@ -2432,7 +2534,10 @@ document.getElementById('recBtn').addEventListener('click', () => {
   const savedTheme = localStorage.getItem('ss_theme');
   if (savedTheme) document.documentElement.dataset.t = savedTheme;
 
-  // Restore custom schedule from storage if previously pulled
+  // Set default intake date picker to Today
+  document.getElementById('intakeClassDate').value = new Date().toISOString().slice(0, 10);
+
+  // Restore custom schedule from storage if previously saved
   const customClasses = localStorage.getItem('ss_classes_custom');
   if (customClasses) {
     try { CLASSES = JSON.parse(customClasses); } catch(e){}
