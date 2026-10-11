@@ -60,10 +60,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tog { border: 2px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .btn-icon { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 6px 10px; cursor: pointer; font-size: 16px; }
 
-.ribbon { display: flex; gap: 8px; overflow-x: auto; padding: 8px 18px; }
-.cls { flex: none; border: 2px solid var(--line); background: var(--card); border-radius: 14px; padding: 10px 16px; cursor: pointer; font-size: 15px; font-weight: 500; }
+/* OPTION A: 2-TIER INTEGRATED CLASS CARDS */
+.ribbon { display: flex; gap: 10px; overflow-x: auto; padding: 8px 18px; scroll-snap-type: x mandatory; }
+.cls {
+  flex: none; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+  border: 2px solid var(--line); background: var(--card); border-radius: 16px;
+  padding: 8px 14px; cursor: pointer; min-width: 155px; scroll-snap-align: start;
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.cls:hover { border-color: var(--c); }
 .cls.on { border-color: var(--c); background: var(--c); color: #fff; }
 .cls:disabled { opacity: .5; cursor: not-allowed; }
+
+.cls-header { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; }
+.cls-title { font-size: 15px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.cls-edit-btn { font-size: 11.5px; opacity: 0.65; padding: 1px 4px; border-radius: 4px; cursor: pointer; transition: opacity .15s, transform .1s; }
+.cls-edit-btn:hover { opacity: 1; transform: scale(1.2); }
+.cls-meta { font-size: 11px; font-weight: 400; color: var(--mut); margin-top: 3px; line-height: 1.25; white-space: nowrap; }
+.cls.on .cls-meta { color: rgba(255, 255, 255, 0.85); }
+.cls.on .cls-edit-btn { opacity: 0.85; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25)); }
 
 /* Main Screen Areas */
 main { padding: 4px 18px 140px; flex: 1; }
@@ -122,7 +137,6 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tile.on .ck { background: var(--c); border-color: var(--c); color: #fff; }
 .tile.today { border-style: dashed; }
 
-/* FIXED: Arrow-specific square class so #startNewUnitBtn renders as a clean pill */
 .wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; gap: 12px; }
 .wk button.wk-arrow { width: 50px; height: 50px; flex: none; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
 .wk-center { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -162,7 +176,7 @@ nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color:
 nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
 nav.dock button.on { color: var(--c); font-weight: 700; }
 
-/* Settings & PIN Dialog Modals */
+/* Settings, Unit & Schedule Dialog Modals */
 dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
 dialog::backdrop { background: rgba(30,30,30,.55); }
 .dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
@@ -197,7 +211,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     </div>
   </header>
 
-  <!-- Class Schedule Ribbon (Sorted by Period) -->
+  <!-- Class Schedule Ribbon (2-Tier Cards) -->
   <div class="ribbon" id="classRibbon"></div>
 
   <!-- Screen 1: Dual-Intake Station (Main Screen) -->
@@ -349,6 +363,36 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </nav>
 </div>
 
+<!-- Student-Level Schedule Quick Edit Modal (No PIN Required) -->
+<dialog class="cfg-dlg" id="studentScheduleDlg" style="max-width:440px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">✏️ Edit Class Schedule</h3>
+    <button class="say" id="closeStudentSchedBtn">✕</button>
+  </div>
+  <div class="dlg-body">
+    <b id="studentSchedClassName" style="font-size:16px;color:var(--ink)"></b>
+    <label>Meeting Days
+      <input type="text" id="studentSchedDays" placeholder="e.g. Tue, Thu, Fri">
+    </label>
+    <div class="chips" style="margin:0 0 4px">
+      <button type="button" class="say sm day-toggle-btn" data-day="Mon">Mon</button>
+      <button type="button" class="say sm day-toggle-btn" data-day="Tue">Tue</button>
+      <button type="button" class="say sm day-toggle-btn" data-day="Wed">Wed</button>
+      <button type="button" class="say sm day-toggle-btn" data-day="Thu">Thu</button>
+      <button type="button" class="say sm day-toggle-btn" data-day="Fri">Fri</button>
+    </div>
+    <label>Class Time
+      <input type="text" id="studentSchedTime" placeholder="e.g. 08:00 - 08:50">
+    </label>
+    <label>Teacher Name
+      <input type="text" id="studentSchedTeacher" placeholder="e.g. Erhart">
+    </label>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="saveStudentSchedBtn">Save Schedule</button>
+  </div>
+</dialog>
+
 <!-- Parent PIN Access Modal -->
 <dialog class="cfg-dlg" id="pinDlg" style="max-width:380px">
   <div class="dlg-head">
@@ -381,18 +425,6 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
   <div class="dlg-foot">
     <button class="btn" id="saveNewUnitBtn">Start Unit</button>
-  </div>
-</dialog>
-
-<!-- Schedule Editor Modal -->
-<dialog class="cfg-dlg" id="scheduleDlg" style="max-width:540px">
-  <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">📅 Edit Class Schedule</h3>
-    <button class="say" id="closeScheduleBtn">✕</button>
-  </div>
-  <div class="dlg-body" id="scheduleEditorBody"></div>
-  <div class="dlg-foot">
-    <button class="btn" id="saveScheduleBtn">Save Schedule Changes</button>
   </div>
 </dialog>
 
@@ -443,7 +475,6 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 
     <h4>Schedule &amp; Data Utilities</h4>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn alt sm" id="openScheduleEditorBtn">📅 Edit Schedule &amp; Days</button>
       <button class="btn alt sm" id="pullClassesBtn">☁️ Pull Schedule from SharePoint</button>
       <button class="btn alt sm" id="seedDemoBtn">🧪 Seed Demo Data</button>
       <button class="btn alt sm" id="removeDemoBtn">🧹 Remove Demo Data</button>
@@ -511,7 +542,7 @@ Keep responses concise, clear, and punchy.
 Never lecture in long paragraphs. Use clear bullet points and bold anchor stems.
 Ground all science and math concepts in realistic analogies across aviation, war history, mechanics, soccer, or gaming.`;
 
-// Standalone Mock Demo Deck (Loaded ONLY when requested)
+// Standalone Mock Demo Deck
 const DEMO_CURRICULUM = {
   BIO_1: {
     unitKey: 'U2', unitTitle: 'Unit 2 · Cells & Energy',
@@ -857,7 +888,7 @@ function speakText(rawTextOrElement) {
 }
 
 /* =====================================================================
-   SECTION 5 - SCHEDULE, RADAR PILL & UI RENDER ENGINE
+   SECTION 5 - OPTION A: 2-TIER CLASS CARDS & UI RENDER ENGINE
    ===================================================================== */
 function getActiveDataset() {
   return CURRICULUM[activeClassCode] || { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
@@ -875,17 +906,40 @@ function updateRecScheduleHint() {
   document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
 
+// OPTION A: 2-Tier Integrated Card-Pill with smaller informational subtext
 function renderClassRibbon() {
   const rib = document.getElementById('classRibbon');
   rib.innerHTML = '';
   const visibleClasses = CLASSES.filter(c => c.needsScribe !== false).sort((a,b) => (a.period || 1) - (b.period || 1));
+  
   visibleClasses.forEach(c => {
     const btn = document.createElement('button');
-    btn.className = `cls ${c.code === activeClassCode ? 'on' : ''}`;
-    btn.textContent = `${c.icon} ${c.name} (P${c.period})`;
-    btn.disabled = isRecording() && c.code !== activeClassCode;
-    btn.title = `${c.days || ''} ${c.time || ''}`;
-    btn.onclick = () => switchClass(c.code);
+    const isOn = c.code === activeClassCode;
+    btn.className = `cls ${isOn ? 'on' : ''}`;
+    btn.disabled = isRecording() && !isOn;
+    btn.title = btn.disabled ? 'Stop recording before switching classes' : `${c.name} (Period ${c.period})`;
+
+    const scheduleParts = [];
+    if (c.days) scheduleParts.push(c.days);
+    if (c.time) scheduleParts.push(c.time);
+    const metaText = scheduleParts.join(' · ') || 'Schedule not set';
+
+    btn.innerHTML = `
+      <div class="cls-header">
+        <span class="cls-title">${c.icon} ${c.name} (P${c.period})</span>
+        ${isOn ? `<span class="cls-edit-btn" data-edit-code="${c.code}" title="Edit days & times">✏️</span>` : ''}
+      </div>
+      <div class="cls-meta">${escText(metaText)}</div>
+    `;
+
+    btn.onclick = (e) => {
+      if (e.target.closest('.cls-edit-btn')) {
+        e.stopPropagation();
+        openStudentScheduleModal(c.code);
+        return;
+      }
+      switchClass(c.code);
+    };
     rib.appendChild(btn);
   });
 }
@@ -928,7 +982,7 @@ function updateRadarPills() {
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // 1. GLOBAL RADAR: Nearest exam across ALL classes within 7 days
+  // GLOBAL RADAR: Nearest exam across ALL classes within 7 days
   const upcomingAll = cachedDeadlines
     .filter(d => d.typeDesc === 'Test' || d.typeDesc === 'Quiz')
     .filter(d => d.dueDate && new Date(d.dueDate) >= now && new Date(d.dueDate) <= weekFromNow)
@@ -947,7 +1001,7 @@ function updateRadarPills() {
     radarEl.style.display = 'none';
   }
 
-  // 2. ACTIVE CLASS TEST BANNER
+  // ACTIVE CLASS TEST BANNER
   const classTests = cachedDeadlines
     .filter(d => d.classCode === activeClassCode && (d.typeDesc === 'Test' || d.typeDesc === 'Quiz'))
     .sort((a,b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0));
@@ -1333,7 +1387,6 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const sysInst = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
   const currentClass = CLASSES.find(c => c.code === activeClassCode);
 
-  // Read the backdated or today's date picker
   const pickedDateVal = document.getElementById('intakeClassDate').value;
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
 
@@ -1561,7 +1614,7 @@ function renderHistoryDrawer() {
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function extractGeminiText(data) {
@@ -2184,8 +2237,69 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
 });
 
 /* =====================================================================
-   SECTION 11 - PARENT VAULT, PIN GATE & IN-APP SCHEDULE EDITOR
+   SECTION 11 - STUDENT QUICK-EDIT, PARENT VAULT & START UNIT MODALS
    ===================================================================== */
+let editingClassCode = null;
+
+function openStudentScheduleModal(code) {
+  editingClassCode = code;
+  const cls = CLASSES.find(c => c.code === code);
+  if (!cls) return;
+
+  document.getElementById('studentSchedClassName').textContent = `${cls.icon} ${cls.name} (Period ${cls.period})`;
+  document.getElementById('studentSchedDays').value = cls.days || '';
+  document.getElementById('studentSchedTime').value = cls.time || '';
+  document.getElementById('studentSchedTeacher').value = cls.teacher || '';
+
+  // Highlight active day toggle chips
+  const currentDays = (cls.days || '').toLowerCase();
+  document.querySelectorAll('.day-toggle-btn').forEach(btn => {
+    const day = btn.dataset.day.toLowerCase();
+    btn.classList.toggle('primary', currentDays.includes(day));
+  });
+
+  document.getElementById('studentScheduleDlg').showModal();
+}
+
+document.getElementById('closeStudentSchedBtn').addEventListener('click', () => {
+  document.getElementById('studentScheduleDlg').close();
+});
+
+// Clickable Day Chips to easily toggle days into the input field
+document.querySelectorAll('.day-toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const day = btn.dataset.day;
+    const input = document.getElementById('studentSchedDays');
+    let daysArr = input.value.split(',').map(s => s.trim()).filter(Boolean);
+    
+    if (daysArr.includes(day)) {
+      daysArr = daysArr.filter(d => d !== day);
+      btn.classList.remove('primary');
+    } else {
+      daysArr.push(day);
+      btn.classList.add('primary');
+    }
+    input.value = daysArr.join(', ');
+  });
+});
+
+document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
+  if (!editingClassCode) return;
+  const cls = CLASSES.find(c => c.code === editingClassCode);
+  if (cls) {
+    cls.days = document.getElementById('studentSchedDays').value.trim();
+    cls.time = document.getElementById('studentSchedTime').value.trim();
+    cls.teacher = document.getElementById('studentSchedTeacher').value.trim();
+
+    localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+    localStorage.setItem('ss_dirty_classes', 'true');
+    renderClassRibbon();
+    updateRecScheduleHint();
+    document.getElementById('studentScheduleDlg').close();
+    showToast(`Saved schedule for ${cls.name}!`);
+  }
+});
+
 const PARENT_PIN_KEY = 'ss_parent_pin';
 function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
 
@@ -2263,48 +2377,6 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
   document.getElementById('newUnitDlg').close();
   renderAll();
   showToast(`Started ${title}!`);
-});
-
-// In-App Schedule Editor
-document.getElementById('openScheduleEditorBtn').addEventListener('click', () => {
-  const body = document.getElementById('scheduleEditorBody');
-  body.innerHTML = '';
-  CLASSES.forEach((c, idx) => {
-    body.innerHTML += `
-      <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <b>${c.icon} ${c.name} (P${c.period})</b>
-          <label style="font-size:12px;display:flex;align-items:center;gap:4px">
-            <input type="checkbox" id="schedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe
-          </label>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
-          <label style="font-size:11px">Teacher: <input type="text" id="schedTeacher_${idx}" value="${c.teacher || ''}"></label>
-          <label style="font-size:11px">Days: <input type="text" id="schedDays_${idx}" value="${c.days || ''}"></label>
-          <label style="font-size:11px">Time: <input type="text" id="schedTime_${idx}" value="${c.time || ''}"></label>
-          <label style="font-size:11px">Period: <input type="number" id="schedPeriod_${idx}" value="${c.period}"></label>
-        </div>
-      </div>
-    `;
-  });
-  document.getElementById('scheduleDlg').showModal();
-});
-document.getElementById('closeScheduleBtn').addEventListener('click', () => document.getElementById('scheduleDlg').close());
-
-document.getElementById('saveScheduleBtn').addEventListener('click', () => {
-  CLASSES.forEach((c, idx) => {
-    c.teacher = document.getElementById(`schedTeacher_${idx}`).value.trim();
-    c.days = document.getElementById(`schedDays_${idx}`).value.trim();
-    c.time = document.getElementById(`schedTime_${idx}`).value.trim();
-    c.period = parseInt(document.getElementById(`schedPeriod_${idx}`).value, 10) || c.period;
-    c.needsScribe = document.getElementById(`schedScribe_${idx}`).checked;
-  });
-  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-  localStorage.setItem('ss_dirty_classes', 'true');
-  renderClassRibbon();
-  updateRecScheduleHint();
-  document.getElementById('scheduleDlg').close();
-  showToast('Schedule updated & marked for SharePoint sync!');
 });
 
 // Pull Classes from SharePoint
