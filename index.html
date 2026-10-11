@@ -136,7 +136,24 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tile.on { border-color: var(--c); background: var(--sel); }
 .tile.on .ck { background: var(--c); border-color: var(--c); color: #fff; }
 .tile.today { border-style: dashed; }
-
+.tile-edit-btn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  opacity: 0.65;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.tile-edit-btn:hover { opacity: 1; transform: scale(1.15); border-color: var(--c); }
+.tile.on .tile-edit-btn { background: var(--card); border-color: var(--c); opacity: 0.9; }
 .wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; gap: 12px; }
 .wk button.wk-arrow { width: 50px; height: 50px; flex: none; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
 .wk-center { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -393,7 +410,26 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
 </dialog>
 
-<!-- Parent PIN Access Modal -->
+<!-- Edit Lecture Details Modal -->
+<dialog class="cfg-dlg" id="editLectureDlg" style="max-width:440px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">✏️ Edit Lesson Details</h3>
+    <button class="say" id="closeEditLectBtn">✕</button>
+  </div>
+  <div class="dlg-body">
+    <label>Topic Title
+      <input type="text" id="editLectTitleInput">
+    </label>
+    <label>Class Date (When class happened)
+      <input type="date" id="editLectDateInput">
+    </label>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="saveEditLectBtn">Save Changes</button>
+  </div>
+</dialog>
+  
+  <!-- Parent PIN Access Modal -->
 <dialog class="cfg-dlg" id="pinDlg" style="max-width:380px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">🔒 Parent &amp; Settings Gate</h3>
@@ -1059,6 +1095,7 @@ function renderUnitTrack() {
     const tile = document.createElement('button');
     tile.className = `tile ${isPicked ? 'on' : ''} ${isLast ? 'today' : ''}`;
     tile.innerHTML = `
+      ${!l.isDemo ? `<span class="tile-edit-btn" data-edit-lect="${l.id}" title="Edit date or title">✏️</span>` : ''}
       <span class="ck">${isPicked ? '✓' : ''}</span>
       <span class="ic">${l.i}</span>
       <b>Part ${idx + 1}</b>
@@ -1081,8 +1118,76 @@ function renderUnitTrack() {
   document.getElementById('pickCountLbl').textContent = count === 0
     ? 'Pick at least one part'
     : `✅ ${count} ${count === 1 ? 'part' : 'parts'} selected`;
+let editingLectureId = null;
+
+document.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('[data-edit-lect]');
+  if (editBtn) {
+    e.stopPropagation();
+    openEditLectureModal(editBtn.dataset.editLect);
+  }
+});
+
+function openEditLectureModal(id) {
+  const ds = getActiveDataset();
+  const lect = ds.lectures.find(x => x.id === id);
+  if (!lect) return;
+
+  editingLectureId = id;
+  document.getElementById('editLectTitleInput').value = lect.t;
+  
+  const dObj = lect.recordedDate ? new Date(lect.recordedDate) : new Date();
+  document.getElementById('editLectDateInput').value = dObj.toISOString().slice(0, 10);
+  
+  document.getElementById('editLectureDlg').showModal();
 }
 
+document.getElementById('closeEditLectBtn').addEventListener('click', () => {
+  document.getElementById('editLectureDlg').close();
+});
+
+document.getElementById('saveEditLectBtn').addEventListener('click', async () => {
+  if (!editingLectureId) return;
+  const ds = getActiveDataset();
+  const lect = ds.lectures.find(x => x.id === editingLectureId);
+  if (!lect) return;
+
+  const newTitle = document.getElementById('editLectTitleInput').value.trim();
+  const newDateVal = document.getElementById('editLectDateInput').value;
+  if (!newTitle || !newDateVal) { alert('Title and date are required.'); return; }
+
+  const newDateObj = new Date(newDateVal + 'T12:00:00');
+  
+  lect.t = newTitle;
+  lect.d = newDateObj.toLocaleDateString('en-US', { weekday: 'short' });
+  lect.n = newDateObj.getDate();
+  lect.recordedDate = newDateObj.toISOString();
+
+  const currentClass = CLASSES.find(c => c.code === activeClassCode);
+  const clientId = lect.clientId || `lect_${activeClassCode}_${lect.id}`;
+  
+  await idbPut('lectures', {
+    clientId: clientId,
+    classCode: activeClassCode,
+    className: currentClass.name,
+    periodNumber: currentClass.period,
+    recordedDate: lect.recordedDate,
+    unitKey: ds.unitKey,
+    unitTitle: ds.unitTitle,
+    partNumber: ds.lectures.indexOf(lect) + 1,
+    topicLabel: lect.t,
+    topicIcon: lect.i,
+    processingStatus: 'Completed',
+    isDemo: false,
+    isDirty: true,
+    studyPayload: JSON.stringify(lect)
+  });
+
+  document.getElementById('editLectureDlg').close();
+  renderAll();
+  showToast('Lesson updated! Changes will sync to SharePoint.');
+});}
+  
 function getSourceBadgeHtml(src) {
   const map = {
     'Audio': '🎙️ Class Audio',
