@@ -98,6 +98,30 @@ main { padding: 4px 18px 140px; flex: 1; }
 .coverage-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--sel); border-radius: 12px; font-size: 12.5px; font-weight: 600; }
 .coverage-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
 .coverage-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+/* Practice drill: question left, "ask about this" panel right on wide screens */
+@media (min-width: 1020px) { main.two #s-quiz { grid-column: 1 / -1; } }
+.quiz-layout { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+@media (min-width: 1020px) { .quiz-layout { grid-template-columns: 1.15fr 1fr; } }
+.answer-panel { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1.5px solid var(--line); font-size: 15px; }
+.answer-panel .verdict { font-weight: 700; margin-bottom: 4px; }
+.answer-panel blockquote { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--c); color: var(--mut); font-size: 14px; }
+.quiz-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.followup { display: flex; flex-direction: column; gap: 8px; }
+.followup-feed { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.followup .hint { color: var(--mut); font-size: 14px; }
+#printArea { display: none; }
+@media print {
+  body.printing > *:not(#printArea) { display: none !important; }
+  body.printing #printArea { display: block; color: #000; background: #fff; font-size: 13pt; line-height: 1.5; }
+  #printArea .pq { page-break-inside: avoid; margin: 0 0 18px; }
+  #printArea .page { page-break-after: always; }
+  #printArea .page:last-child { page-break-after: auto; }
+  #printArea h1 { font-size: 18pt; margin: 0 0 4px; }
+  #printArea .meta { font-size: 11pt; color: #444; margin-bottom: 14px; }
+  #printArea ol.opts { list-style: upper-alpha; margin: 4px 0 0 24px; padding: 0; }
+  #printArea .lines div { border-bottom: 1px solid #999; height: 30px; }
+  #printArea .tag { font-size: 10pt; color: #555; }
+}
 .tone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .tone-card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
 .tone-card.on { border-color: var(--c); box-shadow: 0 0 0 2px var(--sel); }
@@ -433,6 +457,22 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 </dialog>
  
 <!-- Parent PIN Access Modal -->
+<div id="printArea"></div>
+
+<dialog class="cfg-dlg" id="intakeMoveDlg" style="max-width:440px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">📎 Materials ready to process</h3>
+  </div>
+  <div class="dlg-body">
+    <p id="intakeMoveText" style="margin:0"></p>
+  </div>
+  <div class="dlg-foot" style="display:flex;flex-direction:column;gap:8px">
+    <button class="btn" id="intakeMoveBtn">Move them</button>
+    <button class="btn alt" id="intakeKeepBtn">Keep them</button>
+    <button class="btn alt" id="intakeDiscardBtn" style="color:var(--bad)">Discard</button>
+  </div>
+</dialog>
+
 <dialog class="cfg-dlg" id="toneDlg" style="max-width:760px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">🗣️ Pick your coach's voice</h3>
@@ -870,7 +910,8 @@ let anchorBoldOn = false;
 let pickedLectures = {};
 let quizIndex = 0;
 let quizScore = 0;
-let quizMissed = [];
+let quizMissed = [];      // question ids missed in the current run
+let quizAnswers = {};     // question id -> chosen option index (current run)
 let quizRetryIds = null;
 let currentChatHistory = [];
 let cachedDeadlines = [];
@@ -1380,6 +1421,7 @@ function getSelectedLectures() {
  
 function updateRecScheduleHint() {
   const c = CLASSES.find(x => x.code === activeClassCode);
+  updateGenerateLabel();
   document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
  
@@ -1420,8 +1462,80 @@ function renderClassRibbon() {
   });
 }
  
-function switchClass(code) {
-  if (isRecording()) { showToast('Stop recording before switching classes'); return; }
+/* Staged intake (files, notes, ticked recordings) belongs to a class.
+   Switching with something staged asks: move it, keep it with the old class, or discard. */
+const intakeDrafts = {}; // classCode -> { files, notes }
+
+function stagedSummary() {
+  const notes = document.getElementById('mainPastedNotes').value.trim();
+  return { files: stagedFiles.length, notes: !!notes, recs: includedSessionIds.size };
+}
+
+function describeStaged(st) {
+  const bits = [];
+  if (st.files) bits.push(`${st.files} file${st.files > 1 ? 's' : ''}`);
+  if (st.recs) bits.push(`${st.recs} recording${st.recs > 1 ? 's' : ''}`);
+  if (st.notes) bits.push('typed notes');
+  return bits.join(', ').replace(/, ([^,]*)$/, ' and $1');
+}
+
+function askAboutStaged(fromName, toName) {
+  return new Promise(resolve => {
+    const dlg = document.getElementById('intakeMoveDlg');
+    document.getElementById('intakeMoveText').innerHTML =
+      `You have ${escText(describeStaged(stagedSummary()))} ready for <b>${escText(fromName)}</b>.`;
+    document.getElementById('intakeMoveBtn').textContent = `Move them to ${toName}`;
+    document.getElementById('intakeKeepBtn').textContent = `Keep them with ${fromName}`;
+    const finish = (v) => { dlg.close(); resolve(v); };
+    document.getElementById('intakeMoveBtn').onclick = () => finish('move');
+    document.getElementById('intakeKeepBtn').onclick = () => finish('keep');
+    document.getElementById('intakeDiscardBtn').onclick = () => finish('discard');
+    dlg.oncancel = (e) => { e.preventDefault(); finish('cancel'); };
+    dlg.showModal();
+  });
+}
+
+async function switchClass(code) {
+  if (isRecording()) { showToast('Stop recording before switching classes'); return false; }
+  if (code === activeClassCode) return true;
+  const st = stagedSummary();
+  const fromCode = activeClassCode;
+  let carry = null;
+  if (fromCode && (st.files || st.notes || st.recs)) {
+    const fromCls = CLASSES.find(x => x.code === fromCode) || { name: fromCode };
+    const toCls = CLASSES.find(x => x.code === code) || { name: code };
+    const choice = await askAboutStaged(fromCls.name, toCls.name);
+    if (choice === 'cancel') return false;
+    if (choice === 'move') {
+      carry = { files: stagedFiles.slice(), notes: document.getElementById('mainPastedNotes').value };
+      // Ticked recordings move with the materials
+      for (const id of includedSessionIds) {
+        const sess = (await idbGetAll('sessions')).find(x => x.id === id);
+        if (sess) { sess.classCode = code; await idbPut('sessions', sess); }
+      }
+    } else if (choice === 'keep') {
+      intakeDrafts[fromCode] = { files: stagedFiles.slice(), notes: document.getElementById('mainPastedNotes').value };
+    }
+    // discard: nothing kept
+  }
+  doSwitchClass(code);
+  const restore = carry || intakeDrafts[code];
+  if (restore) {
+    stagedFiles = restore.files.slice();
+    document.getElementById('mainPastedNotes').value = restore.notes || '';
+    renderStagedFiles();
+    if (!carry) { delete intakeDrafts[code]; showToast('Restored the materials you left here'); }
+  }
+  return true;
+}
+
+function updateGenerateLabel() {
+  const btn = document.getElementById('generateIntakeBtn');
+  const c = CLASSES.find(x => x.code === activeClassCode);
+  if (btn && !btn.disabled) btn.textContent = `🚀 Generate for ${c ? c.name : 'this class'}`;
+}
+
+function doSwitchClass(code) {
   activeClassCode = code;
   localStorage.setItem('ss_last_class', code);
  
@@ -1441,8 +1555,10 @@ function switchClass(code) {
   renderAll();
   loadSubjectChat();
   clearStagedFiles();
+  includedSessionIds = new Set();
   renderPendingRecordings();
   updateRadarPills();
+  updateGenerateLabel();
   showToast(`Switched to ${c.name}`);
 }
  
@@ -1497,10 +1613,9 @@ function updateRadarPills() {
       `${due.toLocaleDateString('en-US', { weekday: 'short' })} (${days} days)`;
     radarText.textContent = `🎯 Next: ${d.class} ${d.typeDesc} · ${when}`;
     radarEl.style.display = 'inline-flex';
-    radarEl.onclick = () => {
+    radarEl.onclick = async () => {
       if (isRecording()) { showToast('Stop recording before switching classes'); return; }
-      switchClass(d.classCode);
-      launchTestPrep(d);
+      if (await switchClass(d.classCode)) launchTestPrep(d);
     };
   } else {
     radarEl.style.display = 'none';
@@ -1629,7 +1744,8 @@ function renderCoverageBar(l) {
   let h = `<div class="coverage-bar"><span>📥 Sources:</span>`;
   if (Array.isArray(cov.files) && cov.files.length) {
     cov.files.forEach(f => {
-      h += `<span class="coverage-chip ${f.used ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${f.used ? '✔' : '⚠️ not used'}</span>`;
+      const state = f.used ? '✔' : f.covered ? '✔ covered by another source' : '⚠️ not used';
+      h += `<span class="coverage-chip ${f.used || f.covered ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${state}</span>`;
     });
   } else (cov.expected || []).forEach(src => {
     const ok = (cov.tagged || []).includes(src);
@@ -1744,6 +1860,9 @@ function getQuizSet() {
           options: qi.options,
           correct: qi.correct,
           feedback: qi.feedback,
+          evidence: qi.evidence || '',
+          evidenceStatus: qi.evidenceStatus || 'unchecked',
+          sourceId: qi.sourceId || '',
           ts: l.ts,
           t: l.t,
           i: l.i
@@ -1776,18 +1895,40 @@ function resetQuiz(retryIds) {
   quizIndex = 0;
   quizScore = 0;
   quizMissed = [];
+  quizAnswers = {};
   quizRetryIds = retryIds || null;
 }
  
+function sourceLabelFor(lecture, sourceId) {
+  const f = ((lecture && lecture.coverage && lecture.coverage.files) || []).find(x => x.id === sourceId);
+  return f ? f.label : '';
+}
+
+function quizLetter(i) { return String.fromCharCode(65 + i); }
+
+function renderAnswerPanel(cur, chosen) {
+  const isCorrect = chosen === cur.correct;
+  const src = sourceLabelFor(cur.parentLecture, cur.sourceId);
+  const showQuote = cur.evidence && cur.evidenceStatus !== 'unverified';
+  return `
+    <div class="answer-panel" id="answerPanel">
+      <div class="verdict" style="color:${isCorrect ? 'var(--ok)' : 'var(--bad)'}">
+        ${isCorrect ? '✔ Correct.' : `Not quite. The answer is <b>${escText(cur.options[cur.correct])}</b>.`}
+      </div>
+      ${cur.feedback ? `<div>${applyBionic(escText(cur.feedback))}</div>` : ''}
+      ${showQuote ? `<blockquote>“${escText(cur.evidence)}”${src ? `<br><small>From: ${escText(src)}</small>` : ''}</blockquote>` : ''}
+    </div>`;
+}
+
 function renderQuiz() {
   const set = getQuizSet();
   const container = document.getElementById('quizContent');
- 
+
   if (!set.length) {
     container.innerHTML = '<div class="card center"><p style="color:var(--mut)">No quiz questions available. Generate study notes first.</p></div>';
     return;
   }
- 
+
   if (quizIndex >= set.length) {
     const missed = quizMissed.slice();
     container.innerHTML = `
@@ -1796,11 +1937,15 @@ function renderQuiz() {
         <p style="font-size:24px;font-weight:700;color:var(--ok)">Score: ${quizScore} / ${set.length}</p>
         <p>${missed.length
           ? `You missed ${missed.length}. Run just those again while they are fresh.`
-          : 'Clean sweep! All active recall concepts mastered.'}</p>
+          : 'Clean sweep. Every question answered correctly.'}</p>
         <div class="chips" style="justify-content:center">
           ${missed.length ? `<button class="btn" id="retryMissedBtn">🔁 Retry missed (${missed.length})</button>` : ''}
           <button class="btn alt" id="testWeakSpotsBtn">🎯 Test My Weak Spots</button>
           <button class="btn ${missed.length ? 'alt' : ''}" id="retryQuizBtn">Retake full drill</button>
+        </div>
+        <div class="chips" style="justify-content:center;margin-top:6px">
+          <button class="btn alt" data-print="results">🖨 Print results</button>
+          <button class="btn alt" data-print="blank">🖨 Print blank test</button>
         </div>
       </div>
     `;
@@ -1810,48 +1955,239 @@ function renderQuiz() {
     document.getElementById('testWeakSpotsBtn').onclick = generateWeakSpotDrill;
     return;
   }
- 
+
   const cur = set[quizIndex];
+  const chosen = quizAnswers[cur.id];
+  const answered = chosen !== undefined;
+  const isLast = quizIndex === set.length - 1;
+
   container.innerHTML = `
-    <div class="row">
-      <b>${quizRetryIds ? 'Retry' : 'Self-Test'} Question ${quizIndex + 1} of ${set.length}</b>
-      <span class="badge">${cur.i} ${cur.t}</span>
-    </div>
-    <div class="progress-bar"><i style="width:${(quizIndex / set.length) * 100}%"></i></div>
-    <div class="card">
-      <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
-      ${cur.options.map((opt, idx) => `<button class="opt" data-opt="${idx}">${escText(opt)}</button>`).join('')}
-      <div id="quizFeedback" class="center" style="margin-top:10px;font-weight:600"></div>
+    <div class="quiz-layout">
+      <div>
+        <div class="row">
+          <b>${quizRetryIds ? 'Retry' : 'Self-Test'} Question ${quizIndex + 1} of ${set.length}</b>
+          <span style="display:flex;gap:6px;align-items:center">
+            <span class="badge">${cur.i} ${escText(cur.t)}</span>
+            <button class="say sm" data-print="blank" title="Print this test blank, to do on paper">🖨 Blank test</button>
+          </span>
+        </div>
+        <div class="progress-bar"><i style="width:${((quizIndex + (answered ? 1 : 0)) / set.length) * 100}%"></i></div>
+        <div class="card">
+          <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
+          ${cur.options.map((opt, idx) => {
+            let cls = '';
+            if (answered && idx === cur.correct) cls = 'ok';
+            else if (answered && idx === chosen) cls = 'no';
+            return `<button class="opt ${cls}" data-opt="${idx}" ${answered ? 'disabled' : ''}>${escText(opt)}</button>`;
+          }).join('')}
+          ${answered ? renderAnswerPanel(cur, chosen) : ''}
+          ${answered ? `
+            <div class="quiz-nav">
+              <button class="say sm" data-print-q="${cur.id}">🖨 Print this question</button>
+              <button class="btn" id="quizNextBtn">${isLast ? 'See results →' : 'Next →'}</button>
+            </div>` : ''}
+        </div>
+      </div>
+      <div class="card followup" id="followupPanel">
+        <h3 style="font-size:16px;margin:0">💬 Ask about this question</h3>
+        ${answered ? `
+          <div class="followup-feed" id="followupFeed">${renderFollowupFeed(cur)}</div>
+          <div class="row" style="gap:8px">
+            <input type="text" id="followupInput" placeholder="Why is that the answer? What does it mean?" style="flex:1">
+            <button class="btn" id="followupSendBtn" style="min-height:40px;padding:8px 14px">Ask</button>
+          </div>`
+        : `<p class="hint">Answer first. Then you can ask why, get it explained another way, or see an example.</p>`}
+      </div>
     </div>
   `;
- 
-  container.querySelectorAll('.opt').forEach(btn => {
-    btn.onclick = () => {
-      container.querySelectorAll('.opt').forEach(b => b.disabled = true);
-      const chosen = parseInt(btn.dataset.opt, 10);
-      const isCorrect = chosen === cur.correct;
-      btn.classList.add(isCorrect ? 'ok' : 'no');
-      if (!isCorrect) container.querySelector(`.opt[data-opt="${cur.correct}"]`).classList.add('ok');
-      const fb = document.getElementById('quizFeedback');
-      if (isCorrect) {
-        quizScore++;
-        fb.innerHTML = '🎉 That is correct!';
-      } else {
-        if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
-        const pl = cur.parentLecture || {};
-        recordExchange(pl.clientId || `lect_${activeClassCode}_${cur.lectureId}`,
-          `Missed Drill Question: ${cur.q}`, `Correct: ${cur.options[cur.correct]}`, true, [cur.lectureId]);
-        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.options[cur.correct])}</b>`;
-      }
-      const answeredId = cur.id;
-      setTimeout(() => {
-        const now = getQuizSet()[quizIndex];
-        if (now && now.id === answeredId) { quizIndex++; renderQuiz(); }
-      }, 2200);
-    };
-  });
+
+  if (!answered) {
+    container.querySelectorAll('.opt').forEach(btn => {
+      btn.onclick = () => {
+        const pick = parseInt(btn.dataset.opt, 10);
+        quizAnswers[cur.id] = pick;
+        if (pick === cur.correct) {
+          quizScore++;
+        } else {
+          if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
+          const pl = cur.parentLecture || {};
+          recordExchange(pl.clientId || `lect_${getStudentId()}_${activeClassCode}_${cur.lectureId}`,
+            `Missed Drill Question: ${cur.q}`, `Correct: ${cur.options[cur.correct]} · Chose: ${cur.options[pick]}`,
+            true, [cur.lectureId], { qid: cur.id });
+        }
+        renderQuiz();
+      };
+    });
+  } else {
+    document.getElementById('quizNextBtn').onclick = () => { quizIndex++; renderQuiz(); };
+    const fb = document.getElementById('followupFeed');
+    if (fb) fb.scrollTop = fb.scrollHeight;
+    document.getElementById('followupSendBtn').onclick = () => sendFollowup(cur);
+    document.getElementById('followupInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendFollowup(cur); }
+    });
+  }
 }
- 
+
+// Enter moves to the next question once an answer is showing (unless typing a follow-up)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  if (!document.getElementById('s-quiz').classList.contains('on')) return;
+  if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const next = document.getElementById('quizNextBtn');
+  if (next) { e.preventDefault(); next.click(); }
+});
+
+/* ---------- Follow-up questions about a drill question ----------
+   Saved in the lecture's own chat row, tagged with the question id,
+   so a question, its miss, and his follow-ups stay together. */
+function drillFollowups(cur) {
+  const pl = cur.parentLecture || {};
+  return loadExchangesForTarget(pl.clientId || '').filter(ex => ex.context === 'drill' && ex.qid === cur.id);
+}
+
+function renderFollowupFeed(cur) {
+  const list = drillFollowups(cur);
+  if (!list.length) return `<p class="hint">Try: “Why is ${escText(String(cur.options[cur.correct]).slice(0, 40))} right?” or “Give me an example.”</p>`;
+  return list.map(ex => `
+    <div class="msg me">${escText(ex.q)}</div>
+    <div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}</div>`).join('');
+}
+
+let followupBusy = false;
+async function sendFollowup(cur) {
+  if (followupBusy) return;
+  const input = document.getElementById('followupInput');
+  const text = (input.value || '').trim();
+  if (!text) return;
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
+
+  const feed = document.getElementById('followupFeed');
+  const sendBtn = document.getElementById('followupSendBtn');
+  followupBusy = true; sendBtn.disabled = true; input.value = '';
+  if (feed.querySelector('.hint')) feed.innerHTML = '';
+  feed.insertAdjacentHTML('beforeend', `<div class="msg me">${escText(text)}</div>`);
+  const waitEl = document.createElement('div');
+  waitEl.className = 'msg ai';
+  feed.appendChild(waitEl);
+  feed.scrollTop = feed.scrollHeight;
+  const stopTimer = startThinkingTimer(waitEl);
+
+  const chosen = quizAnswers[cur.id];
+  const context = `[DRILL QUESTION HE IS ASKING ABOUT]
+Question: ${cur.q}
+Options: ${cur.options.map((o, i) => `${quizLetter(i)}) ${o}`).join('  ')}
+His answer: ${chosen !== undefined ? cur.options[chosen] : 'not answered'}
+Correct answer: ${cur.options[cur.correct]}
+Explanation: ${cur.feedback || ''}
+${cur.evidence && cur.evidenceStatus !== 'unverified' ? `Evidence from the material: ${cur.evidence}` : ''}
+Answer his follow-up about this question. If he got it wrong, help him see why his choice does not fit, without making him feel small.`;
+
+  const history = drillFollowups(cur).slice(-3).flatMap(ex => [
+    { role: 'user', parts: [{ text: ex.q }] }, { role: 'model', parts: [{ text: ex.a }] }]);
+  const t0 = Date.now();
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), CHAT_TIMEOUT_MS);
+  try {
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const res = await queryGeminiWaterfall([...history, { role: 'user', parts: [{ text }] }], key, model, {
+      system: buildCoachSystem([cur.parentLecture].filter(Boolean), { includeTranscript: false }) + '\n\n' + context,
+      signal: ctrl.signal
+    });
+    stopTimer();
+    waitEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(res.text))}`;
+    const pl = cur.parentLecture || {};
+    recordExchange(pl.clientId, text, res.text, false, [cur.lectureId],
+      { context: 'drill', qid: cur.id, model: res.modelUsed, ms: Date.now() - t0 });
+  } catch (err) {
+    stopTimer();
+    waitEl.className = 'msg ai err';
+    waitEl.textContent = ctrl.signal.aborted ? '⚠️ That took too long. Tap Ask to try again.' : `⚠️ ${err.message}`;
+    input.value = text;
+  } finally {
+    clearTimeout(timeout);
+    followupBusy = false;
+    sendBtn.disabled = false;
+    feed.scrollTop = feed.scrollHeight;
+  }
+}
+
+/* ---------- Printing: results, blank test, single question ---------- */
+function printHtml(html) {
+  const area = document.getElementById('printArea');
+  area.innerHTML = html;
+  document.body.classList.add('printing');
+  const done = () => { document.body.classList.remove('printing'); area.innerHTML = ''; window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  setTimeout(() => window.print(), 50);
+}
+
+function printHeader(title) {
+  const cls = CLASSES.find(c => c.code === activeClassCode) || { name: activeClassCode };
+  const parts = getSelectedLectures().map(l => l.t).join(', ');
+  const name = getStudentName();
+  return `<h1>${escText(title)}</h1>
+    <div class="meta">${escText(cls.name)} · ${escText(parts)}<br>
+    ${name ? `Name: ${escText(name)}` : 'Name: ______________________'} &nbsp;&nbsp; Date: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>`;
+}
+
+function printQuestionBlock(q, n, opts = {}) {
+  const chosen = quizAnswers[q.id];
+  const src = sourceLabelFor(q.parentLecture, q.sourceId);
+  const optsHtml = `<ol class="opts">${q.options.map((o, i) => {
+    let mark = '';
+    if (opts.showAnswers && i === q.correct) mark = ' ✔';
+    if (opts.showAnswers && chosen === i && i !== q.correct) mark = ' ✘ (your answer)';
+    else if (opts.showAnswers && chosen === i) mark = ' ✔ (your answer)';
+    return `<li>${escText(o)}${mark}</li>`;
+  }).join('')}</ol>`;
+  let extra = '';
+  if (opts.showAnswers) {
+    extra += `<div><b>Correct answer:</b> ${quizLetter(q.correct)}) ${escText(q.options[q.correct])}</div>`;
+    extra += `<div><b>Your answer:</b> ${chosen !== undefined ? `${quizLetter(chosen)}) ${escText(q.options[chosen])}` : 'Not answered'}</div>`;
+    if (q.feedback) extra += `<div><b>Why:</b> ${escText(q.feedback)}</div>`;
+    if (q.evidence && q.evidenceStatus !== 'unverified') extra += `<div class="tag">From the material${src ? ` (${escText(src)})` : ''}: “${escText(q.evidence)}”</div>`;
+  } else if (opts.answerLine) {
+    extra = `<div style="margin-top:6px">Answer: ______</div>`;
+  }
+  return `<div class="pq"><b>${n}. ${escText(q.q)}</b>${optsHtml}${extra}</div>`;
+}
+
+function printDrill(kind) {
+  const set = getQuizSet();
+  if (!set.length) { showToast('No questions to print'); return; }
+  if (kind === 'results') {
+    const score = set.filter(q => quizAnswers[q.id] === q.correct).length;
+    printHtml(`<div class="page">${printHeader('Practice Results')}
+      <div class="meta">Score: ${score} / ${set.length}</div>
+      ${set.map((q, i) => printQuestionBlock(q, i + 1, { showAnswers: true })).join('')}</div>`);
+  } else {
+    // Blank test, then an answer key on its own page for the parent
+    printHtml(`<div class="page">${printHeader('Practice Test')}
+      ${set.map((q, i) => printQuestionBlock(q, i + 1, { answerLine: true })).join('')}</div>
+      <div class="page"><h1>Answer Key</h1>
+      ${set.map((q, i) => `<div>${i + 1}. ${quizLetter(q.correct)}) ${escText(q.options[q.correct])}</div>`).join('')}</div>`);
+  }
+}
+
+function printSingleQuestion(qid) {
+  const q = getQuizSet().find(x => x.id === qid);
+  if (!q) return;
+  const followups = drillFollowups(q);
+  printHtml(`<div class="page">${printHeader('Question to Talk About')}
+    ${printQuestionBlock(q, 1, { showAnswers: true })}
+    ${followups.length ? `<div class="pq"><b>What I asked the coach:</b>${followups.map(ex => `<div style="margin-top:6px"><i>${escText(ex.q)}</i><br>${escText(ex.a).slice(0, 900)}</div>`).join('')}</div>` : ''}
+    <div class="pq"><b>My questions / notes:</b><div class="lines">${'<div></div>'.repeat(8)}</div></div></div>`);
+}
+
+document.addEventListener('click', (e) => {
+  const p = e.target.closest('[data-print]');
+  if (p) { printDrill(p.dataset.print); return; }
+  const pq = e.target.closest('[data-print-q]');
+  if (pq) printSingleQuestion(pq.dataset.printQ);
+});
+
 function renderAll() {
   renderScopeHeader();
   renderUnitTrack();
@@ -2085,6 +2421,7 @@ async function sliceToWav(audioBuffer, startSec, endSec) {
 
 const TRANSCRIBE_CONCURRENCY = 3;   // slices in flight at once
 const TAIL_GAP_SECONDS = 45;        // a slice ending this early gets its tail transcribed again
+const LONG_SILENCE_SECONDS = 60;    // "[no speech]" longer than this is double-checked
 
 // The model stamps times from 0:00 within each segment; the class time is added here, in code
 function shiftTimestamps(text, offsetSec, segLen) {
@@ -2096,6 +2433,38 @@ function shiftTimestamps(text, offsetSec, segLen) {
     return `[${fmtClock(offsetSec + rel)}]`;
   });
   return { text: out, lastRel };
+}
+
+function parseClock(str) {
+  const p = String(str).split(':').map(Number);
+  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+}
+
+// Keep one timestamp at the start of each line; drop the per-word stamps some replies contain
+function tidyStamps(text) {
+  return String(text).split('\n').map(line => {
+    const m = line.match(/^(\s*\[\d{1,2}:\d{2}(?::\d{2})?\])(.*)$/);
+    const head = m ? m[1] : '';
+    const rest = (m ? m[2] : line).replace(/\s*\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/g, ' ').replace(/\s{2,}/g, ' ');
+    return (head + rest).trimEnd();
+  }).join('\n');
+}
+
+// Long "[no speech]" stretches inside a slice: [{from, to}] in class seconds
+function findLongSilences(text, sliceEnd, minSec) {
+  const lines = String(text).split('\n');
+  const stamped = [];
+  lines.forEach((line, idx) => {
+    const m = line.match(/^\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(.*)$/);
+    if (m) stamped.push({ idx, sec: parseClock(m[1]), body: m[2].trim() });
+  });
+  const spans = [];
+  stamped.forEach((st, i) => {
+    if (!/^\[no speech\]$/i.test(st.body)) return;
+    const to = i + 1 < stamped.length ? stamped[i + 1].sec : sliceEnd;
+    if (to - st.sec >= minSec) spans.push({ from: st.sec, to, lineIdx: st.idx });
+  });
+  return spans;
 }
 
 async function transcribeSegment(audioBuffer, start, end, key, model) {
@@ -2158,6 +2527,19 @@ async function transcribeAudioSource(blob, label, key, onProgress) {
       if (newCovered <= coveredAbs + 5) break;
       coveredAbs = newCovered;
     }
+
+    // A long "[no speech]" may be skipped speech: transcribe that stretch alone once (up to 2 per slice)
+    const silences = findLongSilences(body, end, LONG_SILENCE_SECONDS).slice(0, 2);
+    if (silences.length) {
+      const lines = body.split('\n');
+      for (const sp of silences) {
+        const re = await transcribeSegment(audioBuffer, sp.from, sp.to, key, model);
+        const found = !re.failed && re.text.trim() && !/^\[no speech\]$/i.test(re.text.trim().replace(/^\[[\d:]+\]\s*/, ''));
+        if (found) lines[sp.lineIdx] = re.text.trim();
+      }
+      body = lines.join('\n');
+    }
+    body = tidyStamps(body);
 
     const gap = end - coveredAbs > TAIL_GAP_SECONDS ? { from: coveredAbs, to: end } : null;
     results[i] = {
@@ -2247,7 +2629,7 @@ REFERENCE DATE (the day of this class): ${dateIso}. Resolve relative dates such 
 The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on. Sources: ${ids}.
 
 1. INVENTORY FIRST: fill "sections_found" before anything else. List every distinct part, section, or topic that appears in ANY source, with the IDs of the sources where it appears. Keep separate parts separate, even when two sources are by the same author or on a similar theme.
-2. CONCEPTS: write at least one core concept for EVERY entry in sections_found, and set "section" to that entry's exact title. Every source (${sourceList.map(x => x.id).join(', ')}) must be the source of at least one core concept. Never drop material because only one source mentions it.
+2. CONCEPTS: write 2 to 5 core concepts for EVERY entry in sections_found (more when a source covers it in depth, at least 1 for a brief mention), and set "section" to that entry's exact title. A long source with many points needs several concepts, not one summary line. Every source (${sourceList.map(x => x.id).join(', ')}) must be the source of at least one core concept. Never drop material because only one source mentions it.
 3. SOURCE IDS: every concept, vocab term, cue, and deadline carries "source", the ID of the source it came from (for example "S2").
 4. ${analogyRule} Put an analogy in a concept's "analogy" field only when it helps; otherwise null. Most concepts should have no analogy.
 5. TEACHER CUES: only explicit emphasis by the teacher or speaker, such as "this will be on the test", "remember this", or "know this for Friday". Restating content is not a cue. Return [] if there are none. For audio cues, copy the [mm:ss] timestamp from the transcript.
@@ -2361,10 +2743,14 @@ function normalizeStudy(parsed, sourceList) {
 
 // Per-file coverage: each attached item must be the source of at least one core concept
 function computeCoverage(study, sourceList, extra = {}) {
-  const files = sourceList.map(x => ({
-    id: x.id, kind: x.kind, label: x.label,
-    used: study.concepts.some(c => c.sourceId === x.id)
-  }));
+  const same = (a, b) => { a = a.toLowerCase(); b = b.toLowerCase(); return a === b || a.includes(b) || b.includes(a); };
+  const files = sourceList.map(x => {
+    const used = study.concepts.some(c => c.sourceId === x.id);
+    // Not cited directly, but listed in a section that has concepts (e.g. a photo of what was also read aloud)
+    const covered = !used && study.sections.some(sec => sec.sources.includes(x.id) &&
+      study.concepts.some(c => c.section && same(c.section, sec.title)));
+    return { id: x.id, kind: x.kind, label: x.label, used, covered };
+  });
   const tagged = [...new Set([...study.concepts, ...study.vocab, ...study.cues, ...study.quiz].map(i => i.source).filter(Boolean))];
   return {
     files,
@@ -2374,6 +2760,18 @@ function computeCoverage(study, sourceList, extra = {}) {
     failedSlices: extra.failedSlices || 0,
     gaps: extra.gaps || 0
   };
+}
+
+// Checks a quiz evidence phrase against the source text the app has (transcripts, notes).
+// Loose on purpose: Bible quotes and paraphrases differ in wording.
+function evidenceStatusFor(evidence, sourceText) {
+  if (!evidence || !sourceText) return 'unchecked';
+  const words = s => String(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+  const ev = words(evidence);
+  if (ev.length < 2) return 'unchecked';
+  const bag = new Set(words(sourceText));
+  const hit = ev.filter(w => bag.has(w)).length / ev.length;
+  return hit >= 0.6 ? 'ok' : 'unverified';
 }
 
 // Drops questions whose wrong options wander off-topic (hobby words not found anywhere in the material)
@@ -2387,7 +2785,7 @@ function isOffTopicQuestion(q, corpus) {
 }
 
 async function generatePracticeQuiz(ctx) {
-  const { parts, study, sourceList, className, readingLevel, key, model, corpus, onStatus } = ctx;
+  const { parts, study, sourceList, className, readingLevel, key, model, corpus, onStatus, sourceTexts } = ctx;
   const target = Math.min(12, Math.max(8, study.sections.length * 2));
   const system = 'You write fair, accurate practice questions for high school students. Questions test the material, not trivia about the student.';
   const accepted = [];
@@ -2408,8 +2806,10 @@ async function generatePracticeQuiz(ctx) {
       if (seen.has(sig)) return;
       if (isOffTopicQuestion(q, corpus)) { dropped++; return; }
       seen.add(sig);
+      const srcRef = resolveSource(raw.source, sourceList);
+      const evidence = strOf(raw.evidence);
       accepted.push({ ...q, section: strOf(raw.section), kind: strOf(raw.kind) || 'recall',
-        evidence: strOf(raw.evidence), ...resolveSource(raw.source, sourceList) });
+        evidence, evidenceStatus: evidenceStatusFor(evidence, (sourceTexts || {})[srcRef.sourceId]), ...srcRef });
     });
     if (!extraVocab.length) {
       extraVocab = arrOf(parsed.extra_vocab).filter(v => v && strOf(v.term) && strOf(v.definition))
@@ -2536,6 +2936,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     const parts = [];
     const sourceList = [];
     const addSource = (kind, label) => { const id = `S${sourceList.length + 1}`; sourceList.push({ id, kind, label }); return id; };
+    const sourceTexts = {}; // text the app can check evidence against
     let transcriptAll = '';
     let failedSlices = 0;
     let gapCount = 0;
@@ -2564,7 +2965,9 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       gapCount += r.gaps;
       totalAudioSec += r.durationSec;
       transcriptAll += (transcriptAll ? '\n\n' : '') + `### ${src.label}\n${r.text}`;
-      parts.push({ text: `[${addSource('audio', src.label)} · audio: transcript of ${src.label}]\n${r.text}` });
+      const audioId = addSource('audio', src.label);
+      sourceTexts[audioId] = r.text;
+      parts.push({ text: `[${audioId} · audio: transcript of ${src.label}]\n${r.text}` });
     }
 
     // 2. PDFs and photos
@@ -2575,7 +2978,11 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     });
 
     // 3. Typed or pasted notes
-    if (hasNotes) parts.push({ text: `[${addSource('notes', 'Typed notes')} · notes: Typed notes]\n${pastedNotes}` });
+    if (hasNotes) {
+      const notesId = addSource('notes', 'Typed notes');
+      sourceTexts[notesId] = pastedNotes;
+      parts.push({ text: `[${notesId} · notes: Typed notes]\n${pastedNotes}` });
+    }
 
     // Size guard: base64 and text both count toward the request limit
     const approxBytes = parts.reduce((sum, p) => sum + (p.inlineData ? p.inlineData.data.length : (p.text || '').length), 0);
@@ -2605,7 +3012,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     let quizResult = { quiz: [], extraVocab: [], dropped: 0, target: 0 };
     try {
       quizResult = await generatePracticeQuiz({ parts, study, sourceList, className: currentClass.name,
-        readingLevel, key, model, corpus, onStatus: setStatus });
+        readingLevel, key, model, corpus, onStatus: setStatus, sourceTexts });
     } catch (qErr) {
       console.warn('Quiz generation failed', qErr);
     }
@@ -2719,20 +3126,22 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     navigateTo('guide');
 
     const notes = [];
-    const unusedFiles = study.coverage.files.filter(f => !f.used).length;
+    const unusedFiles = study.coverage.files.filter(f => !f.used && !f.covered).length;
     if (unusedFiles) notes.push(`${unusedFiles} source(s) not used`);
     if (study.coverage.missingSections.length) notes.push(`${study.coverage.missingSections.length} section(s) missing notes`);
     if (failedSlices) notes.push(`${failedSlices} audio slice(s) failed`);
     if (gapCount) notes.push(`${gapCount} possible audio gap(s)`);
     notes.push(`${study.quiz.length} practice question(s)`);
     if (quizResult.dropped) notes.push(`${quizResult.dropped} weak question(s) removed`);
+    const unverified = study.quiz.filter(q => q.evidenceStatus === 'unverified').length;
+    if (unverified) notes.push(`${unverified} quote(s) not found in the material, hidden`);
     if (newDeadlines) notes.push(`${newDeadlines} deadline(s) added`);
     showToast(notes.length ? `Study guide ready · ${notes.join(' · ')}` : '🎉 Study guide and practice drill ready!');
   } catch (err) {
     alert('Processing error: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '🚀 Generate Study Guide & Practice Drill';
+    updateGenerateLabel();
   }
 });
  
@@ -2758,14 +3167,16 @@ function saveExchangesForTarget(targetKey, list) {
   localStorage.setItem(`ss_dirty_chat_${targetKey}`, 'true');
 }
  
-function recordExchange(targetKey, qText, aText, isMiss = false, lectureIds = null) {
+function recordExchange(targetKey, qText, aText, isMiss = false, lectureIds = null, meta = null) {
+  if (!targetKey) return;
   const list = loadExchangesForTarget(targetKey);
   list.push({
     q: qText,
     a: aText,
     ts: new Date().toISOString(),
     isMiss: isMiss,
-    lectureIds: lectureIds || getSelectedLectures().map(l => l.id)
+    lectureIds: lectureIds || getSelectedLectures().map(l => l.id),
+    ...(meta || {})
   });
   saveExchangesForTarget(targetKey, list);
 }
@@ -2829,7 +3240,7 @@ function loadSubjectChat() {
   `;
  
   exchanges.forEach(ex => {
-    if (!ex.isMiss) {
+    if (!ex.isMiss && ex.context !== 'drill') {
       feed.innerHTML += `<div class="msg me">${escText(ex.q)}</div>`;
       feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}</div>`;
     }
@@ -2917,6 +3328,7 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
  
   let lastError = null;
   for (const curModel of chain) {
+    if (opts.signal && opts.signal.aborted) throw new Error('Timed out');
     let withThinking = true;
     for (let attempt = 0; attempt < 3; attempt++) {
       let res, data;
@@ -2924,10 +3336,12 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
         res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(curModel)}:generateContent`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-          body: JSON.stringify(buildBody(withThinking))
+          body: JSON.stringify(buildBody(withThinking)),
+          signal: opts.signal
         });
         data = await res.json();
       } catch (netErr) {
+        if (opts.signal && opts.signal.aborted) throw new Error('Timed out');
         lastError = 'Network: ' + netErr.message;
         break;
       }
@@ -2971,7 +3385,7 @@ function recentMissCount(lectures) {
   return n;
 }
 
-function buildCoachSystem(lectures) {
+function buildCoachSystem(lectures, opts = {}) {
   const name = getStudentName();
   const parts = [
     getConfig('prompt.master', activeClassCode) || DEFAULT_SYSTEM_PROMPT,
@@ -2982,19 +3396,39 @@ function buildCoachSystem(lectures) {
   if (recentMissCount(lectures) >= 3) {
     parts.push('He has missed several questions on this material recently. Slow down, explain step by step, and check understanding before moving on.');
   }
-  parts.push(buildChatGrounding(lectures));
+  parts.push(buildChatGrounding(lectures, opts));
   return parts.join('\n\n');
 }
 
 // The coach answers from the lesson itself: concepts, vocab, and the class transcript when one exists
 const CHAT_TRANSCRIPT_BUDGET = 60000; // characters across all selected lectures
-function buildChatGrounding(lectures) {
+const CHAT_TIMEOUT_MS = 45000;
+
+// Broad overview questions are answered from concepts and vocabulary only, which is much faster
+function isBroadQuestion(text) {
+  return /what'?s on the (test|quiz|exam)|summar|overview|main (idea|points|topics)|review (it|everything|all)|study guide|key points/i.test(text || '');
+}
+
+// Shows "Coach is thinking… 0:12" so a slow answer never looks frozen; returns a stop function
+function startThinkingTimer(el) {
+  const t0 = Date.now();
+  const tick = () => {
+    const sec = Math.floor((Date.now() - t0) / 1000);
+    el.textContent = `Coach is thinking… ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  };
+  tick();
+  const id = setInterval(tick, 1000);
+  return () => clearInterval(id);
+}
+
+function buildChatGrounding(lectures, opts = {}) {
+  const includeTranscript = opts.includeTranscript !== false;
   const perLecture = lectures.length ? Math.floor(CHAT_TRANSCRIPT_BUDGET / lectures.length) : 0;
   const blocks = lectures.map(l => {
     const concepts = (l.concepts || [{ bold_stem: l.bold_stem, text: l.c }])
       .map(c => `- ${c.section ? '[' + c.section + '] ' : ''}${c.bold_stem}: ${c.text}`).join('\n');
     const vocab = (l.vocab || []).map(v => `- ${v.term}: ${v.definition}`).join('\n');
-    let tr = l.transcript || '';
+    let tr = includeTranscript ? (l.transcript || '') : '';
     if (tr.length > perLecture) tr = tr.slice(0, perLecture) + '\n[transcript shortened]';
     return `### ${l.t} (${l.d || ''} ${l.n || ''})\nBig idea: ${l.c}\nConcepts:\n${concepts}` +
       (vocab ? `\nVocabulary:\n${vocab}` : '') +
@@ -3031,10 +3465,11 @@ async function sendChatMessage(query, isRetry = false) {
   }
  
   const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
-  const systemContext = buildCoachSystem(getSelectedLectures());
+  const broad = isBroadQuestion(text);
+  const systemContext = buildCoachSystem(getSelectedLectures(), { includeTranscript: !broad });
  
   const targetKey = getActiveChatTargetKey();
-  const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss);
+  const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss && ex.context !== 'drill');
  
   const contentsPayload = [];
   exchanges.slice(-4).forEach(h => {
@@ -3046,12 +3481,16 @@ async function sendChatMessage(query, isRetry = false) {
   const thinkingEl = document.createElement('div');
   thinkingEl.className = 'msg ai';
   thinkingEl.id = 'thinkingMsg';
-  thinkingEl.textContent = 'Coach is preparing explanation…';
   feed.appendChild(thinkingEl);
   feed.scrollTop = feed.scrollHeight;
+  const stopTimer = startThinkingTimer(thinkingEl);
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), CHAT_TIMEOUT_MS);
+  const t0 = Date.now();
  
   try {
-    const result = await queryGeminiWaterfall(contentsPayload, key, model, { system: systemContext });
+    const result = await queryGeminiWaterfall(contentsPayload, key, model, { system: systemContext, signal: ctrl.signal });
+    stopTimer();
     thinkingEl.remove();
  
     const formattedHtml = applyBionic(mdToHtml(result.text));
@@ -3061,12 +3500,16 @@ async function sendChatMessage(query, isRetry = false) {
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
  
-    recordExchange(targetKey, text, result.text, false);
+    // Which model answered and how long it took, for diagnosing slow answers from SharePoint
+    recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
   } catch (err) {
+    stopTimer();
     thinkingEl.remove();
     const errEl = document.createElement('div');
     errEl.className = 'msg ai err';
-    errEl.innerHTML = `Connection paused: ${escapeHtml(err.message)}<br>`;
+    errEl.innerHTML = ctrl.signal.aborted
+      ? 'That took longer than 45 seconds, so I stopped waiting.<br>'
+      : `Connection paused: ${escapeHtml(err.message)}<br>`;
     
     const retryBtn = document.createElement('button');
     retryBtn.className = 'btn alt sm';
@@ -3078,6 +3521,7 @@ async function sendChatMessage(query, isRetry = false) {
     feed.appendChild(errEl);
     feed.scrollTop = feed.scrollHeight;
   } finally {
+    clearTimeout(timeout);
     setChatBusy(false);
   }
 }
@@ -3214,11 +3658,13 @@ Return strictly valid, raw JSON array (no markdown backticks):
           const fb = document.getElementById('weakFeedback');
           if (isCorrect) {
             drillScore++;
-            fb.innerHTML = '🎉 Nailed it! Weak spot mastered.';
+            fb.innerHTML = '✔ Correct.';
           } else {
-            fb.innerHTML = `Review note: Correct answer is <b>${escText(q.options[q.correct])}</b>`;
+            fb.innerHTML = `Not quite. The answer is <b>${escText(q.options[q.correct])}</b>.`;
           }
-          setTimeout(() => { drillIdx++; renderWeakDrillCard(); }, 2200);
+          if (q.feedback) fb.innerHTML += `<div style="font-weight:400;margin-top:6px">${escText(q.feedback)}</div>`;
+          fb.insertAdjacentHTML('beforeend', `<div class="quiz-nav" style="justify-content:flex-end"><button class="btn" id="weakNextBtn">${drillIdx === questions.length - 1 ? 'See results →' : 'Next →'}</button></div>`);
+          document.getElementById('weakNextBtn').onclick = () => { drillIdx++; renderWeakDrillCard(); };
         };
       });
     }
@@ -4132,7 +4578,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
         CLASSES = loaded;
         localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
         renderClassRibbon();
-        switchClass(CLASSES[0].code);
+        doSwitchClass(CLASSES[0].code);
         showToast(`Loaded ${CLASSES.length} classes from SharePoint!`);
       }
     }
