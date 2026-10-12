@@ -95,6 +95,10 @@ main { padding: 4px 18px 140px; flex: 1; }
 .say:hover { border-color: var(--c); }
 .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 10px; background: var(--sel); color: var(--ink); margin-left: 6px; }
 .src-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 2px 8px; background: var(--bg); border: 1px solid var(--line); color: var(--mut); margin-bottom: 6px; }
+.coverage-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--sel); border-radius: 12px; font-size: 12.5px; font-weight: 600; }
+.coverage-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
+.coverage-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+
 .demo-banner { background: #FEF3C7; border: 1.5px solid #F59E0B; color: #B45309; border-radius: 12px; padding: 8px 14px; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .btn { border: 0; background: var(--c); color: #fff; border-radius: 14px; padding: 12px 20px; font-weight: 600; cursor: pointer; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn.alt { background: var(--card); border: 2px solid var(--line); color: var(--ink); }
@@ -184,7 +188,7 @@ nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color:
 nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
 nav.dock button.on { color: var(--c); font-weight: 700; }
 
-/* Settings, Unit & Schedule Dialog Modals */
+/* Settings & Dialog Modals */
 dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
 dialog::backdrop { background: rgba(30,30,30,.55); }
 .dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
@@ -269,7 +273,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
             <small style="color:var(--mut);font-size:11.5px">Select 1 or more files (PDF, Whiteboard Photo, TXT)</small>
           </div>
           <div id="stagedFilesContainer" class="staged-chips-box"></div>
-          <textarea id="mainPastedNotes" rows="2" placeholder="Or paste homework instructions or syllabus notes here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
+          <textarea id="mainPastedNotes" rows="2" placeholder="Or paste student notes, whiteboard transcripts, or homework details here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
         </div>
       </div>
 
@@ -606,7 +610,6 @@ let quizRetryIds = null;
 let currentChatHistory = [];
 let cachedDeadlines = [];
 
-// MULTI-FILE STAGING QUEUE (PDFs, Images, Notes)
 let stagedFiles = [];
 
 /* =====================================================================
@@ -820,7 +823,6 @@ function isRecording() {
   return !!(mediaRecorder && mediaRecorder.state === 'recording');
 }
 
-// Convert all chunks for a session into a base64 audio string
 async function getSessionAudioBase64(sessionId) {
   const allChunks = await idbGetAll('chunks');
   const sessionChunks = allChunks.filter(c => c.sessionId === sessionId).sort((a,b) => a.seq - b.seq);
@@ -938,6 +940,18 @@ function speakText(rawTextOrElement) {
   });
 }
 
+// Client-side Option Shuffler (Eliminates the correct:0 bias)
+function shuffleOptions(questionObj) {
+  const correctText = questionObj.options[questionObj.correct];
+  const shuffled = questionObj.options.slice().sort(() => Math.random() - 0.5);
+  return {
+    q: questionObj.q,
+    options: shuffled,
+    correct: shuffled.indexOf(correctText),
+    feedback: questionObj.feedback || 'Correct response.'
+  };
+}
+
 /* =====================================================================
    SECTION 5 - OPTION A: 2-TIER CLASS CARDS & UI RENDER ENGINE
    ===================================================================== */
@@ -957,7 +971,6 @@ function updateRecScheduleHint() {
   document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
 
-// 2-Tier Integrated Card-Pill with smaller informational subtext
 function renderClassRibbon() {
   const rib = document.getElementById('classRibbon');
   rib.innerHTML = '';
@@ -1015,7 +1028,7 @@ function switchClass(code) {
   updateRecScheduleHint();
   renderAll();
   loadSubjectChat();
-  renderStagedFiles();
+  clearStagedFiles();
   showToast(`Switched to ${c.name}`);
 }
 
@@ -1138,8 +1151,8 @@ function getSourceBadgeHtml(src) {
     'Audio': '🎙️ Class Audio',
     'Handout': '📄 Canvas Handout',
     'Photo': '📷 Whiteboard Photo',
-    'Mixed': '⚡ Audio &amp; Handout Fused',
-    'Notes': '📝 Notes'
+    'Mixed': '⚡ Multi-Source Fused',
+    'Notes': '✍️ Student Notes'
   };
   return `<span class="src-badge">${map[src] || '📝 Notes'}</span>`;
 }
@@ -1156,6 +1169,16 @@ function renderStudyGuide() {
   let html = '';
   selected.forEach((l, idx) => {
     const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
+
+    // Render "What I Read" Source Coverage verification bar if available
+    if (l.sourcesUsed && l.sourcesUsed.length) {
+      html += `<div class="coverage-bar"><span>📥 Ingested Sources:</span>`;
+      const sMap = { 'audio': '🎙️ Audio ✔', 'photo': '📷 Photo ✔', 'pdf': '📄 PDF ✔', 'notes': '✍️ Notes ✔' };
+      l.sourcesUsed.forEach(src => {
+        html += `<span class="coverage-chip">${sMap[src.toLowerCase()] || escText(src) + ' ✔'}</span>`;
+      });
+      html += `</div>`;
+    }
 
     html += `
       <div class="card">
@@ -1175,6 +1198,18 @@ function renderStudyGuide() {
         <p id="analogyText_${l.id}">${applyBionic(l.analogy)}</p>
       </div>
     `;
+
+    // Render Vocab Terms Deck if available
+    if (l.vocab && l.vocab.length) {
+      html += `
+        <div class="card">
+          <h3>📖 Key Vocabulary &amp; Terms <button class="say btn-speak" data-target="vocabList_${l.id}">🔊 Read</button></h3>
+          <ul id="vocabList_${l.id}">
+            ${l.vocab.map(v => `<li><strong>${applyBionic(v.term)}:</strong> ${applyBionic(v.definition)}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }
 
     if (l.cue) {
       html += `
@@ -1225,7 +1260,7 @@ function getQuizSet() {
         q: l.q[0],
         options: l.q[1],
         correct: l.q[2],
-        feedback: 'Correct biological term.',
+        feedback: 'Correct term.',
         ts: l.ts,
         t: l.t,
         i: l.i
@@ -1406,11 +1441,12 @@ function handleStagedFile(file) {
     };
     reader.readAsDataURL(file);
   } else {
+    // Plain text / notepad
     const reader = new FileReader();
     reader.onload = (ev) => {
       const cur = document.getElementById('mainPastedNotes').value;
-      document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[File: ${file.name}]\n` + ev.target.result;
-      showToast(`Appended text notes: ${file.name}`);
+      document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[Notes: ${file.name}]\n` + ev.target.result;
+      showToast(`Loaded notes: ${file.name}`);
     };
     reader.readAsText(file);
   }
@@ -1446,7 +1482,7 @@ function clearStagedFiles() {
 }
 
 /* =====================================================================
-   SECTION 7 - REAL AI INTAKE ENGINE (WIRED AUDIO, FILES & NOTES)
+   SECTION 7 - REAL AI INTAKE ENGINE (LABELED SOURCES & STRUCTURED JSON)
    ===================================================================== */
 document.getElementById('generateIntakeBtn').addEventListener('click', async () => {
   const pastedNotes = document.getElementById('mainPastedNotes').value.trim();
@@ -1470,7 +1506,6 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing materials with Gemini…';
 
-  // Calculate dynamic source type badge
   const sourceTypes = [];
   if (hasAudio) sourceTypes.push('Audio');
   if (stagedFiles.some(f => f.type === 'pdf')) sourceTypes.push('Handout');
@@ -1489,31 +1524,40 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
   const dateIsoString = classDateObj.toISOString().slice(0, 10);
 
-  const prompt = `You are an expert high school study coach creating study materials for a 9th-grade student in ${currentClass.name}.
-Analyze all attached classroom audio recordings, handouts, slides, whiteboard photos, or teacher notes thoroughly.
+  // RIGOROUS INSTRUCTION PROMPT - PREVENTS 2-ITEM DROP OFF & INVENTED CUES
+  const prompt = `You are an expert high school study coach creating study materials for a student in ${currentClass.name}.
+Analyze ALL attached labeled sources thoroughly.
 
 TODAY'S REFERENCE DATE IS: ${dateIsoString}.
-If materials mention relative deadlines (e.g. "quiz next Friday" or "due tomorrow"), calculate and output the exact ISO date string (YYYY-MM-DD).
+CRITICAL EXTRACTION RULES:
+1. COVERAGE: You must cover EVERY topic and section present across all materials. Never drop a section just because it appears in only one source.
+2. ANALOGIES: Prioritize the material's own analogies first if present (e.g. $100 bill vs $1 bills). Otherwise, formulate relatable comparisons from aviation, mechanics, WWII strategy, or gaming. An analogy must never contradict biological or mathematical facts.
+3. TEACHER CUES: Return cues ONLY for explicit teacher emphasis ("remember this for the test") or deadlines. If no explicit cues were given, return []. Do NOT invent cues.
+4. VOCABULARY: Extract 4-8 key terms with concise, scannable definitions into the vocab array.
+5. PRACTICE QUIZ: Generate 3-6 distinct active recall questions covering different concepts. Distractors must be realistic, plausible academic terms from ${currentClass.name}. Do NOT use joke answers.
+6. SOURCE TRACKING: Report all source types that were actually used in "sources_used" array: ["audio", "photo", "pdf", "notes"].
 
 Return your response strictly as valid, raw JSON (no conversational prose, no markdown backticks):
 {
-  "topic_label": "Concise Overall Topic (e.g. Photosynthesis & Cellular Respiration)",
+  "topic_label": "Concise Overall Topic Name",
   "topic_icon": "Single appropriate emoji",
   "source_type": "${computedSourceType}",
-  "big_idea": "Core central takeaway in 1-2 punchy sentences.",
+  "big_idea": "Core central takeaway across all sections in 1-2 punchy sentences.",
   "core_concepts": [
     {
-      "bold_stem": "Key anchor phrase for Concept 1",
-      "text": "Clear explanation adhering to Grade ${readingLevel} reading level."
-    },
-    {
-      "bold_stem": "Key anchor phrase for Concept 2",
+      "bold_stem": "Key anchor phrase for Section",
       "text": "Clear explanation adhering to Grade ${readingLevel} reading level."
     }
   ],
-  "analogy": "Relatable comparison using aviation, mechanics, WWII strategy, soccer tactics, or gaming physics.",
-  "teacher_cue": "Any test hint, deadline, or 'remember this' cue found in materials.",
-  "cue_approx_time": "Class discussion / Handout Section",
+  "vocab": [
+    {
+      "term": "Term Name",
+      "definition": "Clear concise definition."
+    }
+  ],
+  "analogy": "Relatable comparison grounding the core mechanism.",
+  "teacher_cue": "Explicit teacher test tip or null if none was stated.",
+  "cue_approx_time": "Section or timestamp",
   "deadline_item": {
     "title": "Assignment or exam title if found, or null",
     "type": "Test or Quiz or Homework",
@@ -1521,29 +1565,26 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
   },
   "quiz_questions": [
     {
-      "q": "Active recall check question covering Concept 1",
-      "options": ["Option A", "Option B", "Option C"],
+      "q": "Active recall check question",
+      "options": ["Correct Option", "Plausible Distractor B", "Plausible Distractor C"],
       "correct": 0,
-      "feedback": "Encouraging explanation. Distractors must be realistic, plausible academic terms from ${currentClass.name}. Do NOT use joke answers or analogy words."
-    },
-    {
-      "q": "Active recall check question covering Concept 2",
-      "options": ["Option A", "Option B", "Option C"],
-      "correct": 0,
-      "feedback": "Encouraging explanation. Distractors must be realistic academic terms."
+      "feedback": "Encouraging explanation."
     }
-  ]
+  ],
+  "sources_used": ["audio", "photo", "pdf", "notes"]
 }`;
 
   try {
     const parts = [];
+    let sourceCounter = 1;
 
-    // 1. INGEST RECORDED AUDIO DIRECTLY IF PRESENT
+    // 1. INGEST RECORDED AUDIO WITH LABEL
     let sessionDuration = null;
     if (hasAudio) {
       btn.textContent = '⏳ Decoding recorded audio…';
       const audioBase64 = await getSessionAudioBase64(activeRecordingSession.id);
       if (audioBase64) {
+        parts.push({ text: `[SOURCE ${sourceCounter++}: Classroom Audio Recording]` });
         parts.push({
           inlineData: { mimeType: 'audio/webm', data: audioBase64 }
         });
@@ -1551,19 +1592,20 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       }
     }
 
-    // 2. INGEST ALL STAGED FILES (PDFs & PHOTOS)
+    // 2. INGEST ALL STAGED FILES WITH EXPLICIT LABELS
     stagedFiles.forEach(f => {
+      parts.push({ text: `[SOURCE ${sourceCounter++}: ${f.type === 'pdf' ? 'PDF Document' : 'Photo / Whiteboard'}: ${f.name}]` });
       parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
     });
 
-    // 3. INGEST PASTED NOTES
+    // 3. INGEST PASTED NOTES WITH EXPLICIT LABEL
     if (hasNotes) {
-      parts.push({ text: `[TEACHER CANVAS / HANDOUT NOTES]\n${pastedNotes}` });
+      parts.push({ text: `[SOURCE ${sourceCounter++}: Student's Notes & Transcript]\n${pastedNotes}` });
     }
 
     parts.push({ text: prompt });
 
-    btn.textContent = '⏳ Formulating study guide with Gemini…';
+    btn.textContent = '⏳ Formulating complete study guide…';
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const systemContext = `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}`;
 
@@ -1588,9 +1630,9 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       ? parsed.core_concepts
       : [{ bold_stem: parsed.topic_label, text: parsed.big_idea }];
 
-    const formattedQuiz = parsed.quiz_questions && parsed.quiz_questions.length
-      ? parsed.quiz_questions
-      : [{ q: 'Key review check', options: ['Option A', 'Option B'], correct: 0, feedback: 'Correct.' }];
+    // CLIENT-SIDE SHUFFLE TO ELIMINATE correct:0 BIAS
+    const rawQuiz = parsed.quiz_questions && parsed.quiz_questions.length ? parsed.quiz_questions : [];
+    const formattedQuiz = rawQuiz.map(qObj => shuffleOptions(qObj));
 
     const newLecture = {
       id: newId,
@@ -1604,13 +1646,15 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       c: parsed.big_idea || '',
       bold_stem: formattedConcepts[0].bold_stem,
       concepts: formattedConcepts,
+      vocab: parsed.vocab || [],
+      sourcesUsed: parsed.sources_used || [],
       analogy: parsed.analogy || '',
       cue: parsed.teacher_cue || null,
       ts: parsed.cue_approx_time || 'Class note',
       recordedDate: dateIso,
       durationSeconds: sessionDuration,
       quizItems: formattedQuiz,
-      q: [formattedQuiz[0].q, formattedQuiz[0].options, formattedQuiz[0].correct]
+      q: formattedQuiz.length ? [formattedQuiz[0].q, formattedQuiz[0].options, formattedQuiz[0].correct] : ['Review question', ['A', 'B'], 0]
     };
 
     ds.lectures.push(newLecture);
@@ -1620,13 +1664,17 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       source_type: computedSourceType,
       big_idea: newLecture.c,
       core_concepts: formattedConcepts,
+      vocab: newLecture.vocab,
       analogy: newLecture.analogy,
-      teacher_cues: newLecture.cue ? [{ cue: newLecture.cue, ts: newLecture.ts }] : []
+      teacher_cues: newLecture.cue ? [{ cue: newLecture.cue, ts: newLecture.ts }] : [],
+      sources_used: newLecture.sourcesUsed
     };
 
     const practicePayloadClean = {
       quiz: formattedQuiz,
-      flashcards: formattedConcepts.map(c => ({ front: c.bold_stem, back: c.text }))
+      flashcards: (newLecture.vocab && newLecture.vocab.length)
+        ? newLecture.vocab.map(v => ({ front: v.term, back: v.definition }))
+        : formattedConcepts.map(c => ({ front: c.bold_stem, back: c.text }))
     };
 
     await idbPut('lectures', {
@@ -1676,7 +1724,7 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
 
     renderAll();
     navigateTo('guide');
-    showToast('🎉 Multi-source Study Guide & Drill generated!');
+    showToast('🎉 Multi-section Study Guide & Shuffled Quiz generated!');
   } catch (err) {
     alert('Processing error: ' + err.message);
   } finally {
@@ -2016,7 +2064,7 @@ Return strictly valid, raw JSON array (no markdown backticks):
 [
   {
     "q": "Recovery question testing his specific weak spot",
-    "options": ["Option A", "Option B", "Option C"],
+    "options": ["Correct Option", "Plausible Distractor B", "Plausible Distractor C"],
     "correct": 0,
     "feedback": "Encouraging explanation"
   }
@@ -2026,7 +2074,8 @@ Return strictly valid, raw JSON array (no markdown backticks):
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: prompt }] }], key, model, { temperature: 0.2 });
     const cleanJson = res.text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const questions = JSON.parse(cleanJson);
+    const rawQuestions = JSON.parse(cleanJson);
+    const questions = rawQuestions.map(qObj => shuffleOptions(qObj));
 
     const container = document.getElementById('quizContent');
     let drillIdx = 0, drillScore = 0;
@@ -2484,7 +2533,6 @@ document.getElementById('saveEditLectBtn').addEventListener('click', async () =>
   showToast('Lesson updated! Changes will sync to SharePoint.');
 });
 
-// Student Quick-Edit Schedule
 let editingClassCode = null;
 
 function openStudentScheduleModal(code) {
@@ -2597,7 +2645,6 @@ function openParentVault() {
 
 document.getElementById('closeCfgBtn').addEventListener('click', () => document.getElementById('cfgDlg').close());
 
-// Start New Unit Modal
 document.getElementById('startNewUnitBtn').addEventListener('click', () => {
   const ds = getActiveDataset();
   const currentNum = parseInt((ds.unitKey || 'U1').replace(/\D/g, ''), 10) || 1;
@@ -2623,7 +2670,6 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
   showToast(`Started ${title}!`);
 });
 
-// Parent Vault Schedule & Term Editor (Supports Archiving Individual Classes)
 document.getElementById('openScheduleEditorBtn').addEventListener('click', () => {
   renderParentScheduleEditor();
   document.getElementById('scheduleDlg').showModal();
@@ -3000,19 +3046,15 @@ document.getElementById('recBtn').addEventListener('click', () => {
   const savedTheme = localStorage.getItem('ss_theme');
   if (savedTheme) document.documentElement.dataset.t = savedTheme;
 
-  // Set default intake date picker to Today
   document.getElementById('intakeClassDate').value = new Date().toISOString().slice(0, 10);
 
-  // Restore custom schedule from storage if previously saved
   const customClasses = localStorage.getItem('ss_classes_custom');
   if (customClasses) {
     try { CLASSES = JSON.parse(customClasses); } catch(e){}
   }
 
-  // Load real saved lectures from IndexedDB
   await loadLecturesFromDB();
 
-  // Open on the last-used class or Period 1
   activeClassCode = localStorage.getItem('ss_last_class') || CLASSES[0].code;
   const initialCls = CLASSES.find(c => c.code === activeClassCode) || CLASSES[0];
   document.documentElement.style.setProperty('--c', initialCls.color);
