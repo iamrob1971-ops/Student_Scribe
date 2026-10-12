@@ -1192,12 +1192,13 @@ function switchClass(code) {
   showToast(`Switched to ${c.name}`);
 }
  
-// Deadline status values. These must match the choices in the Student_Deadlines "Status" column.
+// Deadline status values. These must match the choices in the Student_Deadlines "Status" column:
+// Active, Upcoming = still open · Complete, Archived = finished (hidden from the radar and Prep button)
 const DL_STATUS_OPEN = 'Upcoming';
-const DL_STATUS_DONE = 'Done';
+const DL_STATUS_DONE = 'Complete';
 
 function isDeadlineDone(d) {
-  return /^(done|completed|closed)$/i.test(d.status || '');
+  return /^(complete|completed|archived|done|closed)$/i.test(String(d.status || '').trim());
 }
 
 function localDayStart(dateLike) {
