@@ -546,7 +546,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile</h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V13</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -953,8 +953,24 @@ function getDB() {
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains('deadlines')) db.createObjectStore('deadlines', { keyPath: 'deadlineId' });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // If a newer version of the app opens in another tab, let go so its upgrade is not blocked
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+          showToast('Student Study was updated in another tab. Reloading…');
+          setTimeout(() => location.reload(), 1500);
+        };
+        resolve(db);
+      };
       req.onerror = () => reject(req.error);
+      // An older copy of the app open in another tab or window holds the database: say so instead of hanging
+      req.onblocked = () => {
+        showToast('Close other Student Study tabs or windows to finish updating, then reload this one.');
+        const hint = document.getElementById('recScheduleHint');
+        if (hint) hint.textContent = '⚠️ Update waiting: close other Student Study tabs or windows, then reload.';
+      };
     });
   }
   return dbPromise;
@@ -5325,6 +5341,9 @@ function migrateLegacyMissKeys() {
     localStorage.removeItem(`ss_dirty_chat_${key}`);
   });
 }
+
+const APP_VERSION = 'V13';
+console.info('Student Study', APP_VERSION);
 
 (async function init() {
   const savedTheme = localStorage.getItem('ss_theme');
