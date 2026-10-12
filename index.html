@@ -126,6 +126,12 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tone-card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
 .tone-card.on { border-color: var(--c); box-shadow: 0 0 0 2px var(--sel); }
 .tone-card .md p { margin: 4px 0; }
+.same-day { text-align: left; background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 0 auto 14px; max-width: 720px; font-size: 14px; }
+.same-day label { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 500; cursor: pointer; }
+.same-day input { width: auto; margin: 0; }
+.same-day .srcs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.focus-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; background: var(--sel); border-radius: 10px; padding: 6px 10px; }
+.date-pill { font-size: 13px; color: var(--mut); font-weight: 600; }
 .pending-recs { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .pending-rec { display: flex; align-items: center; gap: 8px; font-size: 12.5px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 8px; text-align: left; }
 .pending-rec input { width: auto; margin: 0; }
@@ -316,6 +322,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <div class="card center" style="margin-top:16px;background:var(--card)">
         <h3 style="justify-content:center;margin-bottom:4px">⚡ Prepare Study Materials</h3>
         <p style="font-size:14px;color:var(--mut);margin:0 0 14px">Turns class notes and handouts into a high-yield study guide and practice drill.</p>
+        <div id="sameDayBanner" class="same-day" style="display:none"></div>
         <div class="chips" style="justify-content:center">
           <button class="btn" id="generateIntakeBtn">🚀 Generate Study Guide &amp; Practice Drill</button>
           <button class="btn alt" id="spSyncBtn">☁️ Sync to SharePoint</button>
@@ -922,7 +929,7 @@ let stagedFiles = [];
    SECTION 2 - INDEXEDDB STORAGE (SEPARATED SESSIONS & LECTURES)
    ===================================================================== */
 const DB_NAME = 'StudentStudy_v4';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let dbPromise = null;
  
 function getDB() {
@@ -938,6 +945,11 @@ function getDB() {
         // Index so one recording's chunks can be read without loading every recording
         if (!chunkStore.indexNames.contains('bySession')) chunkStore.createIndex('bySession', 'sessionId');
         if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
+        // PDFs and photos kept on this device with their lecture, so "Add to this lecture" can reread them
+        if (!db.objectStoreNames.contains('lectureFiles')) {
+          const lf = db.createObjectStore('lectureFiles', { keyPath: 'id' });
+          lf.createIndex('byLecture', 'lectureClientId');
+        }
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains('deadlines')) db.createObjectStore('deadlines', { keyPath: 'deadlineId' });
       };
@@ -1529,10 +1541,56 @@ async function switchClass(code) {
   return true;
 }
 
+/* Same class + same date: offer to add new material to that day's lecture (default) or make a separate part */
+let sameDayChoice = null; // a lecture clientId, or 'new'
+
+function sameDayLectures() {
+  const day = document.getElementById('intakeClassDate').value;
+  if (!day) return [];
+  return getActiveDataset().lectures.filter(l => !l.isDemo && isMyRecord(l) && l.clientId && lectureDay(l) === day);
+}
+
+async function renderSameDayBanner() {
+  const box = document.getElementById('sameDayBanner');
+  if (!box) return;
+  const list = sameDayLectures();
+  if (!list.length) { box.style.display = 'none'; box.innerHTML = ''; sameDayChoice = null; updateGenerateLabel(); return; }
+  if (sameDayChoice !== 'new' && !list.some(l => l.clientId === sameDayChoice)) sameDayChoice = list[list.length - 1].clientId;
+
+  const ds = getActiveDataset();
+  const day = document.getElementById('intakeClassDate').value;
+  const dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const rows = [];
+  for (const l of list) {
+    const saved = await idbGetByIndex('lectureFiles', 'byLecture', l.clientId).catch(() => []);
+    const files = (l.coverage && l.coverage.files) ? l.coverage.files : [];
+    const chips = files.map(f => `<span class="coverage-chip">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)}</span>`).join('')
+      || `<span class="coverage-chip">${escText(l.src || 'Notes')}</span>`;
+    const partNo = ds.lectures.indexOf(l) + 1;
+    rows.push(`<label><input type="radio" name="sameDayPick" value="${escText(l.clientId)}" ${sameDayChoice === l.clientId ? 'checked' : ''}>
+      Add to Part ${partNo} · ${escText(l.t)}</label>
+      <div class="srcs">${chips}${saved.length ? `<small style="color:var(--mut)">${saved.length} file(s) kept on this device</small>` : ''}</div>`);
+  }
+  box.innerHTML = `<b>📅 ${escText(dayLabel)} already has ${list.length === 1 ? 'a lecture' : list.length + ' lectures'}.</b>
+    ${rows.join('')}
+    <label><input type="radio" name="sameDayPick" value="new" ${sameDayChoice === 'new' ? 'checked' : ''}>
+      Make a separate part (uses only the new material)</label>`;
+  box.style.display = 'block';
+  updateGenerateLabel();
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.name === 'sameDayPick') { sameDayChoice = e.target.value; updateGenerateLabel(); }
+  if (e.target.id === 'intakeClassDate') { sameDayChoice = null; renderSameDayBanner(); }
+});
+
 function updateGenerateLabel() {
   const btn = document.getElementById('generateIntakeBtn');
   const c = CLASSES.find(x => x.code === activeClassCode);
-  if (btn && !btn.disabled) btn.textContent = `🚀 Generate for ${c ? c.name : 'this class'}`;
+  if (!btn || btn.disabled) return;
+  const adding = sameDayChoice && sameDayChoice !== 'new' && document.getElementById('sameDayBanner') &&
+    document.getElementById('sameDayBanner').style.display !== 'none';
+  btn.textContent = adding ? `➕ Add to this lecture` : `🚀 Generate for ${c ? c.name : 'this class'}`;
 }
 
 function doSwitchClass(code) {
@@ -1558,7 +1616,8 @@ function doSwitchClass(code) {
   includedSessionIds = new Set();
   renderPendingRecordings();
   updateRadarPills();
-  updateGenerateLabel();
+  sameDayChoice = null;
+  renderSameDayBanner();
   showToast(`Switched to ${c.name}`);
 }
  
@@ -1666,6 +1725,19 @@ function launchTestPrep(test) {
     : `No lectures tagged ${test.unitsCovered || 'for this test'} yet, so all parts are loaded`);
 }
 
+function lectureDay(l) {
+  if (l.recordedDate) return localDateInputValue(new Date(l.recordedDate));
+  return '';
+}
+
+function lectureDateLabel(lectures) {
+  const days = [...new Set(lectures.map(lectureDay).filter(Boolean))].sort();
+  if (!days.length) return '';
+  const fmt = (d, opts) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', opts);
+  if (days.length === 1) return `📅 ${fmt(days[0], { weekday: 'short', month: 'short', day: 'numeric' })}`;
+  return `📅 Multiple dates · ${fmt(days[0], { month: 'short', day: 'numeric' })} – ${fmt(days[days.length - 1], { month: 'short', day: 'numeric' })}`;
+}
+
 function renderScopeHeader() {
   const selected = getSelectedLectures();
   const isArena = selected.length > 1;
@@ -1673,6 +1745,7 @@ function renderScopeHeader() {
     <span class="mode-pill">${isArena ? '⚔️ Exam Review' : '📖 Unit Overview'}</span>
     ${selected.map(l => `<span>${l.i}</span>`).join('')}
     <span><b>${selected.length}</b> ${selected.length === 1 ? 'part' : 'parts combined'}</span>
+    <span class="date-pill">${escText(lectureDateLabel(selected))}</span>
     <button class="say" data-go="cls" style="margin-left:auto">Change</button>
   `;
   document.querySelectorAll('[data-scope]').forEach(el => el.innerHTML = h);
@@ -1709,6 +1782,7 @@ function renderUnitTrack() {
     tile.onclick = () => {
       if (pickedLectures[l.id]) delete pickedLectures[l.id];
       else pickedLectures[l.id] = true;
+      endChatFocus();
       resetQuiz();
       renderAll();
     };
@@ -2279,7 +2353,8 @@ His answer: ${chosen !== undefined ? cur.options[chosen] : 'not answered'}
 Correct answer: ${cur.options[cur.correct]}
 Explanation: ${cur.feedback || ''}
 ${cur.evidence && cur.evidenceStatus !== 'unverified' ? `Evidence from the material: ${cur.evidence}` : ''}
-Answer his follow-up about this question. If he got it wrong, help him see why his choice does not fit, without making him feel small.`;
+His answer is already recorded and cannot change. If his message just states an answer (for example he types the correct option after seeing it highlighted), do NOT say he got it right or "spot on". Acknowledge that it is the right answer, remind him which option he actually chose, and explain why that choice does not fit.
+Otherwise, answer his follow-up about this question. If he got it wrong, help him see why his choice does not fit, without making him feel small.`;
 
   const history = drillFollowups(cur).slice(-3).flatMap(ex => [
     { role: 'user', parts: [{ text: ex.q }] }, { role: 'model', parts: [{ text: ex.a }] }]);
@@ -3039,6 +3114,59 @@ function parseModelJsonArray(text) {
   throw new Error('The drill could not be read. Please try again.');
 }
 
+// Rebuilds an existing lecture in place: same id and clientId (so its chats stay attached),
+// new guide content, earlier quiz sets kept and the rebuilt quiz added as the newest set
+async function mergeIntoLecture(l, study, ctx) {
+  const kinds = [...new Set(ctx.sourceList.map(x => x.kind))];
+  const typeNames = { audio: 'Audio', pdf: 'Handout', photo: 'Photo', notes: 'Notes' };
+  const firstCue = study.cues[0] || null;
+  Object.assign(l, {
+    i: study.topic_icon || l.i,
+    t: study.topic_label || l.t,
+    src: kinds.length > 1 ? 'Mixed' : (typeNames[kinds[0]] || l.src),
+    c: study.big_idea,
+    bigIdeas: study.big_ideas,
+    notesText: ctx.notesText,
+    bold_stem: study.concepts[0].bold_stem,
+    concepts: study.concepts,
+    sectionsFound: study.sections,
+    vocab: study.vocab,
+    cues: study.cues,
+    cue: firstCue ? firstCue.cue : null,
+    ts: firstCue && firstCue.timestamp ? firstCue.timestamp : 'Class note',
+    analogy: (study.concepts.find(c => c.analogy) || {}).analogy || '',
+    coverage: study.coverage,
+    sourcesUsed: study.coverage.tagged,
+    transcript: ctx.transcriptAll,
+    durationSeconds: ((l.durationSeconds || 0) + (ctx.addedSeconds || 0)) || null
+  });
+  const sets = getLectureSets(l).slice();
+  if (study.quiz.length) sets.push({ id: `s${sets.length + 1}`, batchId: 'b' + Date.now(), createdAt: new Date().toISOString(), items: study.quiz });
+  l.quizSets = sets;
+  drillSetChoice = 'newest';
+
+  const all = await idbGetAll('lectures');
+  const rec = all.find(r => r.clientId === l.clientId);
+  if (rec) {
+    rec.topicLabel = l.t;
+    rec.topicIcon = l.i;
+    rec.durationSeconds = l.durationSeconds;
+    rec.studyPayload = JSON.stringify(l);
+    rec.studyPayloadClean = JSON.stringify({
+      source_type: l.src, big_idea: l.c, big_ideas: l.bigIdeas, sections_found: l.sectionsFound,
+      core_concepts: l.concepts, vocab: l.vocab, teacher_cues: l.cues, coverage: l.coverage, transcript: l.transcript || null
+    });
+    rec.practicePayloadClean = JSON.stringify({
+      quiz: sets.length ? sets[sets.length - 1].items : [],
+      sets: sets.map(st => ({ id: st.id, batchId: st.batchId, createdAt: st.createdAt, quiz: st.items })),
+      flashcards: (l.vocab || []).map(v => ({ front: v.term, back: v.definition }))
+    });
+    rec.isDirty = true;
+    await idbPut('lectures', rec);
+  }
+  return l;
+}
+
 function normTitle(t) {
   return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -3136,6 +3264,8 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const pickedDateVal = document.getElementById('intakeClassDate').value;
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
   const dateIsoString = localDateInputValue(classDateObj);
+  const addTarget = (sameDayChoice && sameDayChoice !== 'new')
+    ? sameDayLectures().find(l => l.clientId === sameDayChoice) || null : null;
 
   try {
     const parts = [];
@@ -3147,6 +3277,45 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     let gapCount = 0;
     let totalAudioSec = 0;
     const rawMode = localStorage.getItem('ss_audio_raw_test') === 'true';
+    let carriedNotes = '';
+
+    // 0. ADDING TO THIS DAY'S LECTURE: bring back what it already has, so the guide is rebuilt from everything
+    if (addTarget) {
+      setStatus('⏳ Gathering what this lecture already has…');
+      String(addTarget.transcript || '').split(/^### /m).filter(b => b.trim()).forEach(b => {
+        const nl = b.indexOf('\n');
+        const label = (nl > 0 ? b.slice(0, nl) : 'Earlier recording').trim();
+        const text = nl > 0 ? b.slice(nl + 1) : b;
+        const id = addSource('audio', label);
+        sourceTexts[id] = text;
+        parts.push({ text: `[${id} · audio: transcript of ${label}]\n${text}` });
+        transcriptAll += (transcriptAll ? '\n\n' : '') + `### ${label}\n${text}`;
+      });
+      const saved = await idbGetByIndex('lectureFiles', 'byLecture', addTarget.clientId).catch(() => []);
+      saved.forEach(f => {
+        parts.push({ text: `[${addSource(f.kind, f.name)} · ${f.kind}: ${f.name}]` });
+        parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+      });
+      // PDFs and photos from before V13 were not kept: carry what the guide extracted from them
+      const savedNames = new Set(saved.map(f => f.name));
+      const priorFiles = (addTarget.coverage && addTarget.coverage.files) || [];
+      const lost = priorFiles.filter(f => (f.kind === 'pdf' || f.kind === 'photo') && !savedNames.has(f.label));
+      if (lost.length || (!saved.length && !priorFiles.length && !addTarget.transcript && !addTarget.notesText)) {
+        const guideText = (lost.length ? `Notes previously extracted from: ${lost.map(f => f.label).join(', ')}\n` : '') +
+          (addTarget.bigIdeas || [addTarget.c]).filter(Boolean).map(b => `- ${b}`).join('\n') + '\n' +
+          (addTarget.concepts || []).map(c => `- [${c.section || ''}] ${c.bold_stem}: ${c.text}`).join('\n') + '\n' +
+          (addTarget.vocab || []).map(v => `- ${v.term}: ${v.definition}`).join('\n');
+        const id = addSource('notes', 'Earlier study guide');
+        sourceTexts[id] = guideText;
+        parts.push({ text: `[${id} · notes: Earlier study guide]\n${guideText}` });
+      }
+      if (addTarget.notesText) {
+        carriedNotes = addTarget.notesText;
+        const id = addSource('notes', 'Earlier typed notes');
+        sourceTexts[id] = carriedNotes;
+        parts.push({ text: `[${id} · notes: Earlier typed notes]\n${carriedNotes}` });
+      }
+    }
 
     // 1. AUDIO: in-app recordings and attached audio files
     const audioSources = [
@@ -3192,7 +3361,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     // Size guard: base64 and text both count toward the request limit
     const approxBytes = parts.reduce((sum, p) => sum + (p.inlineData ? p.inlineData.data.length : (p.text || '').length), 0);
     if (approxBytes > INLINE_LIMIT_BYTES) {
-      throw new Error(`These attachments add up to about ${(approxBytes / 1048576).toFixed(1)} MB, over the ~18 MB request limit. Generate with fewer files at a time.`);
+      throw new Error(`These attachments add up to about ${(approxBytes / 1048576).toFixed(1)} MB, over the ~18 MB request limit. ${addTarget ? 'Try "Make a separate part" instead, or ' : ''}Generate with fewer files at a time.`);
     }
 
     setStatus('⏳ Building the study guide…');
@@ -3228,6 +3397,14 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     study.coverage = computeCoverage(study, sourceList, { failedSlices, gaps: gapCount });
 
     const ds = CURRICULUM[classCodeAtStart] || getActiveDataset();
+    let targetLecture;
+    if (addTarget) {
+      targetLecture = await mergeIntoLecture(addTarget, study, {
+        transcriptAll, notesText: [carriedNotes, pastedNotes].filter(Boolean).join('\n\n'),
+        sourceList, addedSeconds: totalAudioSec
+      });
+      if (activeClassCode === classCodeAtStart) pickedLectures = { [targetLecture.id]: true };
+    } else {
     const newId = `${classCodeAtStart.toLowerCase()}_${Date.now()}`;
     const clientId = `lect_${sid}_${classCodeAtStart}_${newId}`;
     const dateIso = classDateObj.toISOString();
@@ -3307,11 +3484,21 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       practicePayloadClean: JSON.stringify(practicePayloadClean)
     });
 
+      targetLecture = newLecture;
+    }
+
+    // Keep this run's PDFs and photos on the device with their lecture
+    for (const f of docFiles) {
+      await idbPut('lectureFiles', { id: 'lf_' + Date.now() + Math.random().toString(36).slice(2, 6),
+        lectureClientId: targetLecture.clientId, name: f.name, kind: f.type === 'pdf' ? 'pdf' : 'photo',
+        mime: f.mime, base64: f.base64, size: f.size || 0, addedAt: new Date().toISOString() });
+    }
+
     let newDeadlines = 0;
     for (const item of study.deadlines) {
       const added = await addSuggestedDeadline(item, {
         classCode: classCodeAtStart, className: currentClass.name, studentId: sid,
-        unitKey: ds.unitKey, sourceClientId: newLecture.clientId
+        unitKey: ds.unitKey, sourceClientId: targetLecture.clientId
       });
       if (added) newDeadlines++;
     }
@@ -3320,7 +3507,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     for (const sx of sessionsToUse) {
       sx.status = 'completed';
       sx.completedAt = new Date().toISOString();
-      sx.lectureClientId = newLecture.clientId;
+      sx.lectureClientId = targetLecture.clientId;
       await idbPut('sessions', sx);
       includedSessionIds.delete(sx.id);
     }
@@ -3344,7 +3531,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     const unverified = study.quiz.filter(q => q.evidenceStatus === 'unverified').length;
     if (unverified) notes.push(`${unverified} quote(s) not found in the material, hidden`);
     if (newDeadlines) notes.push(`${newDeadlines} deadline(s) added`);
+    if (addTarget) notes.unshift('added to this day\'s lecture');
     showToast(notes.length ? `Study guide ready · ${notes.join(' · ')}` : '🎉 Study guide and practice drill ready!');
+    sameDayChoice = null;
+    renderSameDayBanner();
   } catch (err) {
     alert('Processing error: ' + err.message);
   } finally {
@@ -3393,9 +3583,21 @@ function recordExchange(targetKey, qText, aText, isMiss = false, lectureIds = nu
 function getClearedAt(targetKey) {
   return localStorage.getItem(`ss_cleared_${targetKey}`) || '';
 }
+// Focus mode: "Continue from here" shows one earlier exchange plus anything asked after it in this sitting
+let chatFocus = null; // { key, ts, since }
+
 function getVisibleExchanges(targetKey) {
+  const all = loadExchangesForTarget(targetKey);
+  if (chatFocus && chatFocus.key === targetKey) {
+    return all.filter(ex => ex.ts === chatFocus.ts || (ex.ts || '') > chatFocus.since);
+  }
   const cut = getClearedAt(targetKey);
-  return loadExchangesForTarget(targetKey).filter(ex => !cut || (ex.ts || '') > cut);
+  return all.filter(ex => !cut || (ex.ts || '') > cut);
+}
+
+function endChatFocus() {
+  if (!chatFocus) return;
+  chatFocus = null;
 }
  
 function updateToneButton() {
@@ -3440,7 +3642,9 @@ function loadSubjectChat() {
   const feed = document.getElementById('chatFeed');
   
   const exchanges = getVisibleExchanges(targetKey);
-  feed.innerHTML = `
+  const focusing = chatFocus && chatFocus.key === targetKey;
+  feed.innerHTML = focusing ? `<div class="focus-bar"><span>↪ Continuing an earlier question</span><button class="say sm" id="endFocusBtn">Show full chat</button></div>` : '';
+  feed.innerHTML += `
     <div class="msg ai">
       <button class="say btn-speak">🔊</button>
       ${getStudentName() ? `Hi ${escText(getStudentName())}. ` : ''}Ask me anything about your <b>${c.name}</b> notes, or tap an idea below.
@@ -3455,9 +3659,12 @@ function loadSubjectChat() {
   });
  
   feed.scrollTop = feed.scrollHeight;
+  const ef = document.getElementById('endFocusBtn');
+  if (ef) ef.onclick = () => { endChatFocus(); loadSubjectChat(); };
 }
- 
+
 document.getElementById('newChatBtn').addEventListener('click', () => {
+  endChatFocus();
   const targetKey = getActiveChatTargetKey();
   if (confirm('Start fresh in this channel? (Previous Q&A remains saved for weak-spot drills)')) {
     localStorage.setItem(`ss_cleared_${targetKey}`, new Date().toISOString());
@@ -3498,14 +3705,45 @@ function renderHistoryDrawer() {
       <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}</div>
       <small style="color:var(--mut)">${when}</small>
       ${ex.isMiss ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
-        ${ex.context === 'drill' ? '' : `<button class="say sm" data-continue-ts="${escapeHtml(ex.ts)}">↪ Continue from here</button>`}
-        <button class="say sm" data-ask-again="${escapeHtml(ex.ts)}">✎ Ask again</button>
+        ${ex.context === 'drill'
+          ? `<button class="say sm" data-open-q="${escapeHtml(ex.qid || '')}">🎯 Open question</button>`
+          : `<button class="say sm" data-continue-ts="${escapeHtml(ex.ts)}">↪ Continue from here</button>
+             <button class="say sm" data-ask-again="${escapeHtml(ex.ts)}">✎ Ask again</button>`}
       </div>`}
     `;
     body.appendChild(item);
   });
 }
  
+// Open question: jump to the drill question a follow-up belongs to, with its panel open
+document.addEventListener('click', (e) => {
+  const oq = e.target.closest('[data-open-q]');
+  if (!oq) return;
+  document.getElementById('chatHistoryDrawer').classList.remove('open');
+  const qid = oq.dataset.openQ;
+  const findIdx = () => getQuizSet().findIndex(q => q.id === qid);
+  let idx = findIdx();
+  if (idx < 0) { drillSetChoice = 'newest'; idx = findIdx(); }
+  if (idx < 0) {
+    // The question may live in another set: search every set of the selected lectures
+    for (const l of getSelectedLectures()) {
+      const st = getLectureSets(l).find(set => set.items.some((_, i) => questionIdFor(l, set.id, i) === qid));
+      if (st) { drillSetChoice = st.batchId; break; }
+    }
+    idx = findIdx();
+  }
+  if (idx < 0) { showToast('That question is not in the current selection'); return; }
+  resetQuiz();
+  quizIndex = idx;
+  // Show it as answered so the follow-up panel opens; the recorded miss (if any) decides the highlight
+  const q = getQuizSet()[idx];
+  const miss = loadExchangesForTarget((q.parentLecture || {}).clientId || '').find(x => x.isMiss && x.qid === qid);
+  const chosen = miss && /Chose: (.*)$/.exec(miss.a || '');
+  const chosenIdx = chosen ? q.options.indexOf(chosen[1]) : -1;
+  quizAnswers[qid] = chosenIdx >= 0 ? chosenIdx : q.correct;
+  navigateTo('quiz');
+});
+
 // Continue: show the conversation from that exchange on, with its lectures selected, ready for the next question
 document.addEventListener('click', (e) => {
   const cont = e.target.closest('[data-continue-ts]');
@@ -3521,11 +3759,10 @@ document.addEventListener('click', (e) => {
     const ids = (ex.lectureIds || []).filter(id => ds.lectures.some(l => l.id === id));
     if (ids.length) { pickedLectures = {}; ids.forEach(id => { pickedLectures[id] = true; }); resetQuiz(); }
     const key2 = getActiveChatTargetKey();
-    const before = new Date(new Date(ex.ts).getTime() - 1).toISOString();
-    localStorage.setItem(`ss_cleared_${key2}`, before);
+    chatFocus = { key: key2, ts: ex.ts, since: new Date().toISOString() };
     navigateTo('chat');
     loadSubjectChat();
-    showToast('Picked up where you left off');
+    showToast('Continuing that question. Ask your next one.');
   } else {
     navigateTo('chat');
     document.getElementById('chatInput').value = ex.q.replace(/^Missed Drill Question:\s*/, '');
@@ -5125,6 +5362,7 @@ function migrateLegacyMissKeys() {
   loadSubjectChat();
   renderPendingRecordings();
   updateRadarPills();
+  renderSameDayBanner();
 
   backgroundCloudRefresh();
 
