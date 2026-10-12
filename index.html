@@ -184,7 +184,7 @@ nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color:
 nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
 nav.dock button.on { color: var(--c); font-weight: 700; }
 
-/* Settings & Dialog Modals */
+/* Settings, Unit & Schedule Dialog Modals */
 dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
 dialog::backdrop { background: rgba(30,30,30,.55); }
 .dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
@@ -562,12 +562,12 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
    SECTION 1 - MASTER STATE & MAC'S EXACT FALL 26/27 SCHEDULE
    ===================================================================== */
 let CLASSES = [
-  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   days: 'Tue, Thu, Fri', time: '08:00 - 08:50', color: '#8A4FD6', icon: '📐', needsScribe: true, term: 'Fall 26/27' },
-  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', days: 'Mon, Wed, Fri', time: '08:55 - 09:45', color: '#C2703A', icon: '📖', needsScribe: true, term: 'Fall 26/27' },
-  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    days: 'Mon, Wed, Fri', time: '09:50 - 10:40', color: '#2F6FDE', icon: '🧬', needsScribe: true, term: 'Fall 26/27' },
-  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', days: 'Mon, Wed, Fri', time: '10:45 - 11:35', color: '#2E7D5B', icon: '📚', needsScribe: true, term: 'Fall 26/27' },
-  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    days: 'Tue, Thu, Fri', time: '11:40 - 12:30', color: '#D97706', icon: '🍎', needsScribe: true, term: 'Fall 26/27' },
-  { code: 'STR_CND', name: 'Strength & Cond.',     period: 6, teacher: '',         days: 'Tue, Thu, Fri', time: '12:35 - 01:25', color: '#64748B', icon: '🏋️', needsScribe: false, term: 'Fall 26/27' }
+  { code: 'ALG_1',   name: 'Algebra I',            period: 1, teacher: 'Erhart',   days: 'Tue, Thu, Fri', time: '08:00 - 08:50', color: '#8A4FD6', icon: '📐', needsScribe: true, term: 'Fall 26/27', isActive: true },
+  { code: 'BBL_FDN', name: 'Biblical Foundations', period: 2, teacher: 'Gambrell', days: 'Mon, Wed, Fri', time: '08:55 - 09:45', color: '#C2703A', icon: '📖', needsScribe: true, term: 'Fall 26/27', isActive: true },
+  { code: 'BIO_1',   name: 'Biology I',            period: 3, teacher: 'Smith',    days: 'Mon, Wed, Fri', time: '09:50 - 10:40', color: '#2F6FDE', icon: '🧬', needsScribe: true, term: 'Fall 26/27', isActive: true },
+  { code: 'ENG_1',   name: 'English I',            period: 4, teacher: 'Piersant', days: 'Mon, Wed, Fri', time: '10:45 - 11:35', color: '#2E7D5B', icon: '📚', needsScribe: true, term: 'Fall 26/27', isActive: true },
+  { code: 'WLN_1',   name: 'Wellness',             period: 5, teacher: 'Craft',    days: 'Tue, Thu, Fri', time: '11:40 - 12:30', color: '#D97706', icon: '🍎', needsScribe: true, term: 'Fall 26/27', isActive: true },
+  { code: 'STR_CND', name: 'Strength & Cond.',     period: 6, teacher: '',         days: 'Tue, Thu, Fri', time: '12:35 - 01:25', color: '#64748B', icon: '🏋️', needsScribe: false, term: 'Fall 26/27', isActive: true }
 ];
 
 const DEFAULT_PROFILE = `STUDENT PROFILE: High school student with visual and auditory processing fatigue.
@@ -678,7 +678,7 @@ async function loadLecturesFromDB() {
   const records = await idbGetAll('lectures');
   CURRICULUM = {};
   
-  CLASSES.filter(c => c.needsScribe !== false).forEach(c => {
+  CLASSES.filter(c => c.needsScribe !== false && c.isActive !== false).forEach(c => {
     CURRICULUM[c.code] = { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
   });
 
@@ -820,6 +820,20 @@ function isRecording() {
   return !!(mediaRecorder && mediaRecorder.state === 'recording');
 }
 
+// Convert all chunks for a session into a base64 audio string
+async function getSessionAudioBase64(sessionId) {
+  const allChunks = await idbGetAll('chunks');
+  const sessionChunks = allChunks.filter(c => c.sessionId === sessionId).sort((a,b) => a.seq - b.seq);
+  if (!sessionChunks.length) return null;
+  const combinedBlob = new Blob(sessionChunks.map(c => c.blob), { type: 'audio/webm' });
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(combinedBlob);
+  });
+}
+
 /* =====================================================================
    SECTION 4 - CLEAN MARKDOWN, BIONIC & TTS (SENTENCE-SPLITTING)
    ===================================================================== */
@@ -943,10 +957,11 @@ function updateRecScheduleHint() {
   document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
 
+// 2-Tier Integrated Card-Pill with smaller informational subtext
 function renderClassRibbon() {
   const rib = document.getElementById('classRibbon');
   rib.innerHTML = '';
-  const visibleClasses = CLASSES.filter(c => c.needsScribe !== false).sort((a,b) => (a.period || 1) - (b.period || 1));
+  const visibleClasses = CLASSES.filter(c => c.needsScribe !== false && c.isActive !== false).sort((a,b) => (a.period || 1) - (b.period || 1));
   
   visibleClasses.forEach(c => {
     const btn = document.createElement('button');
@@ -1123,7 +1138,8 @@ function getSourceBadgeHtml(src) {
     'Audio': '🎙️ Class Audio',
     'Handout': '📄 Canvas Handout',
     'Photo': '📷 Whiteboard Photo',
-    'Mixed': '⚡ Audio &amp; Handout Fused'
+    'Mixed': '⚡ Audio &amp; Handout Fused',
+    'Notes': '📝 Notes'
   };
   return `<span class="src-badge">${map[src] || '📝 Notes'}</span>`;
 }
@@ -1139,7 +1155,6 @@ function renderStudyGuide() {
 
   let html = '';
   selected.forEach((l, idx) => {
-    // Render multi-concepts if available, or fallback to single
     const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
 
     html += `
@@ -1182,7 +1197,6 @@ function renderStudyGuide() {
   container.innerHTML = html;
 }
 
-// Support multiple questions per lecture
 function getQuizSet() {
   const selected = getSelectedLectures();
   let questions = [];
@@ -1392,7 +1406,6 @@ function handleStagedFile(file) {
     };
     reader.readAsDataURL(file);
   } else {
-    // Plain text / notepad
     const reader = new FileReader();
     reader.onload = (ev) => {
       const cur = document.getElementById('mainPastedNotes').value;
@@ -1433,21 +1446,16 @@ function clearStagedFiles() {
 }
 
 /* =====================================================================
-   SECTION 7 - REAL AI MULTIMODAL INTAKE ENGINE (GEMINI 3-SERIES)
+   SECTION 7 - REAL AI INTAKE ENGINE (WIRED AUDIO, FILES & NOTES)
    ===================================================================== */
 document.getElementById('generateIntakeBtn').addEventListener('click', async () => {
   const pastedNotes = document.getElementById('mainPastedNotes').value.trim();
-  const hasAudio = activeRecordingSession && activeRecordingSession.chunksCount > 0;
+  const hasAudio = activeRecordingSession && activeRecordingSession.durationSeconds > 0;
   const hasFiles = stagedFiles.length > 0;
   const hasNotes = !!pastedNotes;
 
-  if (hasAudio && !hasFiles && !hasNotes) {
-    alert('Audio transcription pipeline is in setup. Please attach a Canvas PDF, photo, or paste notes to generate your study guide.');
-    return;
-  }
-
-  if (!hasFiles && !hasNotes) {
-    alert('Please attach at least one Canvas PDF / Photo or paste notes first.');
+  if (!hasAudio && !hasFiles && !hasNotes) {
+    alert('Please record classroom audio, attach a PDF/Photo, or paste notes first.');
     return;
   }
 
@@ -1461,7 +1469,16 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const btn = document.getElementById('generateIntakeBtn');
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing materials with Gemini…';
-  showToast(`Processing ${stagedFiles.length} file(s) with Gemini AI…`);
+
+  // Calculate dynamic source type badge
+  const sourceTypes = [];
+  if (hasAudio) sourceTypes.push('Audio');
+  if (stagedFiles.some(f => f.type === 'pdf')) sourceTypes.push('Handout');
+  if (stagedFiles.some(f => f.type === 'image')) sourceTypes.push('Photo');
+  if (hasNotes && !hasFiles) sourceTypes.push('Notes');
+  const computedSourceType = sourceTypes.length > 1 ? 'Mixed' : (sourceTypes[0] || 'Notes');
+
+  showToast(`Processing lesson with Gemini AI (${computedSourceType})…`);
 
   const readingLevel = localStorage.getItem('ss_reading_level') || '5';
   const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
@@ -1473,7 +1490,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const dateIsoString = classDateObj.toISOString().slice(0, 10);
 
   const prompt = `You are an expert high school study coach creating study materials for a 9th-grade student in ${currentClass.name}.
-Analyze all attached handouts, slides, whiteboard photos, or teacher notes thoroughly.
+Analyze all attached classroom audio recordings, handouts, slides, whiteboard photos, or teacher notes thoroughly.
 
 TODAY'S REFERENCE DATE IS: ${dateIsoString}.
 If materials mention relative deadlines (e.g. "quiz next Friday" or "due tomorrow"), calculate and output the exact ISO date string (YYYY-MM-DD).
@@ -1482,7 +1499,7 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
 {
   "topic_label": "Concise Overall Topic (e.g. Photosynthesis & Cellular Respiration)",
   "topic_icon": "Single appropriate emoji",
-  "source_type": "${stagedFiles.some(f => f.type === 'image') ? 'Photo' : 'Handout'}",
+  "source_type": "${computedSourceType}",
   "big_idea": "Core central takeaway in 1-2 punchy sentences.",
   "core_concepts": [
     {
@@ -1496,7 +1513,7 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
   ],
   "analogy": "Relatable comparison using aviation, mechanics, WWII strategy, soccer tactics, or gaming physics.",
   "teacher_cue": "Any test hint, deadline, or 'remember this' cue found in materials.",
-  "cue_approx_time": "Handout Section",
+  "cue_approx_time": "Class discussion / Handout Section",
   "deadline_item": {
     "title": "Assignment or exam title if found, or null",
     "type": "Test or Quiz or Homework",
@@ -1520,14 +1537,33 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
 
   try {
     const parts = [];
+
+    // 1. INGEST RECORDED AUDIO DIRECTLY IF PRESENT
+    let sessionDuration = null;
+    if (hasAudio) {
+      btn.textContent = '⏳ Decoding recorded audio…';
+      const audioBase64 = await getSessionAudioBase64(activeRecordingSession.id);
+      if (audioBase64) {
+        parts.push({
+          inlineData: { mimeType: 'audio/webm', data: audioBase64 }
+        });
+        sessionDuration = activeRecordingSession.durationSeconds;
+      }
+    }
+
+    // 2. INGEST ALL STAGED FILES (PDFs & PHOTOS)
     stagedFiles.forEach(f => {
       parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
     });
+
+    // 3. INGEST PASTED NOTES
     if (hasNotes) {
       parts.push({ text: `[TEACHER CANVAS / HANDOUT NOTES]\n${pastedNotes}` });
     }
+
     parts.push({ text: prompt });
 
+    btn.textContent = '⏳ Formulating study guide with Gemini…';
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const systemContext = `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}`;
 
@@ -1564,14 +1600,15 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       d: classDateObj.toLocaleDateString('en-US', { weekday: 'short' }),
       n: classDateObj.getDate(),
       t: parsed.topic_label || 'New Topic',
-      src: parsed.source_type || 'Handout',
+      src: computedSourceType,
       c: parsed.big_idea || '',
       bold_stem: formattedConcepts[0].bold_stem,
       concepts: formattedConcepts,
       analogy: parsed.analogy || '',
       cue: parsed.teacher_cue || null,
-      ts: parsed.cue_approx_time || 'Class handout',
+      ts: parsed.cue_approx_time || 'Class note',
       recordedDate: dateIso,
+      durationSeconds: sessionDuration,
       quizItems: formattedQuiz,
       q: [formattedQuiz[0].q, formattedQuiz[0].options, formattedQuiz[0].correct]
     };
@@ -1579,9 +1616,8 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
     ds.lectures.push(newLecture);
     pickedLectures = { [newId]: true };
 
-    // Separate clean payloads for SharePoint columns
     const studyPayloadClean = {
-      source_type: newLecture.src,
+      source_type: computedSourceType,
       big_idea: newLecture.c,
       core_concepts: formattedConcepts,
       analogy: newLecture.analogy,
@@ -1599,6 +1635,7 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
       className: currentClass.name,
       periodNumber: currentClass.period,
       recordedDate: dateIso,
+      durationSeconds: sessionDuration,
       unitKey: ds.unitKey,
       unitTitle: ds.unitTitle,
       partNumber: ds.lectures.length,
@@ -1630,12 +1667,16 @@ Return your response strictly as valid, raw JSON (no conversational prose, no ma
     }
 
     clearStagedFiles();
-    activeRecordingSession = null;
+    if (activeRecordingSession) {
+      activeRecordingSession.status = 'completed';
+      await idbPut('sessions', activeRecordingSession);
+      activeRecordingSession = null;
+    }
     document.getElementById('recTimer').textContent = '0:00 · saved';
 
     renderAll();
     navigateTo('guide');
-    showToast('🎉 Multi-concept Study Guide & Drill generated!');
+    showToast('🎉 Multi-source Study Guide & Drill generated!');
   } catch (err) {
     alert('Processing error: ' + err.message);
   } finally {
@@ -2166,7 +2207,7 @@ async function fetchGraphWithRetry(url, options = {}, token) {
   throw new Error('Graph request exceeded retries.');
 }
 
-// Complete Graph Sync (Deduplicated, checks res.ok, guards against demo rows)
+// Complete Graph Sync (With fixed syncedChatsCount variable)
 document.getElementById('spSyncBtn').addEventListener('click', async () => {
   const btn = document.getElementById('spSyncBtn');
   if (btn.disabled) return;
@@ -2308,7 +2349,6 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       await pushClassesToSharePoint(siteId, token);
     }
 
-    // Pull down updated deadlines to refresh Flight Radar
     const remoteDlRes = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$expand=fields&$top=50`, { method: 'GET' }, token);
     const remoteDlData = await remoteDlRes.json();
     if (remoteDlData.value) {
@@ -2348,7 +2388,7 @@ async function pushClassesToSharePoint(siteId, token) {
       NeedsScribe: cls.needsScribe !== false,
       SortOrder: cls.period,
       Term: cls.term || 'Fall 26/27',
-      IsActive: true
+      IsActive: cls.isActive !== false
     };
 
     const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
@@ -2427,6 +2467,7 @@ document.getElementById('saveEditLectBtn').addEventListener('click', async () =>
     className: currentClass.name,
     periodNumber: currentClass.period,
     recordedDate: lect.recordedDate,
+    durationSeconds: lect.durationSeconds || null,
     unitKey: ds.unitKey,
     unitTitle: ds.unitTitle,
     partNumber: ds.lectures.indexOf(lect) + 1,
@@ -2582,7 +2623,7 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
   showToast(`Started ${title}!`);
 });
 
-// Parent Vault Schedule & Term Editor
+// Parent Vault Schedule & Term Editor (Supports Archiving Individual Classes)
 document.getElementById('openScheduleEditorBtn').addEventListener('click', () => {
   renderParentScheduleEditor();
   document.getElementById('scheduleDlg').showModal();
@@ -2594,14 +2635,24 @@ document.getElementById('closeScheduleBtn').addEventListener('click', () => {
 function renderParentScheduleEditor() {
   const body = document.getElementById('scheduleEditorBody');
   body.innerHTML = '';
-  CLASSES.forEach((c, idx) => {
+  
+  const activeClasses = CLASSES.filter(c => c.isActive !== false);
+  const archivedClasses = CLASSES.filter(c => c.isActive === false);
+
+  body.innerHTML += '<h5 style="margin:4px 0 8px;color:var(--c)">Active Classes</h5>';
+
+  activeClasses.forEach((c) => {
+    const idx = CLASSES.indexOf(c);
     body.innerHTML += `
       <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <b>${c.icon} ${c.name} (P${c.period})</b>
-          <label style="font-size:12px;display:flex;align-items:center;gap:4px">
-            <input type="checkbox" id="parentSchedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe Active
-          </label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;display:flex;align-items:center;gap:4px">
+              <input type="checkbox" id="parentSchedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe Active
+            </label>
+            <button class="say sm" data-archive-cls="${c.code}" style="color:var(--bad)">📦 Archive</button>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
           <label style="font-size:11px">Class Name: <input type="text" id="parentSchedName_${idx}" value="${c.name}"></label>
@@ -2612,7 +2663,49 @@ function renderParentScheduleEditor() {
       </div>
     `;
   });
+
+  if (archivedClasses.length) {
+    body.innerHTML += '<h5 style="margin:12px 0 6px;color:var(--mut)">Archived / Dropped Classes</h5>';
+    archivedClasses.forEach(c => {
+      body.innerHTML += `
+        <div style="border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;background:var(--bg)">
+          <span style="color:var(--mut);font-size:13px">${c.icon} ${c.name} (P${c.period}) · Archived</span>
+          <button class="say sm" data-restore-cls="${c.code}">🔄 Restore</button>
+        </div>
+      `;
+    });
+  }
 }
+
+document.addEventListener('click', (e) => {
+  const archBtn = e.target.closest('[data-archive-cls]');
+  if (archBtn) {
+    const code = archBtn.dataset.archiveCls;
+    const cls = CLASSES.find(c => c.code === code);
+    if (cls && confirm(`Archive ${cls.name}? It will be removed from Mac's active ribbon, but past notes and SharePoint records will remain safe.`)) {
+      cls.isActive = false;
+      localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+      localStorage.setItem('ss_dirty_classes', 'true');
+      renderParentScheduleEditor();
+      renderClassRibbon();
+      showToast(`${cls.name} archived.`);
+    }
+  }
+
+  const resBtn = e.target.closest('[data-restore-cls]');
+  if (resBtn) {
+    const code = resBtn.dataset.restoreCls;
+    const cls = CLASSES.find(c => c.code === code);
+    if (cls) {
+      cls.isActive = true;
+      localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+      localStorage.setItem('ss_dirty_classes', 'true');
+      renderParentScheduleEditor();
+      renderClassRibbon();
+      showToast(`${cls.name} restored to active ribbon!`);
+    }
+  }
+});
 
 document.getElementById('addNewClassBtn').addEventListener('click', () => {
   const newPeriod = CLASSES.length + 1;
@@ -2626,7 +2719,8 @@ document.getElementById('addNewClassBtn').addEventListener('click', () => {
     color: '#2F6FDE',
     icon: '📚',
     needsScribe: true,
-    term: document.getElementById('activeTermInput').value.trim() || 'Fall 26/27'
+    term: document.getElementById('activeTermInput').value.trim() || 'Fall 26/27',
+    isActive: true
   });
   renderParentScheduleEditor();
 });
@@ -2703,7 +2797,8 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
           color: f.ColorHex || '#2F6FDE',
           icon: f.IconEmoji || '📚',
           needsScribe: f.NeedsScribe !== false,
-          term: f.Term || 'Fall 26/27'
+          term: f.Term || 'Fall 26/27',
+          isActive: true
         }));
 
       if (loaded.length) {
