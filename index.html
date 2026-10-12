@@ -59,7 +59,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tog { border: 2px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .btn-icon { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 6px 10px; cursor: pointer; font-size: 16px; }
 
-/* OPTION A: 2-TIER INTEGRATED CLASS CARDS */
+/* 2-TIER CLASS CARDS */
 .ribbon { display: flex; gap: 10px; overflow-x: auto; padding: 8px 18px; scroll-snap-type: x mandatory; }
 .cls {
   flex: none; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
@@ -114,7 +114,8 @@ main { padding: 4px 18px 140px; flex: 1; }
 @keyframes pulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.05); box-shadow: 0 0 28px rgba(194,84,58,.5); } }
 .dropzone { border: 2px dashed var(--line); border-radius: 14px; padding: 14px; text-align: center; background: var(--bg); cursor: pointer; transition: border-color .15s; }
 .dropzone:hover, .dropzone.dragover { border-color: var(--c); background: var(--sel); }
-.staged-file-card { background: var(--sel); border: 1px solid var(--c); border-radius: 10px; padding: 8px 12px; margin-top: 10px; font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+.staged-chips-box { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.staged-chip { background: var(--sel); border: 1px solid var(--c); border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
 
 /* Date Picker Control */
 .date-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
@@ -135,24 +136,15 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tile.on { border-color: var(--c); background: var(--sel); }
 .tile.on .ck { background: var(--c); border-color: var(--c); color: #fff; }
 .tile.today { border-style: dashed; }
+
 .tile-edit-btn {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1.5px solid var(--line);
-  background: var(--card);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  opacity: 0.65;
-  cursor: pointer;
-  transition: opacity .15s, transform .1s;
+  position: absolute; top: 6px; left: 6px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--line); background: var(--card); display: grid; place-items: center;
+  font-size: 11px; opacity: 0.65; cursor: pointer; transition: opacity .15s, transform .1s;
 }
 .tile-edit-btn:hover { opacity: 1; transform: scale(1.15); border-color: var(--c); }
 .tile.on .tile-edit-btn { background: var(--card); border-color: var(--c); opacity: 0.9; }
+
 .wk { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; gap: 12px; }
 .wk button.wk-arrow { width: 50px; height: 50px; flex: none; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-size: 20px; cursor: pointer; }
 .wk-center { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -192,7 +184,7 @@ nav.dock button { flex: 1; max-width: 170px; border: 0; background: none; color:
 nav.dock button span { display: block; font-size: 22px; margin-bottom: 2px; }
 nav.dock button.on { color: var(--c); font-weight: 700; }
 
-/* Settings, Unit & Schedule Dialog Modals */
+/* Settings & Dialog Modals */
 dialog.cfg-dlg { border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); padding: 0; width: min(840px, 94vw); max-height: 90vh; }
 dialog::backdrop { background: rgba(30,30,30,.55); }
 .dlg-head { padding: 16px 22px; border-bottom: 1.5px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
@@ -258,30 +250,26 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
             <button class="rec" id="recBtn">● Record</button>
             <p id="recTimer" style="font-size:14px;color:var(--mut);margin:6px 0 0">0:00 · saves every 10s</p>
           </div>
-          <p style="font-size:12px;color:var(--mut);margin:10px 0 0;line-height:1.4">When permitted in class. Audio commits in background.</p>
+          <p style="font-size:12px;color:var(--mut);margin:10px 0 0;line-height:1.4">When permitted in class. Audio commits locally in background.</p>
         </div>
 
-        <!-- INTAKE B: CANVAS & PHOTOS -->
+        <!-- INTAKE B: CANVAS & PHOTOS (MULTI-FILE DROPZONE) -->
         <div class="intake-panel">
           <h4>📄 Canvas Slides, Handouts &amp; Photos</h4>
           
-          <!-- Class Date Selector for Backdating -->
           <div class="date-row">
             <span>📅 Class Date:</span>
             <input type="date" id="intakeClassDate" title="Date when this class actually took place">
           </div>
 
-          <input type="file" id="mainIntakeFileInput" accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp,text/plain,application/pdf,image/*" style="display:none">
+          <input type="file" id="mainIntakeFileInput" multiple accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp,text/plain,application/pdf,image/*" style="display:none">
           <div class="dropzone" id="mainDropzone">
             <span style="font-size:22px">📁</span>
-            <div style="font-weight:600;font-size:13.5px;margin-top:4px">Drop Canvas PDF, Photo or Notes</div>
-            <small style="color:var(--mut);font-size:11.5px">PDFs, Whiteboard Photos, or Notepad TXT</small>
+            <div style="font-weight:600;font-size:13.5px;margin-top:4px">Drop Canvas PDFs, Photos or Notes</div>
+            <small style="color:var(--mut);font-size:11.5px">Select 1 or more files (PDF, Whiteboard Photo, TXT)</small>
           </div>
-          <div id="stagedFileBox" style="display:none" class="staged-file-card">
-            <span id="stagedFileLabel"></span>
-            <button class="say" id="clearStagedFileBtn" style="padding:2px 8px;font-size:11px">✕</button>
-          </div>
-          <textarea id="mainPastedNotes" rows="2" placeholder="Or paste homework instructions or text here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
+          <div id="stagedFilesContainer" class="staged-chips-box"></div>
+          <textarea id="mainPastedNotes" rows="2" placeholder="Or paste homework instructions or syllabus notes here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
         </div>
       </div>
 
@@ -379,7 +367,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </nav>
 </div>
 
-<!-- Student-Level Schedule Quick Edit Modal (No PIN Required) -->
+<!-- Student-Level Schedule Quick Edit Modal -->
 <dialog class="cfg-dlg" id="studentScheduleDlg" style="max-width:440px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">✏️ Edit Class Schedule</h3>
@@ -427,8 +415,8 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <button class="btn" id="saveEditLectBtn">Save Changes</button>
   </div>
 </dialog>
-  
-  <!-- Parent PIN Access Modal -->
+
+<!-- Parent PIN Access Modal -->
 <dialog class="cfg-dlg" id="pinDlg" style="max-width:380px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">🔒 Parent &amp; Settings Gate</h3>
@@ -463,6 +451,27 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
 </dialog>
 
+<!-- Schedule Manager Modal in Parent Vault -->
+<dialog class="cfg-dlg" id="scheduleDlg" style="max-width:580px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">📅 Schedule &amp; Term Manager</h3>
+    <button class="say" id="closeScheduleBtn">✕</button>
+  </div>
+  <div class="dlg-body">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <label style="flex:1;margin-right:12px">Active Academic Term:
+        <input type="text" id="activeTermInput" value="Fall 26/27">
+      </label>
+      <button class="btn alt sm" id="archiveTermBtn" style="color:var(--bad);margin-top:14px">📦 Archive Current Term</button>
+    </div>
+    <div id="scheduleEditorBody" style="margin-top:10px"></div>
+    <button class="btn alt sm" id="addNewClassBtn" style="width:100%;margin-top:8px">➕ Add New Class</button>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="saveScheduleBtn">Save Schedule Changes</button>
+  </div>
+</dialog>
+
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
@@ -471,13 +480,6 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
   <div class="dlg-body">
     <h4>AI Provider &amp; Model (Google Gemini 3-Series)</h4>
-    <label>Active Engine
-      <select id="cfgProvider">
-        <option value="gemini">Google Gemini (3-Series Flash / Flash-Lite)</option>
-        <option value="azure">Azure OpenAI APIM Gateway</option>
-      </select>
-    </label>
-
     <div id="geminiBox">
       <label>Google Gemini API Key
         <input type="password" id="geminiApiKey" placeholder="Paste Google AI Studio Key">
@@ -496,7 +498,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     </div>
 
     <h4>SharePoint Sync (rmr1971.sharepoint.com:/sites/Bible_App)</h4>
-    <p style="font-size:13px;color:var(--mut);margin:0">Syncs <code>Student_Lectures</code>, <code>Student_Deadlines</code>, and <code>Student_Chats</code>.</p>
+    <p style="font-size:13px;color:var(--mut);margin:0">Syncs <code>Student_Lectures</code>, <code>Student_Deadlines</code>, <code>Student_Chats</code>, and <code>Student_Classes</code>.</p>
     <label>Tenant Authority
       <input type="text" id="spAuthority" placeholder="https://login.microsoftonline.com/<Directory tenant ID>">
     </label>
@@ -508,9 +510,11 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <span id="msUserBadge" style="font-size:13px;font-weight:600">Not signed in</span>
     </div>
 
-    <h4>Schedule &amp; Data Utilities</h4>
+    <h4>Schedule &amp; SharePoint Sync</h4>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn alt sm" id="openScheduleEditorBtn">📅 Manage Classes &amp; Term</button>
       <button class="btn alt sm" id="pullClassesBtn">☁️ Pull Schedule from SharePoint</button>
+      <button class="btn alt sm" id="pushClassesBtn">📤 Push Schedule to SharePoint</button>
       <button class="btn alt sm" id="seedDemoBtn">🧪 Seed Demo Data</button>
       <button class="btn alt sm" id="removeDemoBtn">🧹 Remove Demo Data</button>
       <button class="btn alt sm" id="wipeDataBtn" style="color:var(--bad)">⚠️ Wipe All Local Data</button>
@@ -577,7 +581,7 @@ Keep responses concise, clear, and punchy.
 Never lecture in long paragraphs. Use clear bullet points and bold anchor stems.
 Ground all science and math concepts in realistic analogies across aviation, war history, mechanics, soccer, or gaming.`;
 
-// Standalone Mock Demo Deck
+// Standalone Demo Deck
 const DEMO_CURRICULUM = {
   BIO_1: {
     unitKey: 'U2', unitTitle: 'Unit 2 · Cells & Energy',
@@ -602,10 +606,8 @@ let quizRetryIds = null;
 let currentChatHistory = [];
 let cachedDeadlines = [];
 
-let stagedFileBase64 = null;
-let stagedFileMime = null;
-let stagedFileName = null;
-let stagedFileType = null;
+// MULTI-FILE STAGING QUEUE (PDFs, Images, Notes)
+let stagedFiles = [];
 
 /* =====================================================================
    SECTION 2 - INDEXEDDB STORAGE (SEPARATED SESSIONS & LECTURES)
@@ -941,7 +943,6 @@ function updateRecScheduleHint() {
   document.getElementById('recScheduleHint').textContent = `Period ${c.period} → ${c.name} (${c.teacher || 'Class'}) · ${c.days || ''}`;
 }
 
-// OPTION A: 2-Tier Integrated Card-Pill with smaller informational subtext
 function renderClassRibbon() {
   const rib = document.getElementById('classRibbon');
   rib.innerHTML = '';
@@ -999,7 +1000,7 @@ function switchClass(code) {
   updateRecScheduleHint();
   renderAll();
   loadSubjectChat();
-  clearStagedFile();
+  renderStagedFiles();
   showToast(`Switched to ${c.name}`);
 }
 
@@ -1017,7 +1018,6 @@ function updateRadarPills() {
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // GLOBAL RADAR: Nearest exam across ALL classes within 7 days
   const upcomingAll = cachedDeadlines
     .filter(d => d.typeDesc === 'Test' || d.typeDesc === 'Quiz')
     .filter(d => d.dueDate && new Date(d.dueDate) >= now && new Date(d.dueDate) <= weekFromNow)
@@ -1036,7 +1036,6 @@ function updateRadarPills() {
     radarEl.style.display = 'none';
   }
 
-  // ACTIVE CLASS TEST BANNER
   const classTests = cachedDeadlines
     .filter(d => d.classCode === activeClassCode && (d.typeDesc === 'Test' || d.typeDesc === 'Quiz'))
     .sort((a,b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0));
@@ -1117,76 +1116,8 @@ function renderUnitTrack() {
   document.getElementById('pickCountLbl').textContent = count === 0
     ? 'Pick at least one part'
     : `✅ ${count} ${count === 1 ? 'part' : 'parts'} selected`;
-let editingLectureId = null;
-
-document.addEventListener('click', (e) => {
-  const editBtn = e.target.closest('[data-edit-lect]');
-  if (editBtn) {
-    e.stopPropagation();
-    openEditLectureModal(editBtn.dataset.editLect);
-  }
-});
-
-function openEditLectureModal(id) {
-  const ds = getActiveDataset();
-  const lect = ds.lectures.find(x => x.id === id);
-  if (!lect) return;
-
-  editingLectureId = id;
-  document.getElementById('editLectTitleInput').value = lect.t;
-  
-  const dObj = lect.recordedDate ? new Date(lect.recordedDate) : new Date();
-  document.getElementById('editLectDateInput').value = dObj.toISOString().slice(0, 10);
-  
-  document.getElementById('editLectureDlg').showModal();
 }
 
-document.getElementById('closeEditLectBtn').addEventListener('click', () => {
-  document.getElementById('editLectureDlg').close();
-});
-
-document.getElementById('saveEditLectBtn').addEventListener('click', async () => {
-  if (!editingLectureId) return;
-  const ds = getActiveDataset();
-  const lect = ds.lectures.find(x => x.id === editingLectureId);
-  if (!lect) return;
-
-  const newTitle = document.getElementById('editLectTitleInput').value.trim();
-  const newDateVal = document.getElementById('editLectDateInput').value;
-  if (!newTitle || !newDateVal) { alert('Title and date are required.'); return; }
-
-  const newDateObj = new Date(newDateVal + 'T12:00:00');
-  
-  lect.t = newTitle;
-  lect.d = newDateObj.toLocaleDateString('en-US', { weekday: 'short' });
-  lect.n = newDateObj.getDate();
-  lect.recordedDate = newDateObj.toISOString();
-
-  const currentClass = CLASSES.find(c => c.code === activeClassCode);
-  const clientId = lect.clientId || `lect_${activeClassCode}_${lect.id}`;
-  
-  await idbPut('lectures', {
-    clientId: clientId,
-    classCode: activeClassCode,
-    className: currentClass.name,
-    periodNumber: currentClass.period,
-    recordedDate: lect.recordedDate,
-    unitKey: ds.unitKey,
-    unitTitle: ds.unitTitle,
-    partNumber: ds.lectures.indexOf(lect) + 1,
-    topicLabel: lect.t,
-    topicIcon: lect.i,
-    processingStatus: 'Completed',
-    isDemo: false,
-    isDirty: true,
-    studyPayload: JSON.stringify(lect)
-  });
-
-  document.getElementById('editLectureDlg').close();
-  renderAll();
-  showToast('Lesson updated! Changes will sync to SharePoint.');
-});}
-  
 function getSourceBadgeHtml(src) {
   const map = {
     'Audio': '🎙️ Class Audio',
@@ -1208,6 +1139,9 @@ function renderStudyGuide() {
 
   let html = '';
   selected.forEach((l, idx) => {
+    // Render multi-concepts if available, or fallback to single
+    const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
+
     html += `
       <div class="card">
         ${getSourceBadgeHtml(l.src || 'Notes')}
@@ -1218,7 +1152,7 @@ function renderStudyGuide() {
       <div class="card">
         <h3>🔑 Core Concepts <button class="say btn-speak" data-target="conceptsList_${l.id}">🔊 Read</button></h3>
         <ul id="conceptsList_${l.id}">
-          <li><strong>${l.bold_stem}:</strong> ${applyBionic(l.c)} <span class="badge">Part ${idx + 1}</span></li>
+          ${conceptsArray.map(cp => `<li><strong>${applyBionic(cp.bold_stem)}:</strong> ${applyBionic(cp.text)}</li>`).join('')}
         </ul>
       </div>
       <div class="card" style="border-color:var(--c)">
@@ -1248,11 +1182,48 @@ function renderStudyGuide() {
   container.innerHTML = html;
 }
 
+// Support multiple questions per lecture
 function getQuizSet() {
   const selected = getSelectedLectures();
-  if (!quizRetryIds) return selected;
-  const set = selected.filter(l => quizRetryIds.includes(l.id));
-  return set.length ? set : selected;
+  let questions = [];
+
+  selected.forEach(l => {
+    if (l.quizItems && l.quizItems.length) {
+      l.quizItems.forEach((qi, qIdx) => {
+        questions.push({
+          parentLecture: l,
+          id: `${l.id}_q${qIdx}`,
+          lectureId: l.id,
+          q: qi.q,
+          options: qi.options,
+          correct: qi.correct,
+          feedback: qi.feedback,
+          ts: l.ts,
+          t: l.t,
+          i: l.i
+        });
+      });
+    } else if (l.q) {
+      questions.push({
+        parentLecture: l,
+        id: `${l.id}_q0`,
+        lectureId: l.id,
+        q: l.q[0],
+        options: l.q[1],
+        correct: l.q[2],
+        feedback: 'Correct biological term.',
+        ts: l.ts,
+        t: l.t,
+        i: l.i
+      });
+    }
+  });
+
+  if (quizRetryIds && quizRetryIds.length) {
+    const filtered = questions.filter(item => quizRetryIds.includes(item.id));
+    return filtered.length ? filtered : questions;
+  }
+  return questions;
 }
 
 function resetQuiz(retryIds) {
@@ -1279,7 +1250,7 @@ function renderQuiz() {
         <p style="font-size:24px;font-weight:700;color:var(--ok)">Score: ${quizScore} / ${set.length}</p>
         <p>${missed.length
           ? `You missed ${missed.length}. Run just those again while they are fresh.`
-          : 'Clean sweep. Try a bigger set from the Unit Map when you are ready.'}</p>
+          : 'Clean sweep! All active recall concepts mastered.'}</p>
         <div class="chips" style="justify-content:center">
           ${missed.length ? `<button class="btn" id="retryMissedBtn">🔁 Retry missed (${missed.length})</button>` : ''}
           <button class="btn alt" id="testWeakSpotsBtn">🎯 Test My Weak Spots</button>
@@ -1302,8 +1273,8 @@ function renderQuiz() {
     </div>
     <div class="progress-bar"><i style="width:${(quizIndex / set.length) * 100}%"></i></div>
     <div class="card">
-      <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q[0]))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
-      ${cur.q[1].map((opt, idx) => `<button class="opt" data-opt="${idx}">${escText(opt)}</button>`).join('')}
+      <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
+      ${cur.options.map((opt, idx) => `<button class="opt" data-opt="${idx}">${escText(opt)}</button>`).join('')}
       <div id="quizFeedback" class="center" style="margin-top:10px;font-weight:600"></div>
     </div>
   `;
@@ -1312,17 +1283,17 @@ function renderQuiz() {
     btn.onclick = () => {
       container.querySelectorAll('.opt').forEach(b => b.disabled = true);
       const chosen = parseInt(btn.dataset.opt, 10);
-      const isCorrect = chosen === cur.q[2];
+      const isCorrect = chosen === cur.correct;
       btn.classList.add(isCorrect ? 'ok' : 'no');
-      if (!isCorrect) container.querySelector(`.opt[data-opt="${cur.q[2]}"]`).classList.add('ok');
+      if (!isCorrect) container.querySelector(`.opt[data-opt="${cur.correct}"]`).classList.add('ok');
       const fb = document.getElementById('quizFeedback');
       if (isCorrect) {
         quizScore++;
         fb.innerHTML = '🎉 That is correct!';
       } else {
         if (!quizMissed.includes(cur.id)) quizMissed.push(cur.id);
-        recordExchange(cur.id, `Missed Drill Question: ${cur.q[0]}`, `Correct: ${cur.q[1][cur.q[2]]}`, true);
-        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.q[1][cur.q[2]])}</b> <span class="badge">${cur.ts}</span>`;
+        recordExchange(cur.lectureId, `Missed Drill Question: ${cur.q}`, `Correct: ${cur.options[cur.correct]}`, true);
+        fb.innerHTML = `Review note: Correct answer is <b>${escText(cur.options[cur.correct])}</b>`;
       }
       const answeredId = cur.id;
       setTimeout(() => {
@@ -1377,7 +1348,7 @@ document.addEventListener('click', (e) => {
 });
 
 /* =====================================================================
-   SECTION 6 - DUAL INTAKE ATTACHMENTS (WITH CLASS DATE PICKER)
+   SECTION 6 - MULTI-FILE INTAKE QUEUE (PDFs, Images, TXT)
    ===================================================================== */
 const mainDropzone = document.getElementById('mainDropzone');
 const mainFileInput = document.getElementById('mainIntakeFileInput');
@@ -1391,86 +1362,92 @@ mainDropzone.addEventListener('click', () => mainFileInput.click());
   mainDropzone.addEventListener(name, (e) => { e.preventDefault(); mainDropzone.classList.remove('dragover'); });
 });
 mainDropzone.addEventListener('drop', (e) => {
-  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-    handleIntakeFile(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files && e.dataTransfer.files.length) {
+    Array.from(e.dataTransfer.files).forEach(f => handleStagedFile(f));
   }
 });
 
 mainFileInput.addEventListener('change', (e) => {
-  if (e.target.files && e.target.files[0]) {
-    handleIntakeFile(e.target.files[0]);
+  if (e.target.files && e.target.files.length) {
+    Array.from(e.target.files).forEach(f => handleStagedFile(f));
   }
 });
 
-function handleIntakeFile(file) {
-  stagedFileName = file.name;
+function handleStagedFile(file) {
   const isPdf = file.name.endsWith('.pdf') || file.type === 'application/pdf';
   const isImg = file.type.startsWith('image/');
 
   if (isPdf || isImg) {
     const reader = new FileReader();
     reader.onload = (ev) => {
-      stagedFileBase64 = ev.target.result.split(',')[1];
-      stagedFileMime = file.type || (isPdf ? 'application/pdf' : 'image/jpeg');
-      stagedFileType = isPdf ? 'pdf' : 'image';
-      renderStagedFileUI();
-      showToast(`${isPdf ? 'PDF' : 'Photo'} staged: ${file.name}`);
+      stagedFiles.push({
+        id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
+        name: file.name,
+        type: isPdf ? 'pdf' : 'image',
+        mime: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+        base64: ev.target.result.split(',')[1]
+      });
+      renderStagedFiles();
+      showToast(`Staged: ${file.name}`);
     };
     reader.readAsDataURL(file);
   } else {
+    // Plain text / notepad
     const reader = new FileReader();
     reader.onload = (ev) => {
-      stagedFileBase64 = null;
-      stagedFileMime = 'text/plain';
-      stagedFileType = 'text';
-      document.getElementById('mainPastedNotes').value = ev.target.result;
-      renderStagedFileUI();
-      showToast(`Notes loaded: ${file.name}`);
+      const cur = document.getElementById('mainPastedNotes').value;
+      document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[File: ${file.name}]\n` + ev.target.result;
+      showToast(`Appended text notes: ${file.name}`);
     };
     reader.readAsText(file);
   }
 }
 
-function renderStagedFileUI() {
-  const box = document.getElementById('stagedFileBox');
-  const lbl = document.getElementById('stagedFileLabel');
-  if (stagedFileName) {
-    box.style.display = 'flex';
-    lbl.textContent = `📎 ${stagedFileName} (${stagedFileType.toUpperCase()})`;
-  } else {
-    box.style.display = 'none';
-    lbl.textContent = '';
-  }
+function renderStagedFiles() {
+  const container = document.getElementById('stagedFilesContainer');
+  container.innerHTML = '';
+  stagedFiles.forEach(f => {
+    const chip = document.createElement('div');
+    chip.className = 'staged-chip';
+    chip.innerHTML = `
+      <span>${f.type === 'pdf' ? '📄' : '📷'} ${escText(f.name)}</span>
+      <button class="say sm" data-remove-file="${f.id}" style="padding:1px 5px;font-size:11px">✕</button>
+    `;
+    container.appendChild(chip);
+  });
 }
 
-function clearStagedFile() {
-  stagedFileBase64 = null;
-  stagedFileMime = null;
-  stagedFileName = null;
-  stagedFileType = null;
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove-file]');
+  if (btn) {
+    stagedFiles = stagedFiles.filter(f => f.id !== btn.dataset.removeFile);
+    renderStagedFiles();
+  }
+});
+
+function clearStagedFiles() {
+  stagedFiles = [];
   mainFileInput.value = '';
   document.getElementById('mainPastedNotes').value = '';
-  renderStagedFileUI();
+  renderStagedFiles();
 }
 
-document.getElementById('clearStagedFileBtn').addEventListener('click', clearStagedFile);
-
 /* =====================================================================
-   SECTION 7 - REAL AI INTAKE ENGINE (GEMINI MULTIMODAL)
+   SECTION 7 - REAL AI MULTIMODAL INTAKE ENGINE (GEMINI 3-SERIES)
    ===================================================================== */
 document.getElementById('generateIntakeBtn').addEventListener('click', async () => {
   const pastedNotes = document.getElementById('mainPastedNotes').value.trim();
   const hasAudio = activeRecordingSession && activeRecordingSession.chunksCount > 0;
-  const hasFile = !!stagedFileBase64;
+  const hasFiles = stagedFiles.length > 0;
   const hasNotes = !!pastedNotes;
 
-  if (hasAudio && !hasFile && !hasNotes) {
-    alert('Audio transcription pipeline is in setup. Please attach a Canvas PDF, photo, or paste teacher notes to generate your study guide.');
+  if (hasAudio && !hasFiles && !hasNotes) {
+    alert('Audio transcription pipeline is in setup. Please attach a Canvas PDF, photo, or paste notes to generate your study guide.');
     return;
   }
 
-  if (!hasFile && !hasNotes) {
-    alert('Please attach a Canvas PDF / Photo or paste teacher notes first.');
+  if (!hasFiles && !hasNotes) {
+    alert('Please attach at least one Canvas PDF / Photo or paste notes first.');
     return;
   }
 
@@ -1484,7 +1461,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const btn = document.getElementById('generateIntakeBtn');
   btn.disabled = true;
   btn.textContent = '⏳ Analyzing materials with Gemini…';
-  showToast('Processing lesson with Gemini AI…');
+  showToast(`Processing ${stagedFiles.length} file(s) with Gemini AI…`);
 
   const readingLevel = localStorage.getItem('ss_reading_level') || '5';
   const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
@@ -1493,18 +1470,30 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
   const pickedDateVal = document.getElementById('intakeClassDate').value;
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
+  const dateIsoString = classDateObj.toISOString().slice(0, 10);
 
-  const prompt = `You are an expert high school study coach creating study materials for a student in ${currentClass.name}.
-Analyze all attached materials (Canvas handouts, whiteboard photos, or teacher notes).
+  const prompt = `You are an expert high school study coach creating study materials for a 9th-grade student in ${currentClass.name}.
+Analyze all attached handouts, slides, whiteboard photos, or teacher notes thoroughly.
 
-Return your response strictly as valid, raw JSON (no conversational text, no markdown backticks):
+TODAY'S REFERENCE DATE IS: ${dateIsoString}.
+If materials mention relative deadlines (e.g. "quiz next Friday" or "due tomorrow"), calculate and output the exact ISO date string (YYYY-MM-DD).
+
+Return your response strictly as valid, raw JSON (no conversational prose, no markdown backticks):
 {
-  "topic_label": "Concise Topic Name (e.g. Cellular Respiration)",
+  "topic_label": "Concise Overall Topic (e.g. Photosynthesis & Cellular Respiration)",
   "topic_icon": "Single appropriate emoji",
-  "source_type": "${stagedFileType === 'image' ? 'Photo' : 'Handout'}",
+  "source_type": "${stagedFiles.some(f => f.type === 'image') ? 'Photo' : 'Handout'}",
   "big_idea": "Core central takeaway in 1-2 punchy sentences.",
-  "bold_stem": "Key anchor phrase",
-  "core_concept_text": "Clear explanation adhering to Grade ${readingLevel} reading level.",
+  "core_concepts": [
+    {
+      "bold_stem": "Key anchor phrase for Concept 1",
+      "text": "Clear explanation adhering to Grade ${readingLevel} reading level."
+    },
+    {
+      "bold_stem": "Key anchor phrase for Concept 2",
+      "text": "Clear explanation adhering to Grade ${readingLevel} reading level."
+    }
+  ],
   "analogy": "Relatable comparison using aviation, mechanics, WWII strategy, soccer tactics, or gaming physics.",
   "teacher_cue": "Any test hint, deadline, or 'remember this' cue found in materials.",
   "cue_approx_time": "Handout Section",
@@ -1513,17 +1502,27 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
     "type": "Test or Quiz or Homework",
     "due_iso": "YYYY-MM-DD or null"
   },
-  "quiz_question": "One active recall check question",
-  "quiz_options": ["Option A", "Option B", "Option C"],
-  "quiz_correct_index": 0,
-  "quiz_feedback": "Encouraging explanation of the correct answer."
+  "quiz_questions": [
+    {
+      "q": "Active recall check question covering Concept 1",
+      "options": ["Option A", "Option B", "Option C"],
+      "correct": 0,
+      "feedback": "Encouraging explanation. Distractors must be realistic, plausible academic terms from ${currentClass.name}. Do NOT use joke answers or analogy words."
+    },
+    {
+      "q": "Active recall check question covering Concept 2",
+      "options": ["Option A", "Option B", "Option C"],
+      "correct": 0,
+      "feedback": "Encouraging explanation. Distractors must be realistic academic terms."
+    }
+  ]
 }`;
 
   try {
     const parts = [];
-    if (hasFile) {
-      parts.push({ inlineData: { mimeType: stagedFileMime, data: stagedFileBase64 } });
-    }
+    stagedFiles.forEach(f => {
+      parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+    });
     if (hasNotes) {
       parts.push({ text: `[TEACHER CANVAS / HANDOUT NOTES]\n${pastedNotes}` });
     }
@@ -1549,6 +1548,14 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
     const newId = `${activeClassCode.toLowerCase()}_${Date.now()}`;
     const dateIso = classDateObj.toISOString();
 
+    const formattedConcepts = parsed.core_concepts && parsed.core_concepts.length
+      ? parsed.core_concepts
+      : [{ bold_stem: parsed.topic_label, text: parsed.big_idea }];
+
+    const formattedQuiz = parsed.quiz_questions && parsed.quiz_questions.length
+      ? parsed.quiz_questions
+      : [{ q: 'Key review check', options: ['Option A', 'Option B'], correct: 0, feedback: 'Correct.' }];
+
     const newLecture = {
       id: newId,
       clientId: `lect_${activeClassCode}_${newId}`,
@@ -1559,16 +1566,32 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       t: parsed.topic_label || 'New Topic',
       src: parsed.source_type || 'Handout',
       c: parsed.big_idea || '',
-      bold_stem: parsed.bold_stem || parsed.topic_label,
+      bold_stem: formattedConcepts[0].bold_stem,
+      concepts: formattedConcepts,
       analogy: parsed.analogy || '',
       cue: parsed.teacher_cue || null,
-      ts: parsed.cue_approx_time || 'Class note',
+      ts: parsed.cue_approx_time || 'Class handout',
       recordedDate: dateIso,
-      q: [parsed.quiz_question, parsed.quiz_options, parsed.quiz_correct_index]
+      quizItems: formattedQuiz,
+      q: [formattedQuiz[0].q, formattedQuiz[0].options, formattedQuiz[0].correct]
     };
 
     ds.lectures.push(newLecture);
     pickedLectures = { [newId]: true };
+
+    // Separate clean payloads for SharePoint columns
+    const studyPayloadClean = {
+      source_type: newLecture.src,
+      big_idea: newLecture.c,
+      core_concepts: formattedConcepts,
+      analogy: newLecture.analogy,
+      teacher_cues: newLecture.cue ? [{ cue: newLecture.cue, ts: newLecture.ts }] : []
+    };
+
+    const practicePayloadClean = {
+      quiz: formattedQuiz,
+      flashcards: formattedConcepts.map(c => ({ front: c.bold_stem, back: c.text }))
+    };
 
     await idbPut('lectures', {
       clientId: newLecture.clientId,
@@ -1584,12 +1607,14 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       processingStatus: 'Completed',
       isDemo: false,
       isDirty: true,
-      studyPayload: JSON.stringify(newLecture)
+      studyPayload: JSON.stringify(newLecture),
+      studyPayloadClean: JSON.stringify(studyPayloadClean),
+      practicePayloadClean: JSON.stringify(practicePayloadClean)
     });
 
     if (parsed.deadline_item && parsed.deadline_item.title) {
       const dl = {
-        deadlineId: `dl_${activeClassCode}_${Date.now()}`,
+        deadlineId: `dl_${activeClassCode}_${newId}`,
         title: parsed.deadline_item.title,
         class: currentClass.name,
         classCode: activeClassCode,
@@ -1604,13 +1629,13 @@ Return your response strictly as valid, raw JSON (no conversational text, no mar
       cachedDeadlines.push(dl);
     }
 
-    clearStagedFile();
+    clearStagedFiles();
     activeRecordingSession = null;
     document.getElementById('recTimer').textContent = '0:00 · saved';
 
     renderAll();
     navigateTo('guide');
-    showToast('🎉 Study Guide & Practice Drill generated!');
+    showToast('🎉 Multi-concept Study Guide & Drill generated!');
   } catch (err) {
     alert('Processing error: ' + err.message);
   } finally {
@@ -2019,7 +2044,7 @@ Return strictly valid, raw JSON array (no markdown backticks):
 }
 
 /* =====================================================================
-   SECTION 10 - SAFE GRAPH SYNC WITH DIRTY FLAGS & RETRY-AFTER
+   SECTION 10 - SAFE GRAPH SYNC (CLEAN SPLIT STUDY & PRACTICE PAYLOADS)
    ===================================================================== */
 const GRAPH_SCOPES = ["User.Read", "Sites.ReadWrite.All"];
 const SHAREPOINT_DOMAIN = "rmr1971.sharepoint.com";
@@ -2152,7 +2177,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     const token = await getMsalToken();
     const siteId = await resolveSiteId(token);
 
-    showToast('Checking for unsynced lectures, deadlines, schedules & chats…');
+    showToast('Checking for unsynced lectures, deadlines & chats…');
     let syncedLectures = 0, syncedDeadlines = 0, syncedChatsCount = 0;
 
     // 1. SYNC ALL DIRTY LECTURES
@@ -2174,8 +2199,9 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         TopicLabel: r.topicLabel,
         TopicIcon: r.topicIcon,
         ProcessingStatus: 'Completed',
-        StudyPayload_JSON: r.studyPayload,
-        SchemaVersion: 4
+        StudyPayload_JSON: r.studyPayloadClean || r.studyPayload,
+        PracticePayload_JSON: r.practicePayloadClean || '',
+        SchemaVersion: 5
       };
 
       const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${r.clientId}'&$expand=fields`;
@@ -2277,44 +2303,12 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       }
     }
 
-    // 4. SYNC CLASSES / SCHEDULE IF CHANGED
+    // 4. SYNC SCHEDULE IF MODIFIED
     if (localStorage.getItem('ss_dirty_classes') === 'true') {
-      for (const cls of CLASSES) {
-        const clsPayload = {
-          Title: cls.name,
-          ClassCode: cls.code,
-          TeacherName: cls.teacher || '',
-          PeriodNumber: cls.period,
-          MeetingDays: cls.days || '',
-          MeetingTime: cls.time || '',
-          ColorHex: cls.color || '#2F6FDE',
-          IconEmoji: cls.icon || '📚',
-          NeedsScribe: cls.needsScribe !== false,
-          SortOrder: cls.period,
-          Term: cls.term || 'Fall 26/27',
-          IsActive: true
-        };
-
-        const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
-        const cCheckRes = await fetchGraphWithRetry(cCheckUrl, { method: 'GET' }, token);
-        const cCheckData = await cCheckRes.json();
-
-        if (cCheckData.value && cCheckData.value.length > 0) {
-          await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items/${cCheckData.value[0].id}/fields`, {
-            method: 'PATCH',
-            body: JSON.stringify(clsPayload)
-          }, token);
-        } else {
-          await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items`, {
-            method: 'POST',
-            body: JSON.stringify({ fields: clsPayload })
-          }, token);
-        }
-      }
-      localStorage.removeItem('ss_dirty_classes');
+      await pushClassesToSharePoint(siteId, token);
     }
 
-    // Refresh remote deadlines to update Flight Radar
+    // Pull down updated deadlines to refresh Flight Radar
     const remoteDlRes = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Deadlines/items?$expand=fields&$top=50`, { method: 'GET' }, token);
     const remoteDlData = await remoteDlRes.json();
     if (remoteDlData.value) {
@@ -2340,9 +2334,116 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
   }
 });
 
+async function pushClassesToSharePoint(siteId, token) {
+  for (const cls of CLASSES) {
+    const clsPayload = {
+      Title: cls.name,
+      ClassCode: cls.code,
+      TeacherName: cls.teacher || '',
+      PeriodNumber: cls.period,
+      MeetingDays: cls.days || '',
+      MeetingTime: cls.time || '',
+      ColorHex: cls.color || '#2F6FDE',
+      IconEmoji: cls.icon || '📚',
+      NeedsScribe: cls.needsScribe !== false,
+      SortOrder: cls.period,
+      Term: cls.term || 'Fall 26/27',
+      IsActive: true
+    };
+
+    const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
+    const cCheckRes = await fetchGraphWithRetry(cCheckUrl, { method: 'GET' }, token);
+    const cCheckData = await cCheckRes.json();
+
+    if (cCheckData.value && cCheckData.value.length > 0) {
+      await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items/${cCheckData.value[0].id}/fields`, {
+        method: 'PATCH',
+        body: JSON.stringify(clsPayload)
+      }, token);
+    } else {
+      await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items`, {
+        method: 'POST',
+        body: JSON.stringify({ fields: clsPayload })
+      }, token);
+    }
+  }
+  localStorage.removeItem('ss_dirty_classes');
+}
+
 /* =====================================================================
-   SECTION 11 - STUDENT QUICK-EDIT, PARENT VAULT & START UNIT MODALS
+   SECTION 11 - MODALS (EDIT LECTURE, SCHEDULE & PARENT VAULT)
    ===================================================================== */
+let editingLectureId = null;
+
+document.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('[data-edit-lect]');
+  if (editBtn) {
+    e.stopPropagation();
+    openEditLectureModal(editBtn.dataset.editLect);
+  }
+});
+
+function openEditLectureModal(id) {
+  const ds = getActiveDataset();
+  const lect = ds.lectures.find(x => x.id === id);
+  if (!lect) return;
+
+  editingLectureId = id;
+  document.getElementById('editLectTitleInput').value = lect.t;
+  
+  const dObj = lect.recordedDate ? new Date(lect.recordedDate) : new Date();
+  document.getElementById('editLectDateInput').value = dObj.toISOString().slice(0, 10);
+  
+  document.getElementById('editLectureDlg').showModal();
+}
+
+document.getElementById('closeEditLectBtn').addEventListener('click', () => {
+  document.getElementById('editLectureDlg').close();
+});
+
+document.getElementById('saveEditLectBtn').addEventListener('click', async () => {
+  if (!editingLectureId) return;
+  const ds = getActiveDataset();
+  const lect = ds.lectures.find(x => x.id === editingLectureId);
+  if (!lect) return;
+
+  const newTitle = document.getElementById('editLectTitleInput').value.trim();
+  const newDateVal = document.getElementById('editLectDateInput').value;
+  if (!newTitle || !newDateVal) { alert('Title and date are required.'); return; }
+
+  const newDateObj = new Date(newDateVal + 'T12:00:00');
+  
+  lect.t = newTitle;
+  lect.d = newDateObj.toLocaleDateString('en-US', { weekday: 'short' });
+  lect.n = newDateObj.getDate();
+  lect.recordedDate = newDateObj.toISOString();
+
+  const currentClass = CLASSES.find(c => c.code === activeClassCode);
+  const clientId = lect.clientId || `lect_${activeClassCode}_${lect.id}`;
+  
+  await idbPut('lectures', {
+    clientId: clientId,
+    classCode: activeClassCode,
+    className: currentClass.name,
+    periodNumber: currentClass.period,
+    recordedDate: lect.recordedDate,
+    unitKey: ds.unitKey,
+    unitTitle: ds.unitTitle,
+    partNumber: ds.lectures.indexOf(lect) + 1,
+    topicLabel: lect.t,
+    topicIcon: lect.i,
+    processingStatus: 'Completed',
+    isDemo: false,
+    isDirty: true,
+    studyPayload: JSON.stringify(lect)
+  });
+
+  document.getElementById('editLectureDlg').close();
+  renderAll();
+  showToast('Lesson updated! Changes will sync to SharePoint.');
+});
+
+// Student Quick-Edit Schedule
 let editingClassCode = null;
 
 function openStudentScheduleModal(code) {
@@ -2355,7 +2456,6 @@ function openStudentScheduleModal(code) {
   document.getElementById('studentSchedTime').value = cls.time || '';
   document.getElementById('studentSchedTeacher').value = cls.teacher || '';
 
-  // Highlight active day toggle chips
   const currentDays = (cls.days || '').toLowerCase();
   document.querySelectorAll('.day-toggle-btn').forEach(btn => {
     const day = btn.dataset.day.toLowerCase();
@@ -2369,7 +2469,6 @@ document.getElementById('closeStudentSchedBtn').addEventListener('click', () => 
   document.getElementById('studentScheduleDlg').close();
 });
 
-// Clickable Day Chips to easily toggle days into the input field
 document.querySelectorAll('.day-toggle-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const day = btn.dataset.day;
@@ -2457,7 +2556,7 @@ function openParentVault() {
 
 document.getElementById('closeCfgBtn').addEventListener('click', () => document.getElementById('cfgDlg').close());
 
-// Start New Unit Handler
+// Start New Unit Modal
 document.getElementById('startNewUnitBtn').addEventListener('click', () => {
   const ds = getActiveDataset();
   const currentNum = parseInt((ds.unitKey || 'U1').replace(/\D/g, ''), 10) || 1;
@@ -2483,7 +2582,103 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
   showToast(`Started ${title}!`);
 });
 
-// Pull Classes from SharePoint
+// Parent Vault Schedule & Term Editor
+document.getElementById('openScheduleEditorBtn').addEventListener('click', () => {
+  renderParentScheduleEditor();
+  document.getElementById('scheduleDlg').showModal();
+});
+document.getElementById('closeScheduleBtn').addEventListener('click', () => {
+  document.getElementById('scheduleDlg').close();
+});
+
+function renderParentScheduleEditor() {
+  const body = document.getElementById('scheduleEditorBody');
+  body.innerHTML = '';
+  CLASSES.forEach((c, idx) => {
+    body.innerHTML += `
+      <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b>${c.icon} ${c.name} (P${c.period})</b>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="parentSchedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe Active
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <label style="font-size:11px">Class Name: <input type="text" id="parentSchedName_${idx}" value="${c.name}"></label>
+          <label style="font-size:11px">Teacher: <input type="text" id="parentSchedTeacher_${idx}" value="${c.teacher || ''}"></label>
+          <label style="font-size:11px">Days: <input type="text" id="parentSchedDays_${idx}" value="${c.days || ''}"></label>
+          <label style="font-size:11px">Time: <input type="text" id="parentSchedTime_${idx}" value="${c.time || ''}"></label>
+        </div>
+      </div>
+    `;
+  });
+}
+
+document.getElementById('addNewClassBtn').addEventListener('click', () => {
+  const newPeriod = CLASSES.length + 1;
+  CLASSES.push({
+    code: `CLS_${Date.now().toString(36).slice(2, 6).toUpperCase()}`,
+    name: `New Class (P${newPeriod})`,
+    period: newPeriod,
+    teacher: '',
+    days: 'Mon, Wed, Fri',
+    time: '08:00 - 08:50',
+    color: '#2F6FDE',
+    icon: '📚',
+    needsScribe: true,
+    term: document.getElementById('activeTermInput').value.trim() || 'Fall 26/27'
+  });
+  renderParentScheduleEditor();
+});
+
+document.getElementById('saveScheduleBtn').addEventListener('click', () => {
+  const activeTerm = document.getElementById('activeTermInput').value.trim() || 'Fall 26/27';
+  CLASSES.forEach((c, idx) => {
+    const nameEl = document.getElementById(`parentSchedName_${idx}`);
+    if (nameEl) {
+      c.name = nameEl.value.trim();
+      c.teacher = document.getElementById(`parentSchedTeacher_${idx}`).value.trim();
+      c.days = document.getElementById(`parentSchedDays_${idx}`).value.trim();
+      c.time = document.getElementById(`parentSchedTime_${idx}`).value.trim();
+      c.needsScribe = document.getElementById(`parentSchedScribe_${idx}`).checked;
+      c.term = activeTerm;
+    }
+  });
+  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+  localStorage.setItem('ss_dirty_classes', 'true');
+  renderClassRibbon();
+  updateRecScheduleHint();
+  document.getElementById('scheduleDlg').close();
+  showToast('Schedule changes saved! Ready to push to SharePoint.');
+});
+
+document.getElementById('archiveTermBtn').addEventListener('click', () => {
+  const termName = document.getElementById('activeTermInput').value.trim();
+  if (!confirm(`Archive all active classes and unit maps for ${termName} and start the next semester? Past SharePoint lecture history will remain safe.`)) return;
+
+  const nextTerm = termName.includes('Fall') ? termName.replace('Fall', 'Spring') : 'New Semester';
+  document.getElementById('activeTermInput').value = nextTerm;
+  CLASSES.forEach(c => c.term = nextTerm);
+  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
+  localStorage.setItem('ss_dirty_classes', 'true');
+  CURRICULUM = {};
+  CLASSES.forEach(c => { CURRICULUM[c.code] = { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] }; });
+  renderAll();
+  showToast(`Term archived. Ready for ${nextTerm}!`);
+});
+
+document.getElementById('pushClassesBtn').addEventListener('click', async () => {
+  try {
+    showToast('Connecting to Microsoft Graph…');
+    const token = await getMsalToken();
+    const siteId = await resolveSiteId(token);
+    await pushClassesToSharePoint(siteId, token);
+    showToast('🎉 Class schedule pushed to SharePoint Student_Classes!');
+  } catch (err) {
+    alert('Push schedule error: ' + err.message);
+  }
+});
+
 document.getElementById('pullClassesBtn').addEventListener('click', async () => {
   try {
     showToast('Pulling classes from SharePoint…');
