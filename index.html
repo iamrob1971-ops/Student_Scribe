@@ -98,6 +98,10 @@ main { padding: 4px 18px 140px; flex: 1; }
 .coverage-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--sel); border-radius: 12px; font-size: 12.5px; font-weight: 600; }
 .coverage-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
 .coverage-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+.tone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.tone-card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.tone-card.on { border-color: var(--c); box-shadow: 0 0 0 2px var(--sel); }
+.tone-card .md p { margin: 4px 0; }
 .pending-recs { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .pending-rec { display: flex; align-items: center; gap: 8px; font-size: 12.5px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 8px; text-align: left; }
 .pending-rec input { width: auto; margin: 0; }
@@ -327,6 +331,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px">
         <span id="chatSubjectBadge" style="font-size:13px;font-weight:600;color:var(--c)">Active Channel: Biology I</span>
         <div style="display:flex;gap:8px">
+          <button class="say" id="toneBtn" title="Pick how the coach talks">🗣️ Voice: Coach</button>
           <button class="say" id="openChatHistoryBtn">💬 History</button>
           <button class="say" id="newChatBtn">➕ New Chat</button>
         </div>
@@ -428,13 +433,21 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 </dialog>
  
 <!-- Parent PIN Access Modal -->
+<dialog class="cfg-dlg" id="toneDlg" style="max-width:760px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">🗣️ Pick your coach's voice</h3>
+    <button class="say" id="closeToneBtn">✕</button>
+  </div>
+  <div class="dlg-body" id="toneBody"></div>
+</dialog>
+
 <dialog class="cfg-dlg" id="pinDlg" style="max-width:380px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">🔒 Parent &amp; Settings Gate</h3>
     <button class="say" id="closePinBtn">✕</button>
   </div>
   <div class="dlg-body" style="text-align:center">
-    <p style="font-size:14px;color:var(--mut);margin:0">Enter 4-digit PIN to access cloud &amp; learner settings:</p>
+    <p id="pinPrompt" style="font-size:14px;color:var(--mut);margin:0">Enter 4-digit PIN to access cloud &amp; learner settings:</p>
     <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••" style="font-size:28px;text-align:center;letter-spacing:.3em;width:140px;margin:10px auto">
     <p id="pinError" style="color:var(--bad);font-size:13px;display:none">Incorrect PIN. Try again.</p>
   </div>
@@ -504,7 +517,8 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       </label>
       <label>Transcription Model (audio slices)
         <select id="transcribeModelSelect">
-          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Recommended for transcripts)</option>
+          <option value="gemini-3.5-flash">gemini-3.5-flash (Recommended for transcripts)</option>
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Cheapest, less accurate)</option>
           <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
           <option value="gemini-3.8-flash">gemini-3.8-flash</option>
         </select>
@@ -541,6 +555,41 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <button class="btn alt sm" id="removeDemoBtn">🧹 Remove Demo Data</button>
       <button class="btn alt sm" id="wipeDataBtn" style="color:var(--bad)">⚠️ Wipe All Local Data</button>
     </div>
+
+    <h4>Settings Baseline (Student_Config)</h4>
+    <p style="font-size:12px;color:var(--mut);margin:0">Your edits save as overrides for this student and sync to <code>Student_Config</code>. Default rows are your baseline and are never changed by the app.</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+      <button class="btn alt sm" id="seedDefaultsBtn">📌 Save built-in defaults as baseline</button>
+      <button class="btn alt sm" id="pullConfigBtn">☁️ Pull settings now</button>
+    </div>
+
+    <h4>Student &amp; Coach</h4>
+    <label>Student ID on this device (part of every saved key; keep it short and stable)
+      <input type="text" id="cfgStudentId" maxlength="12" style="width:160px;text-transform:uppercase">
+    </label>
+    <label>Student first name (optional, used sparingly by the coach)
+      <input type="text" id="cfgStudentName" maxlength="30" style="width:220px">
+    </label>
+    <label>Interests the coach may draw analogies from
+      <input type="text" id="cfgInterests" placeholder="e.g. aviation, WWII history, engines, soccer">
+    </label>
+    <p style="font-size:13px;font-weight:600;margin:10px 0 0">For <span id="cfgClassName">this class</span>:</p>
+    <label>Coach voice override
+      <select id="cfgToneClass">
+        <option value="">Use the voice he picked</option>
+        <option value="coach">Coach</option>
+        <option value="patient">Patient</option>
+        <option value="brisk">Brisk</option>
+      </select>
+    </label>
+    <label>Analogies
+      <select id="cfgAnalogyClass">
+        <option value="">Use default</option>
+        <option value="on">On (at most one, only when it helps)</option>
+        <option value="source">From the class material only</option>
+        <option value="off">Off</option>
+      </select>
+    </label>
  
     <h4>Target Reading Level Governor</h4>
     <label>Reading &amp; Syntactic Complexity Level
@@ -554,15 +603,17 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     </label>
  
     <h4>Functional Learner Profile (Prompt Injector)</h4>
-    <p style="font-size:12px;color:var(--mut);margin:0">Functional prompt guidance (no medical labels). Saved locally on this device.</p>
+    <p style="font-size:12px;color:var(--mut);margin:0">Functional guidance only. Syncs to Student_Config; never stored in the page itself. {LEVEL} is replaced with the reading level.</p>
     <textarea id="hiddenProfileText" rows="5" style="width:100%;font-size:13px;line-height:1.5"></textarea>
+    <button class="say sm" id="resetProfileBtn" type="button">↺ Reset to default</button>
  
     <h4>Master AI Prompt Instructions</h4>
     <textarea id="masterSystemPrompt" rows="5" style="width:100%;font-size:13px;line-height:1.5"></textarea>
+    <button class="say sm" id="resetMasterBtn" type="button">↺ Reset to default</button>
  
     <h4>Security &amp; TTS Settings</h4>
     <label>Change Parent PIN
-      <input type="password" id="cfgNewPin" maxlength="4" inputmode="numeric" style="width:120px">
+      <input type="password" id="cfgNewPin" maxlength="4" inputmode="numeric" placeholder="Leave blank to keep" style="width:180px">
     </label>
     <label>Read Aloud (TTS) Speed
       <select id="cfgTtsRate">
@@ -592,17 +643,213 @@ let CLASSES = [
   { code: 'STR_CND', name: 'Strength & Cond.',     period: 6, teacher: '',         days: 'Tue, Thu, Fri', time: '12:35 - 01:25', color: '#64748B', icon: '🏋️', needsScribe: false, term: 'Fall 26/27', isActive: true }
 ];
  
-const DEFAULT_PROFILE = `STUDENT PROFILE: High school student with visual and auditory processing fatigue.
-READING CEILING: Target Grade Level: {LEVEL}. Keep sentences punchy, direct, and scannable. Zero walls of text. Do NOT use childish tone; speak to him as a mature young adult.
-ANALOGY POOL: Commercial Aviation (aerodynamics, cockpits, jet engines, flight levels), WWII Tactics & Strategy, Bicycle & Engine Mechanics, Soccer Pitch Tactics, Video Game Physics, Coding logic.
-STRATEGY: Break answers into 3-4 bullet chunks. Bold the first letters of key terms. Draw fluidly from this variety of topics—do NOT repeat aviation on every concept. Keep comparisons natural and fresh. End with a quick 1-sentence check question.`;
- 
-const DEFAULT_SYSTEM_PROMPT = `You are a supportive, high-caliber study coach for a 9th-grade student.
-Follow the hidden functional profile provided.
-Keep responses concise, clear, and punchy.
-Never lecture in long paragraphs. Use clear bullet points and bold anchor stems.
-Ground all science and math concepts in realistic analogies across aviation, war history, mechanics, soccer, or gaming.`;
- 
+// Generic built-in fallbacks only. Personal details (learner profile, interests, name, PIN)
+// live in the Student_Config list in SharePoint and in this device's cache, not in this public file.
+const DEFAULT_PROFILE = `LEARNER PROFILE: High school student.
+Reading level: Grade {LEVEL}. Short, direct sentences. Scannable answers, no walls of text.
+Speak to him as a capable young adult, never as a child.`;
+
+const DEFAULT_SYSTEM_PROMPT = `You are a study coach for a high school student.
+Answer from the class material provided. Accuracy comes first: if the material does not cover something, say so before adding general knowledge.
+Keep answers short: a few sentences or 2 to 4 bullets. Bold only the key terms.
+Do not open every reply with a greeting, do not use acrostics or first-letter word games, and do not end every reply with the same sign-off.
+Ask a check question only when it would genuinely help him remember.`;
+
+const TONE_PRESETS = {
+  coach: {
+    label: 'Coach',
+    blurb: 'Direct and warm. Tells you plainly when you are off, and what to do next.',
+    rule: `TONE: Coach. Direct, warm, plain language. If his answer or idea is wrong, say so plainly ("Not quite.") and show exactly what he missed. Give credit only when it is earned, and be specific about what he did well. Never inflate praise. When it helps, end with one concrete next step.`,
+    sample: `Because cells **spend** it. ATP stores energy in its phosphate bonds. When a cell needs to do work, it breaks one phosphate off and uses the energy released, which turns ATP into **ADP**. The cell recharges ADP back into ATP later.\n\nNext step: say in one sentence what ATP turns into after it is used.`
+  },
+  patient: {
+    label: 'Patient',
+    blurb: 'Same honesty, slower. Small steps and more explanation.',
+    rule: `TONE: Patient. Honest and encouraging. Slow down: explain in small numbered steps, define terms as you use them, and check understanding before moving on. If he is wrong, say so kindly and clearly, then rebuild the idea from what he already knows. Praise real progress specifically; never inflate it.`,
+    sample: `Let's take it one step at a time.\n\n1. Cells need energy for almost everything they do.\n2. **ATP** is a molecule that holds energy in its phosphate bonds.\n3. When the cell needs energy, it breaks one phosphate off. That releases the energy, and ATP becomes **ADP**.\n4. Later the cell recharges ADP back into ATP.\n\nIt is called currency because the cell spends it and earns it back, over and over. Which step should we go over again?`
+  },
+  brisk: {
+    label: 'Brisk',
+    blurb: 'Short answers and quick checks. Good for test-night review.',
+    rule: `TONE: Brisk. Lead with the answer in one or two sentences, then at most two bullets. Quick check questions are welcome. Still correct mistakes plainly.`,
+    sample: `Cells spend ATP for energy: breaking off one phosphate releases it (**ATP → ADP**), and the cell recharges it later.\n\nCheck: what does ATP become after it is used?`
+  }
+};
+const TONE_SAMPLE_QUESTION = 'Why is ATP called the energy currency of the cell?';
+
+const ANALOGY_RULES = {
+  on: `ANALOGIES: Use at most one analogy per answer, and only when it makes the idea clearer. Prefer analogies from the class material. Otherwise draw from his interests when they fit naturally: {INTERESTS}. Never let an analogy distort the facts.`,
+  source: `ANALOGIES: Only use analogies or examples that appear in the class material itself. Do not invent outside comparisons.`,
+  off: `ANALOGIES: Do not use analogies. Explain directly.`
+};
+
+/* ---------------------------------------------------------------------
+   STUDENT + CONFIGURATION (Student_Config list, cached on this device)
+   Which value wins, most specific first:
+   this student + class override > this student override > class default > default > built-in
+   --------------------------------------------------------------------- */
+function getStudentId() {
+  return (localStorage.getItem('ss_student_id') || 'MAC').trim().toUpperCase() || 'MAC';
+}
+
+const BUILTIN_CONFIG = {
+  'prompt.master': DEFAULT_SYSTEM_PROMPT,
+  'prompt.profile': DEFAULT_PROFILE,
+  'tone': 'coach',
+  'analogy': 'on',
+  'reading_level': '5',
+  'interests': 'everyday life, sports, and technology',
+  'student_name': ''
+};
+const CONFIG_TITLES = {
+  'prompt.master': 'Master prompt', 'prompt.profile': 'Learner profile', 'tone': 'Coach voice',
+  'analogy': 'Analogies', 'reading_level': 'Reading level', 'interests': 'Interests',
+  'student_name': 'Student first name', 'pin_hash': 'Parent PIN (hashed)'
+};
+const CONFIG_CACHE_KEY = 'ss_config_rows';
+
+function loadConfigRows() {
+  try { return JSON.parse(localStorage.getItem(CONFIG_CACHE_KEY) || '[]'); } catch (e) { return []; }
+}
+function saveConfigRows(rows) {
+  localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(rows));
+}
+
+function findConfigRow(rows, key, scope, studentId, classCode) {
+  return rows.find(r => r.configKey === key && r.scope === scope && r.isActive !== false &&
+    String(r.studentId || '').toUpperCase() === studentId && String(r.classCode || '') === classCode);
+}
+
+function getConfig(key, classCode = '', opts = {}) {
+  const rows = loadConfigRows();
+  const sid = getStudentId();
+  const hit =
+    (!opts.skipOverride && classCode && findConfigRow(rows, key, 'Override', sid, classCode)) ||
+    (!opts.skipOverride && findConfigRow(rows, key, 'Override', sid, '')) ||
+    (classCode && findConfigRow(rows, key, 'Default', '', classCode)) ||
+    findConfigRow(rows, key, 'Default', '', '');
+  return hit ? hit.value : BUILTIN_CONFIG[key];
+}
+
+function hasClassOverride(key, classCode) {
+  return !!findConfigRow(loadConfigRows(), key, 'Override', getStudentId(), classCode);
+}
+
+function setConfigOverride(key, value, classCode = '') {
+  const rows = loadConfigRows();
+  const sid = getStudentId();
+  let row = rows.find(r => r.configKey === key && r.scope === 'Override' &&
+    String(r.studentId || '').toUpperCase() === sid && String(r.classCode || '') === classCode);
+  if (row) {
+    if (row.value === value && row.isActive !== false) return;
+    row.value = value; row.isActive = true; row.isDirty = true;
+  } else {
+    rows.push({
+      localId: 'cfg_' + Date.now() + Math.random().toString(36).slice(2, 6),
+      configKey: key, scope: 'Override', studentId: sid, classCode,
+      title: `${CONFIG_TITLES[key] || key}${classCode ? ' · ' + classCode : ''} · ${sid}`,
+      value, isActive: true, isDirty: true
+    });
+  }
+  saveConfigRows(rows);
+}
+
+function clearConfigOverride(key, classCode = '') {
+  const rows = loadConfigRows();
+  const sid = getStudentId();
+  const idx = rows.findIndex(r => r.configKey === key && r.scope === 'Override' &&
+    String(r.studentId || '').toUpperCase() === sid && String(r.classCode || '') === classCode && r.isActive !== false);
+  if (idx < 0) return;
+  if (!rows[idx].spItemId) rows.splice(idx, 1);          // never synced: just drop it
+  else { rows[idx].isActive = false; rows[idx].isDirty = true; } // keep history in SharePoint
+  saveConfigRows(rows);
+}
+
+// Save a value as an override only when it differs from the default; otherwise remove the override
+function saveConfigValue(key, value, classCode = '') {
+  const base = getConfig(key, classCode, { skipOverride: true });
+  if (String(value) === String(base)) clearConfigOverride(key, classCode);
+  else setConfigOverride(key, value, classCode);
+}
+
+// Creates Default rows (your baseline) for any setting that has none yet. Never overwrites existing ones.
+function seedDefaultConfigRows() {
+  const rows = loadConfigRows();
+  let added = 0;
+  Object.keys(BUILTIN_CONFIG).forEach(key => {
+    if (key === 'student_name') return;
+    if (rows.some(r => r.configKey === key && r.scope === 'Default' && !r.classCode)) return;
+    rows.push({
+      localId: 'cfg_' + Date.now() + Math.random().toString(36).slice(2, 6),
+      configKey: key, scope: 'Default', studentId: '', classCode: '',
+      title: `${CONFIG_TITLES[key] || key} · Default`,
+      value: BUILTIN_CONFIG[key], isActive: true, isDirty: true
+    });
+    added++;
+  });
+  saveConfigRows(rows);
+  return added;
+}
+
+async function hashPin(pin) {
+  const text = `scribe:${pin}`;
+  if (window.crypto && crypto.subtle) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 2166136261; // FNV-1a fallback when SubtleCrypto is unavailable
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return 'fnv' + (h >>> 0).toString(16);
+}
+
+function getStudentName() {
+  return (getConfig('student_name') || '').trim();
+}
+
+function getToneKey(classCode) {
+  const t = getConfig('tone', classCode || activeClassCode);
+  return TONE_PRESETS[t] ? t : 'coach';
+}
+
+function getAnalogyRule(classCode) {
+  const mode = getConfig('analogy', classCode || activeClassCode);
+  const rule = ANALOGY_RULES[mode] || ANALOGY_RULES.on;
+  return rule.replace('{INTERESTS}', getConfig('interests') || BUILTIN_CONFIG.interests);
+}
+
+function getProfileText() {
+  const level = getConfig('reading_level') || '5';
+  return String(getConfig('prompt.profile') || DEFAULT_PROFILE).replace(/\{LEVEL\}/g, level);
+}
+
+// Moves V9-era device settings into config overrides once
+function migrateLegacySettings() {
+  if (localStorage.getItem('ss_config_migrated_v10')) return;
+  const oldMaster = localStorage.getItem('ss_master_prompt');
+  if (oldMaster && !oldMaster.startsWith('You are a supportive, high-caliber study coach')) {
+    setConfigOverride('prompt.master', oldMaster);
+  }
+  const oldProfile = localStorage.getItem('ss_hidden_profile');
+  if (oldProfile) {
+    const lines = oldProfile.split('\n');
+    const pool = lines.find(l => /^ANALOGY POOL:/i.test(l));
+    if (pool) setConfigOverride('interests', pool.replace(/^ANALOGY POOL:\s*/i, '').replace(/\.$/, ''));
+    // Style instructions now come from the coach voice setting, so the old STRATEGY line is dropped
+    const kept = lines.filter(l => !/^(ANALOGY POOL|STRATEGY):/i.test(l)).join('\n').trim();
+    if (kept) setConfigOverride('prompt.profile', kept);
+  }
+  const oldLevel = localStorage.getItem('ss_reading_level');
+  if (oldLevel && oldLevel !== '5') setConfigOverride('reading_level', oldLevel);
+  ['ss_master_prompt', 'ss_hidden_profile', 'ss_reading_level'].forEach(k => localStorage.removeItem(k));
+  localStorage.setItem('ss_config_migrated_v10', '1');
+}
+
+async function migrateLegacyPin() {
+  const plain = localStorage.getItem('ss_parent_pin');
+  if (plain && !getConfig('pin_hash')) setConfigOverride('pin_hash', await hashPin(plain));
+  if (plain) localStorage.removeItem('ss_parent_pin');
+}
+
 // Standalone Demo Deck
 const DEMO_CURRICULUM = {
   BIO_1: {
@@ -732,6 +979,11 @@ function getSavedUnit(classCode) {
   return { key: 'U1', title: 'Unit 1 · Current Topics' };
 }
 
+// Records without a studentId predate V10 and belong to the original student
+function isMyRecord(r) {
+  return !r || !r.studentId || String(r.studentId).toUpperCase() === getStudentId();
+}
+
 async function loadLecturesFromDB() {
   const records = await idbGetAll('lectures');
   CURRICULUM = {};
@@ -742,6 +994,7 @@ async function loadLecturesFromDB() {
   });
  
   records.forEach(r => {
+    if (!isMyRecord(r)) return; // another student's lecture on a shared device
     if (!CURRICULUM[r.classCode]) {
       CURRICULUM[r.classCode] = { unitKey: r.unitKey || 'U1', unitTitle: r.unitTitle || 'Unit 1', lectures: [] };
     }
@@ -812,6 +1065,7 @@ async function startRecording() {
       startedAt: new Date().toISOString(),
       durationSeconds: 0,
       status: 'recording',
+      studentId: getStudentId(),
       chunksCount: 0
     };
  
@@ -900,7 +1154,7 @@ let includedSessionIds = new Set();
 async function getPendingSessions(classCode) {
   const all = await idbGetAll('sessions');
   return all
-    .filter(s => s.classCode === (classCode || activeClassCode))
+    .filter(s => s.classCode === (classCode || activeClassCode) && isMyRecord(s))
     .filter(s => s.status === 'ready_for_processing' && (s.chunksCount || 0) > 0)
     .sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
 }
@@ -1227,7 +1481,7 @@ function updateRadarPills() {
   const radarEl = document.getElementById('globalRadarPill');
   const radarText = document.getElementById('radarPillText');
   const classBanner = document.getElementById('classTestPrepBanner');
-  const open = (cachedDeadlines || []).filter(d => isExamType(d) && !isDeadlineDone(d));
+  const open = (cachedDeadlines || []).filter(d => isMyRecord(d) && isExamType(d) && !isDeadlineDone(d));
 
   // Radar: nearest dated quiz/test in ANOTHER class within 7 calendar days; hidden while recording
   const radarItems = open
@@ -1373,7 +1627,11 @@ function renderCoverageBar(l) {
   const cov = l.coverage;
   if (!cov) return '';
   let h = `<div class="coverage-bar"><span>📥 Sources:</span>`;
-  (cov.expected || []).forEach(src => {
+  if (Array.isArray(cov.files) && cov.files.length) {
+    cov.files.forEach(f => {
+      h += `<span class="coverage-chip ${f.used ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${f.used ? '✔' : '⚠️ not used'}</span>`;
+    });
+  } else (cov.expected || []).forEach(src => {
     const ok = (cov.tagged || []).includes(src);
     h += `<span class="coverage-chip ${ok ? '' : 'coverage-warn'}">${SOURCE_LABELS[src] || escText(src)} ${ok ? '✔' : '⚠️ not used'}</span>`;
   });
@@ -1382,6 +1640,9 @@ function renderCoverageBar(l) {
   }
   if (cov.failedSlices) {
     h += `<span class="coverage-chip coverage-warn">⚠️ ${cov.failedSlices} audio slice(s) could not be transcribed</span>`;
+  }
+  if (cov.gaps) {
+    h += `<span class="coverage-chip coverage-warn">⚠️ ${cov.gaps} possible gap(s) in the audio transcript</span>`;
   }
   return h + `</div>`;
 }
@@ -1822,17 +2083,48 @@ async function sliceToWav(audioBuffer, startSec, endSec) {
   return encodeMonoWav(rendered.getChannelData(0), TARGET_RATE);
 }
 
-async function transcribeSlice(base64, startSec, endSec, key, model) {
-  const prompt = `Transcribe this classroom audio verbatim. Do not summarize or skip speech.
-This segment runs from ${fmtClock(startSec)} to ${fmtClock(endSec)} of the class.
-Start each new paragraph with a timestamp in [mm:ss] format measured from the START OF THE CLASS (add ${fmtClock(startSec)} to the position within this segment).
-Keep the teacher's exact words whenever they stress something for a test, quiz, or assignment.
-If there is no speech, reply exactly: [no speech]`;
-  const res = await queryGeminiWaterfall(
-    [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: base64 } }, { text: prompt }] }],
-    key, model, { temperature: 0.1, maxOutputTokens: 8192 }
-  );
-  return res.text.trim();
+const TRANSCRIBE_CONCURRENCY = 3;   // slices in flight at once
+const TAIL_GAP_SECONDS = 45;        // a slice ending this early gets its tail transcribed again
+
+// The model stamps times from 0:00 within each segment; the class time is added here, in code
+function shiftTimestamps(text, offsetSec, segLen) {
+  let lastRel = 0;
+  const out = String(text).replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g, (m, a, b, c) => {
+    let rel = c !== undefined ? (+a * 3600 + +b * 60 + +c) : (+a * 60 + +b);
+    if (rel > segLen + 5) rel = segLen;  // out-of-range stamp: clamp to segment end
+    lastRel = Math.max(lastRel, rel);
+    return `[${fmtClock(offsetSec + rel)}]`;
+  });
+  return { text: out, lastRel };
+}
+
+async function transcribeSegment(audioBuffer, start, end, key, model) {
+  const segLen = end - start;
+  const b64 = await blobToBase64(await sliceToWav(audioBuffer, start, end));
+  const prompt = `Transcribe this audio verbatim, from the first word to the very last word. Do not summarize, skip, or stop early.
+The clip is ${fmtClock(segLen)} long. Start each new paragraph with a timestamp in [mm:ss] format measured from the START OF THIS CLIP, beginning at [00:00].
+Keep the speaker's exact words whenever they stress something for a test, quiz, or assignment.
+Mark long silences or music as [no speech]. If the whole clip has no speech, reply exactly: [no speech]`;
+
+  let raw = null;
+  for (let attempt = 0; attempt < 3 && raw === null; attempt++) {
+    try {
+      const res = await queryGeminiWaterfall(
+        [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: b64 } }, { text: prompt }] }],
+        key, model, { temperature: 0.1, maxOutputTokens: 8192 }
+      );
+      raw = res.text.trim();
+    } catch (err) {
+      if (/API key/i.test(err.message)) throw err;
+      await sleep(2000 * (attempt + 1) * (attempt + 1)); // 2s, 8s, 18s
+    }
+  }
+  if (raw === null) return { failed: true, text: '', covered: 0 };
+
+  const shifted = shiftTimestamps(raw, start, segLen);
+  // Ending on [no speech] means the rest of the clip was silence, not a cut-off
+  const covered = /\[no speech\]\s*$/i.test(raw) ? segLen : shifted.lastRel;
+  return { failed: false, text: shifted.text, covered };
 }
 
 async function transcribeAudioSource(blob, label, key, onProgress) {
@@ -1840,97 +2132,163 @@ async function transcribeAudioSource(blob, label, key, onProgress) {
   const audioBuffer = await decodeAudioBlob(blob);
   const total = audioBuffer.duration;
   const count = Math.max(1, Math.ceil(total / SLICE_SECONDS));
-  const model = localStorage.getItem('ss_transcribe_model') || 'gemini-3.5-flash-lite';
-  const pieces = [];
-  let failed = 0;
+  const model = localStorage.getItem('ss_transcribe_model') || 'gemini-3.5-flash';
+  const results = new Array(count);
+  let done = 0;
 
-  for (let i = 0; i < count; i++) {
+  async function processSlice(i) {
     const start = i * SLICE_SECONDS;
     const end = Math.min(total, start + SLICE_SECONDS);
-    onProgress(`🎧 ${label}: transcribing slice ${i + 1} of ${count} (${fmtClock(start)}–${fmtClock(end)})…`);
-    const b64 = await blobToBase64(await sliceToWav(audioBuffer, start, end));
+    const first = await transcribeSegment(audioBuffer, start, end, key, model);
+    if (first.failed) {
+      results[i] = { failed: true, gap: null,
+        text: `--- [${fmtClock(start)}–${fmtClock(end)}] ---\n[This part could not be transcribed]` };
+      return;
+    }
 
-    let text = null;
-    for (let attempt = 0; attempt < 3 && text === null; attempt++) {
-      try {
-        text = await transcribeSlice(b64, start, end, key, model);
-      } catch (err) {
-        if (/API key/i.test(err.message)) throw err;
-        await sleep(2000 * (attempt + 1) * (attempt + 1)); // 2s, 8s, 18s
-      }
+    let body = first.text;
+    let coveredAbs = start + first.covered;
+    // Refill the tail when the model stopped early (up to 2 passes, each must make progress)
+    for (let pass = 0; pass < 2 && end - coveredAbs > TAIL_GAP_SECONDS; pass++) {
+      const tailStart = Math.max(start, coveredAbs - 5);
+      const tail = await transcribeSegment(audioBuffer, tailStart, end, key, model);
+      if (tail.failed) break;
+      if (tail.text.trim() && !/^\[no speech\]$/i.test(tail.text.trim())) body += '\n' + tail.text;
+      const newCovered = tailStart + tail.covered;
+      if (newCovered <= coveredAbs + 5) break;
+      coveredAbs = newCovered;
     }
-    if (text === null) {
-      failed++;
-      pieces.push(`--- [${fmtClock(start)}–${fmtClock(end)}] ---\n[This part could not be transcribed]`);
-    } else {
-      pieces.push(`--- [${fmtClock(start)}–${fmtClock(end)}] ---\n${text}`);
-    }
-    if (i < count - 1) await sleep(400);
+
+    const gap = end - coveredAbs > TAIL_GAP_SECONDS ? { from: coveredAbs, to: end } : null;
+    results[i] = {
+      failed: false, gap,
+      text: `--- [${fmtClock(start)}–${fmtClock(end)}] ---\n${body}` +
+        (gap ? `\n[Possible gap: ${fmtClock(gap.from)}–${fmtClock(gap.to)} may be missing]` : '')
+    };
   }
-  return { text: pieces.join('\n\n'), failed, durationSec: Math.round(total), slices: count };
+
+  onProgress(`🎧 ${label}: transcribing ${count} slice${count > 1 ? 's' : ''}, ${Math.min(TRANSCRIBE_CONCURRENCY, count)} at a time…`);
+  let next = 0;
+  async function worker() {
+    while (next < count) {
+      const i = next++;
+      await processSlice(i);
+      done++;
+      onProgress(`🎧 ${label}: ${done} of ${count} slices done…`);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(TRANSCRIBE_CONCURRENCY, count) }, worker));
+
+  return {
+    text: results.map(r => r.text).join('\n\n'),
+    failed: results.filter(r => r.failed).length,
+    gaps: results.filter(r => r.gap).length,
+    durationSec: Math.round(total),
+    slices: count
+  };
 }
 
 /* ---------------------------------------------------------------------
    STUDY GUIDE SCHEMA, PROMPT AND VALIDATION
    --------------------------------------------------------------------- */
 const SOURCE_KINDS = ['audio', 'pdf', 'photo', 'notes'];
-const KIND_ENUM = { type: 'STRING', enum: SOURCE_KINDS };
+const SOURCE_ICONS = { audio: '🎙️', pdf: '📄', photo: '📷', notes: '✍️' };
+const SRC = { type: 'STRING' }; // source ID such as "S2"
 
 const STUDY_SCHEMA = {
   type: 'OBJECT',
   properties: {
     sections_found: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-      title: { type: 'STRING' }, sources: { type: 'ARRAY', items: KIND_ENUM } }, required: ['title', 'sources'] } },
+      title: { type: 'STRING' }, sources: { type: 'ARRAY', items: SRC } }, required: ['title', 'sources'] } },
     topic_label: { type: 'STRING' },
     topic_icon: { type: 'STRING' },
     big_idea: { type: 'STRING' },
     core_concepts: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
       section: { type: 'STRING' }, bold_stem: { type: 'STRING' }, text: { type: 'STRING' },
-      analogy: { type: 'STRING', nullable: true }, source: KIND_ENUM },
+      analogy: { type: 'STRING', nullable: true }, source: SRC },
       required: ['section', 'bold_stem', 'text', 'source'] } },
     vocab: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-      term: { type: 'STRING' }, definition: { type: 'STRING' }, source: KIND_ENUM },
+      term: { type: 'STRING' }, definition: { type: 'STRING' }, source: SRC },
       required: ['term', 'definition', 'source'] } },
     teacher_cues: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-      cue: { type: 'STRING' }, timestamp: { type: 'STRING', nullable: true }, source: KIND_ENUM },
+      cue: { type: 'STRING' }, timestamp: { type: 'STRING', nullable: true }, source: SRC },
       required: ['cue', 'source'] } },
     deadlines: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
       title: { type: 'STRING' }, type: { type: 'STRING', enum: ['Test', 'Quiz', 'Homework'] },
-      due_iso: { type: 'STRING', nullable: true }, source: KIND_ENUM },
-      required: ['title', 'type', 'source'] } },
+      due_iso: { type: 'STRING', nullable: true }, source: SRC },
+      required: ['title', 'type', 'source'] } }
+  },
+  required: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines'],
+  propertyOrdering: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines']
+};
+
+const QUIZ_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
     quiz_questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
       q: { type: 'STRING' }, options: { type: 'ARRAY', items: { type: 'STRING' } },
       correct: { type: 'INTEGER' }, feedback: { type: 'STRING' }, section: { type: 'STRING' },
-      source: KIND_ENUM, evidence: { type: 'STRING' } },
-      required: ['q', 'options', 'correct', 'feedback', 'section', 'source', 'evidence'] } }
+      kind: { type: 'STRING', enum: ['recall', 'understanding'] },
+      source: SRC, evidence: { type: 'STRING' } },
+      required: ['q', 'options', 'correct', 'feedback', 'section', 'kind', 'source', 'evidence'] } },
+    extra_vocab: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      term: { type: 'STRING' }, definition: { type: 'STRING' }, source: SRC },
+      required: ['term', 'definition', 'source'] } }
   },
-  required: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines', 'quiz_questions'],
-  propertyOrdering: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines', 'quiz_questions']
+  required: ['quiz_questions', 'extra_vocab'],
+  propertyOrdering: ['quiz_questions', 'extra_vocab']
 };
 
-function buildStudyPrompt(className, dateIso, readingLevel) {
+function buildStudyPrompt(className, dateIso, readingLevel, sourceList, analogyRule) {
+  const ids = sourceList.map(x => `${x.id} (${x.kind}: ${x.label})`).join('; ');
   return `You are an expert high school study coach creating study materials for a student in ${className}.
 REFERENCE DATE (the day of this class): ${dateIso}. Resolve relative dates such as "next Thursday" against it.
 
-The sources above are labeled [SOURCE n · kind: name], where kind is audio, pdf, photo, or notes.
+The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on. Sources: ${ids}.
 
-1. INVENTORY FIRST: fill "sections_found" before anything else. List every distinct part, section, or topic that appears in ANY source, with the kinds of source where it appears. Keep separate parts separate.
-2. CONCEPTS: write at least one core concept for EVERY entry in sections_found, and set "section" to that entry's exact title. Never drop a section because only one source mentions it.
-3. SOURCE TAGS: every concept, vocab term, cue, deadline, and question carries "source", the kind of source it came from.
-4. ANALOGIES: attach an analogy to a concept only when it helps. If a source gives its own analogy or example for that idea, use the source's version. Otherwise you may draw on aviation, mechanics, WWII strategy, or gaming. An analogy must never contradict the facts. Use null when none is needed.
-5. TEACHER CUES: only explicit emphasis by the teacher, such as "this will be on the test", "remember this", or "know this for Friday". Restating content is not a cue. Return [] if there are none. For audio cues, copy the [mm:ss] timestamp from the transcript.
+1. INVENTORY FIRST: fill "sections_found" before anything else. List every distinct part, section, or topic that appears in ANY source, with the IDs of the sources where it appears. Keep separate parts separate, even when two sources are by the same author or on a similar theme.
+2. CONCEPTS: write at least one core concept for EVERY entry in sections_found, and set "section" to that entry's exact title. Every source (${sourceList.map(x => x.id).join(', ')}) must be the source of at least one core concept. Never drop material because only one source mentions it.
+3. SOURCE IDS: every concept, vocab term, cue, and deadline carries "source", the ID of the source it came from (for example "S2").
+4. ${analogyRule} Put an analogy in a concept's "analogy" field only when it helps; otherwise null. Most concepts should have no analogy.
+5. TEACHER CUES: only explicit emphasis by the teacher or speaker, such as "this will be on the test", "remember this", or "know this for Friday". Restating content is not a cue. Return [] if there are none. For audio cues, copy the [mm:ss] timestamp from the transcript.
 6. DEADLINES: only assignments, quizzes, or tests whose date is stated in the sources. due_iso is YYYY-MM-DD resolved against the reference date, or null when no date is stated.
-7. VOCABULARY: every key term a student would need to define on a test, each with a short definition.
-8. PRACTICE QUIZ: about 8 questions, with at least one per section in sections_found. Each has 3 or 4 options and exactly one correct answer; "correct" is the 0-based index of that option. Distractors must be plausible terms from ${className}, never jokes. "evidence" is a short phrase (under 20 words) from the source that supports the answer. "section" names the section tested.
-9. Write all explanations at a Grade ${readingLevel} reading level.
+7. VOCABULARY: at least 6 key terms a student would need to define on a test (more when the material has them), each with a short definition. Include names of people, places, and technical terms that matter.
+8. Write all explanations at a Grade ${readingLevel} reading level, in plain, mature language.
 
 Return only JSON with this shape:
-{ "sections_found":[{"title":string,"sources":[kind]}], "topic_label":string, "topic_icon":emoji, "big_idea":string,
-  "core_concepts":[{"section":string,"bold_stem":string,"text":string,"analogy":string|null,"source":kind}],
-  "vocab":[{"term":string,"definition":string,"source":kind}],
-  "teacher_cues":[{"cue":string,"timestamp":string|null,"source":kind}],
-  "deadlines":[{"title":string,"type":"Test"|"Quiz"|"Homework","due_iso":string|null,"source":kind}],
-  "quiz_questions":[{"q":string,"options":[string],"correct":integer,"feedback":string,"section":string,"source":kind,"evidence":string}] }`;
+{ "sections_found":[{"title":string,"sources":[sourceId]}], "topic_label":string, "topic_icon":emoji, "big_idea":string,
+  "core_concepts":[{"section":string,"bold_stem":string,"text":string,"analogy":string|null,"source":sourceId}],
+  "vocab":[{"term":string,"definition":string,"source":sourceId}],
+  "teacher_cues":[{"cue":string,"timestamp":string|null,"source":sourceId}],
+  "deadlines":[{"title":string,"type":"Test"|"Quiz"|"Homework","due_iso":string|null,"source":sourceId}] }`;
+}
+
+function buildQuizPrompt(className, readingLevel, study, target, avoid) {
+  const sections = study.sections.map(x => `- ${x.title}`).join('\n') || '- (one section)';
+  const concepts = study.concepts.map(c => `- [${c.section}] ${c.bold_stem}: ${c.text}`).join('\n');
+  const vocab = study.vocab.map(v => `- ${v.term}: ${v.definition}`).join('\n') || '- (none yet)';
+  return `Write a practice quiz for a high school ${className} student, based on the sources above and this study guide.
+
+SECTIONS:
+${sections}
+
+KEY CONCEPTS:
+${concepts}
+
+VOCABULARY SO FAR (${study.vocab.length} terms):
+${vocab}
+
+RULES:
+1. Write ${target} questions, with at least one for every section.
+2. Mix the kinds: about half "recall" (what, which, who) and half "understanding" (why, how, which example fits, what would happen if).
+3. Each question has exactly 4 options and one correct answer; "correct" is the 0-based index of that option.
+4. Wrong options must be plausible to a student who studied a little: the same kind of thing as the right answer, drawn from this subject and these sources. Never write joke options, and never mention hobbies, games, aviation, or technology unless the subject itself is about them.
+5. "evidence": a short phrase (under 20 words) from the source that supports the answer. "source": the source ID (S1, S2, ...).
+6. "feedback": one sentence explaining why the answer is right, without "Correct!" or praise.
+7. Plain wording at a Grade ${readingLevel} reading level.
+8. "extra_vocab": if fewer than 6 vocabulary terms are listed above, add key terms from the sources (no duplicates) until there are at least 6. Otherwise return [].${avoid && avoid.length ? `\n9. Do not repeat or reword these existing questions:\n${avoid.map(q => '- ' + q).join('\n')}` : ''}
+
+Return only JSON: { "quiz_questions":[{"q":string,"options":[string,string,string,string],"correct":integer,"feedback":string,"section":string,"kind":"recall"|"understanding","source":sourceId,"evidence":string}], "extra_vocab":[{"term":string,"definition":string,"source":sourceId}] }`;
 }
 
 function normKind(k) {
@@ -1943,6 +2301,16 @@ function normKind(k) {
   return '';
 }
 
+// Accepts "S2", "s2", "2", "SOURCE 2"; falls back to a kind word when the model ignored IDs
+function resolveSource(v, sourceList) {
+  const m = String(v || '').match(/(\d+)/);
+  if (m) {
+    const hit = sourceList.find(x => x.id === `S${m[1]}`);
+    if (hit) return { sourceId: hit.id, source: hit.kind };
+  }
+  return { sourceId: '', source: normKind(v) };
+}
+
 function parseModelJson(text) {
   const clean = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
   try { return JSON.parse(clean); } catch (e) {}
@@ -1951,50 +2319,111 @@ function parseModelJson(text) {
   throw new Error('Gemini output could not be parsed into study cards. Please try again.');
 }
 
-function normalizeStudy(parsed, expected) {
-  const arr = v => Array.isArray(v) ? v : [];
-  const str = v => (v === null || v === undefined) ? '' : String(v).trim();
+const arrOf = v => Array.isArray(v) ? v : [];
+const strOf = v => (v === null || v === undefined) ? '' : String(v).trim();
 
-  const sections = arr(parsed.sections_found).filter(x => x && str(x.title))
-    .map(x => ({ title: str(x.title), sources: arr(x.sources).map(normKind).filter(Boolean) }));
-  const concepts = arr(parsed.core_concepts).filter(c => c && (str(c.text) || str(c.bold_stem)))
-    .map(c => ({ section: str(c.section), bold_stem: str(c.bold_stem) || str(c.section) || 'Key idea',
-      text: str(c.text), analogy: str(c.analogy) || null, source: normKind(c.source) }));
-  const vocab = arr(parsed.vocab).filter(v => v && str(v.term) && str(v.definition))
-    .map(v => ({ term: str(v.term), definition: str(v.definition), source: normKind(v.source) }));
-  const cues = arr(parsed.teacher_cues).filter(c => c && str(c.cue))
-    .map(c => ({ cue: str(c.cue), timestamp: str(c.timestamp) || null, source: normKind(c.source) }));
-  // A cue cannot come from audio when no audio was provided
-  if (!expected.includes('audio')) cues.forEach(c => { if (c.source === 'audio') c.source = 'notes'; });
+function normalizeStudy(parsed, sourceList) {
+  const kinds = [...new Set(sourceList.map(x => x.kind))];
+  const sections = arrOf(parsed.sections_found).filter(x => x && strOf(x.title))
+    .map(x => ({ title: strOf(x.title), sources: arrOf(x.sources).map(v => resolveSource(v, sourceList).sourceId).filter(Boolean) }));
+  const concepts = arrOf(parsed.core_concepts).filter(c => c && (strOf(c.text) || strOf(c.bold_stem)))
+    .map(c => ({ section: strOf(c.section), bold_stem: strOf(c.bold_stem) || strOf(c.section) || 'Key idea',
+      text: strOf(c.text), analogy: strOf(c.analogy) || null, ...resolveSource(c.source, sourceList) }));
+  const vocab = arrOf(parsed.vocab).filter(v => v && strOf(v.term) && strOf(v.definition))
+    .map(v => ({ term: strOf(v.term), definition: strOf(v.definition), ...resolveSource(v.source, sourceList) }));
+  const cues = arrOf(parsed.teacher_cues).filter(c => c && strOf(c.cue))
+    .map(c => ({ cue: strOf(c.cue), timestamp: strOf(c.timestamp) || null, ...resolveSource(c.source, sourceList) }));
+  if (!kinds.includes('audio')) cues.forEach(c => { if (c.source === 'audio') c.source = 'notes'; });
 
-  const deadlines = arr(parsed.deadlines).filter(d => d && str(d.title)).map(d => {
-    const t = str(d.type);
+  const deadlines = arrOf(parsed.deadlines).filter(d => d && strOf(d.title)).map(d => {
+    const t = strOf(d.type);
     return {
-      title: str(d.title),
+      title: strOf(d.title),
       type: /test|exam/i.test(t) ? 'Test' : /quiz/i.test(t) ? 'Quiz' : 'Homework',
-      due_iso: /^\d{4}-\d{2}-\d{2}$/.test(str(d.due_iso)) ? str(d.due_iso) : null,
-      source: normKind(d.source)
+      due_iso: /^\d{4}-\d{2}-\d{2}$/.test(strOf(d.due_iso)) ? strOf(d.due_iso) : null,
+      ...resolveSource(d.source, sourceList)
     };
   });
 
-  const rawQuiz = arr(parsed.quiz_questions);
-  const quiz = rawQuiz.map(validateAndShuffle).filter(Boolean)
-    .map(q => ({ ...q, section: str(q.section), source: normKind(q.source), evidence: str(q.evidence) }));
-
-  const tagged = [...new Set([...concepts, ...vocab, ...cues, ...quiz].map(x => x.source).filter(Boolean))];
   const same = (a, b) => { a = a.toLowerCase(); b = b.toLowerCase(); return a === b || a.includes(b) || b.includes(a); };
   const missingSections = sections
     .filter(sec => !concepts.some(c => c.section && same(c.section, sec.title)))
     .map(sec => sec.title);
 
   return {
-    topic_label: str(parsed.topic_label) || 'New Topic',
-    topic_icon: str(parsed.topic_icon) || '📖',
-    big_idea: str(parsed.big_idea),
-    sections, concepts, vocab, cues, deadlines, quiz,
-    droppedQuestions: rawQuiz.length - quiz.length,
-    coverage: { expected, tagged, missingSections }
+    topic_label: strOf(parsed.topic_label) || 'New Topic',
+    topic_icon: strOf(parsed.topic_icon) || '📖',
+    big_idea: strOf(parsed.big_idea),
+    sections, concepts, vocab, cues, deadlines, quiz: [],
+    missingSections
   };
+}
+
+// Per-file coverage: each attached item must be the source of at least one core concept
+function computeCoverage(study, sourceList, extra = {}) {
+  const files = sourceList.map(x => ({
+    id: x.id, kind: x.kind, label: x.label,
+    used: study.concepts.some(c => c.sourceId === x.id)
+  }));
+  const tagged = [...new Set([...study.concepts, ...study.vocab, ...study.cues, ...study.quiz].map(i => i.source).filter(Boolean))];
+  return {
+    files,
+    expected: [...new Set(sourceList.map(x => x.kind))],
+    tagged,
+    missingSections: study.missingSections,
+    failedSlices: extra.failedSlices || 0,
+    gaps: extra.gaps || 0
+  };
+}
+
+// Drops questions whose wrong options wander off-topic (hobby words not found anywhere in the material)
+const OFFTOPIC_WORDS = /\b(jets?|airplanes?|aircraft|pilots?|cockpits?|flights?|runways?|video ?games?|gaming|gamers?|minecraft|fortnite|computer code|coding|programming)\b/i;
+function isOffTopicQuestion(q, corpus) {
+  return q.options.some((o, idx) => {
+    if (idx === q.correct) return false;
+    const m = o.match(OFFTOPIC_WORDS);
+    return m && !corpus.includes(m[0].toLowerCase());
+  });
+}
+
+async function generatePracticeQuiz(ctx) {
+  const { parts, study, sourceList, className, readingLevel, key, model, corpus, onStatus } = ctx;
+  const target = Math.min(12, Math.max(8, study.sections.length * 2));
+  const system = 'You write fair, accurate practice questions for high school students. Questions test the material, not trivia about the student.';
+  const accepted = [];
+  const seen = new Set();
+  let extraVocab = [];
+  let dropped = 0;
+
+  async function ask(n, avoid) {
+    const res = await queryGeminiWaterfall(
+      [{ role: 'user', parts: [...parts, { text: buildQuizPrompt(className, readingLevel, study, n, avoid) }] }],
+      key, model, { system, temperature: 0.3, maxOutputTokens: 12288, responseMimeType: 'application/json', responseSchema: QUIZ_SCHEMA }
+    );
+    const parsed = parseModelJson(res.text);
+    arrOf(parsed.quiz_questions).forEach(raw => {
+      const q = validateAndShuffle(raw);
+      if (!q) { dropped++; return; }
+      const sig = q.q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (seen.has(sig)) return;
+      if (isOffTopicQuestion(q, corpus)) { dropped++; return; }
+      seen.add(sig);
+      accepted.push({ ...q, section: strOf(raw.section), kind: strOf(raw.kind) || 'recall',
+        evidence: strOf(raw.evidence), ...resolveSource(raw.source, sourceList) });
+    });
+    if (!extraVocab.length) {
+      extraVocab = arrOf(parsed.extra_vocab).filter(v => v && strOf(v.term) && strOf(v.definition))
+        .map(v => ({ term: strOf(v.term), definition: strOf(v.definition), ...resolveSource(v.source, sourceList) }));
+    }
+  }
+
+  onStatus('⏳ Writing practice questions…');
+  await ask(target, []);
+  if (accepted.length < target - 2) {
+    onStatus('⏳ Topping up practice questions…');
+    try { await ask(target - accepted.length, accepted.map(q => q.q)); } catch (e) {}
+  }
+  return { quiz: accepted, extraVocab, dropped, target };
 }
 
 function parseModelJsonArray(text) {
@@ -2012,7 +2441,7 @@ function normTitle(t) {
 // AI-found deadlines are suggestions: matched against existing ones before a new row is created
 async function addSuggestedDeadline(item, ctx) {
   const dup = cachedDeadlines.find(d =>
-    d.classCode === ctx.classCode && d.typeDesc === item.type && !isDeadlineDone(d) &&
+    isMyRecord(d) && d.classCode === ctx.classCode && d.typeDesc === item.type && !isDeadlineDone(d) &&
     ((item.due_iso && d.dueDate && String(d.dueDate).slice(0, 10) === item.due_iso) ||
      normTitle(d.title) === normTitle(item.title)));
   if (dup) {
@@ -2033,6 +2462,7 @@ async function addSuggestedDeadline(item, ctx) {
     dueDate: item.due_iso,
     unitsCovered: isExam ? ctx.unitKey : '',
     sourceClientId: ctx.sourceClientId,
+    studentId: ctx.studentId || getStudentId(),
     status: DL_STATUS_OPEN,
     suggested: true,
     isDirty: true
@@ -2082,20 +2512,21 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const setStatus = t => { btn.textContent = t; };
   setStatus('⏳ Preparing materials…');
 
-  const expected = [];
-  if (hasAudio) expected.push('audio');
-  if (docFiles.some(f => f.type === 'pdf')) expected.push('pdf');
-  if (docFiles.some(f => f.type === 'image')) expected.push('photo');
-  if (hasNotes) expected.push('notes');
+  const expectedKinds = [];
+  if (hasAudio) expectedKinds.push('audio');
+  if (docFiles.some(f => f.type === 'pdf')) expectedKinds.push('pdf');
+  if (docFiles.some(f => f.type === 'image')) expectedKinds.push('photo');
+  if (hasNotes) expectedKinds.push('notes');
 
   const typeNames = { audio: 'Audio', pdf: 'Handout', photo: 'Photo', notes: 'Notes' };
-  const computedSourceType = expected.length > 1 ? 'Mixed' : typeNames[expected[0]];
+  const computedSourceType = expectedKinds.length > 1 ? 'Mixed' : typeNames[expectedKinds[0]];
 
-  const readingLevel = localStorage.getItem('ss_reading_level') || '5';
-  const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
-  const sysInst = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
   const currentClass = CLASSES.find(c => c.code === activeClassCode);
   const classCodeAtStart = activeClassCode;
+  const sid = getStudentId();
+  const readingLevel = getConfig('reading_level') || '5';
+  const sysInst = getConfig('prompt.master', classCodeAtStart) || DEFAULT_SYSTEM_PROMPT;
+  const studySystem = `${sysInst}\n\n[LEARNER PROFILE]\n${getProfileText()}`;
 
   const pickedDateVal = document.getElementById('intakeClassDate').value;
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
@@ -2103,9 +2534,11 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
   try {
     const parts = [];
-    let n = 1;
+    const sourceList = [];
+    const addSource = (kind, label) => { const id = `S${sourceList.length + 1}`; sourceList.push({ id, kind, label }); return id; };
     let transcriptAll = '';
     let failedSlices = 0;
+    let gapCount = 0;
     let totalAudioSec = 0;
     const rawMode = localStorage.getItem('ss_audio_raw_test') === 'true';
 
@@ -2121,26 +2554,28 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       if (rawMode) {
         // Diagnostic: send the file as-is to test whether Gemini accepts the format
         const mime = (blob.type || 'audio/webm').split(';')[0];
-        parts.push({ text: `[SOURCE ${n++} · audio: ${src.label} (raw ${mime}, diagnostic)]` });
+        parts.push({ text: `[${addSource('audio', src.label)} · audio: ${src.label} (raw ${mime}, diagnostic)]` });
         parts.push({ inlineData: { mimeType: mime, data: await blobToBase64(blob) } });
         continue;
       }
 
       const r = await transcribeAudioSource(blob, src.label, key, setStatus);
       failedSlices += r.failed;
+      gapCount += r.gaps;
       totalAudioSec += r.durationSec;
       transcriptAll += (transcriptAll ? '\n\n' : '') + `### ${src.label}\n${r.text}`;
-      parts.push({ text: `[SOURCE ${n++} · audio: Classroom transcript, ${src.label}]\n${r.text}` });
+      parts.push({ text: `[${addSource('audio', src.label)} · audio: transcript of ${src.label}]\n${r.text}` });
     }
 
     // 2. PDFs and photos
     docFiles.forEach(f => {
-      parts.push({ text: `[SOURCE ${n++} · ${f.type === 'pdf' ? 'pdf' : 'photo'}: ${f.name}]` });
+      const kind = f.type === 'pdf' ? 'pdf' : 'photo';
+      parts.push({ text: `[${addSource(kind, f.name)} · ${kind}: ${f.name}]` });
       parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
     });
 
     // 3. Typed or pasted notes
-    if (hasNotes) parts.push({ text: `[SOURCE ${n++} · notes: Student's notes]\n${pastedNotes}` });
+    if (hasNotes) parts.push({ text: `[${addSource('notes', 'Typed notes')} · notes: Typed notes]\n${pastedNotes}` });
 
     // Size guard: base64 and text both count toward the request limit
     const approxBytes = parts.reduce((sum, p) => sum + (p.inlineData ? p.inlineData.data.length : (p.text || '').length), 0);
@@ -2148,31 +2583,49 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       throw new Error(`These attachments add up to about ${(approxBytes / 1048576).toFixed(1)} MB, over the ~18 MB request limit. Generate with fewer files at a time.`);
     }
 
-    parts.push({ text: buildStudyPrompt(currentClass.name, dateIsoString, readingLevel) });
-
     setStatus('⏳ Building the study guide…');
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
-    const res = await queryGeminiWaterfall([{ role: 'user', parts }], key, model, {
-      system: `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}`,
-      temperature: 0.2,
-      maxOutputTokens: 16384,
-      responseMimeType: 'application/json',
-      responseSchema: STUDY_SCHEMA
-    });
+    const res = await queryGeminiWaterfall(
+      [{ role: 'user', parts: [...parts, { text: buildStudyPrompt(currentClass.name, dateIsoString, readingLevel, sourceList, getAnalogyRule(classCodeAtStart)) }] }],
+      key, model, {
+        system: studySystem,
+        temperature: 0.2,
+        maxOutputTokens: 16384,
+        responseMimeType: 'application/json',
+        responseSchema: STUDY_SCHEMA
+      });
 
-    const study = normalizeStudy(parseModelJson(res.text), expected);
+    const study = normalizeStudy(parseModelJson(res.text), sourceList);
     if (!study.concepts.length) throw new Error('Gemini returned no study concepts. Please try again.');
-    study.coverage.failedSlices = failedSlices;
+
+    // Practice quiz in its own call: no learner profile, so hobbies cannot leak into the options
+    const corpus = [transcriptAll, pastedNotes, study.big_idea,
+      ...study.concepts.map(c => `${c.bold_stem} ${c.text} ${c.analogy || ''}`),
+      ...study.vocab.map(v => `${v.term} ${v.definition}`)].join('\n').toLowerCase();
+    let quizResult = { quiz: [], extraVocab: [], dropped: 0, target: 0 };
+    try {
+      quizResult = await generatePracticeQuiz({ parts, study, sourceList, className: currentClass.name,
+        readingLevel, key, model, corpus, onStatus: setStatus });
+    } catch (qErr) {
+      console.warn('Quiz generation failed', qErr);
+    }
+    study.quiz = quizResult.quiz;
+    const haveTerms = new Set(study.vocab.map(v => v.term.toLowerCase()));
+    quizResult.extraVocab.forEach(v => { if (!haveTerms.has(v.term.toLowerCase())) { study.vocab.push(v); haveTerms.add(v.term.toLowerCase()); } });
+
+    study.coverage = computeCoverage(study, sourceList, { failedSlices, gaps: gapCount });
 
     const ds = CURRICULUM[classCodeAtStart] || getActiveDataset();
     const newId = `${classCodeAtStart.toLowerCase()}_${Date.now()}`;
+    const clientId = `lect_${sid}_${classCodeAtStart}_${newId}`;
     const dateIso = classDateObj.toISOString();
     const firstCue = study.cues[0] || null;
     const firstAnalogy = (study.concepts.find(c => c.analogy) || {}).analogy || '';
 
     const newLecture = {
       id: newId,
-      clientId: `lect_${classCodeAtStart}_${newId}`,
+      clientId,
+      studentId: sid,
       isDemo: false,
       i: study.topic_icon,
       d: classDateObj.toLocaleDateString('en-US', { weekday: 'short' }),
@@ -2220,6 +2673,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
     await idbPut('lectures', {
       clientId: newLecture.clientId,
+      studentId: sid,
       classCode: classCodeAtStart,
       className: currentClass.name,
       periodNumber: currentClass.period,
@@ -2241,7 +2695,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     let newDeadlines = 0;
     for (const item of study.deadlines) {
       const added = await addSuggestedDeadline(item, {
-        classCode: classCodeAtStart, className: currentClass.name,
+        classCode: classCodeAtStart, className: currentClass.name, studentId: sid,
         unitKey: ds.unitKey, sourceClientId: newLecture.clientId
       });
       if (added) newDeadlines++;
@@ -2265,9 +2719,13 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     navigateTo('guide');
 
     const notes = [];
+    const unusedFiles = study.coverage.files.filter(f => !f.used).length;
+    if (unusedFiles) notes.push(`${unusedFiles} source(s) not used`);
     if (study.coverage.missingSections.length) notes.push(`${study.coverage.missingSections.length} section(s) missing notes`);
     if (failedSlices) notes.push(`${failedSlices} audio slice(s) failed`);
-    if (study.droppedQuestions) notes.push(`${study.droppedQuestions} bad question(s) removed`);
+    if (gapCount) notes.push(`${gapCount} possible audio gap(s)`);
+    notes.push(`${study.quiz.length} practice question(s)`);
+    if (quizResult.dropped) notes.push(`${quizResult.dropped} weak question(s) removed`);
     if (newDeadlines) notes.push(`${newDeadlines} deadline(s) added`);
     showToast(notes.length ? `Study guide ready · ${notes.join(' · ')}` : '🎉 Study guide and practice drill ready!');
   } catch (err) {
@@ -2283,9 +2741,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
    ===================================================================== */
 function getActiveChatTargetKey() {
   const selected = getSelectedLectures();
-  if (!selected.length) return `general_${activeClassCode}`;
-  if (selected.length === 1) return selected[0].clientId || `lect_${activeClassCode}_${selected[0].id}`;
-  return `review_${activeClassCode}`;
+  const sid = getStudentId();
+  if (!selected.length) return `general_${sid}_${activeClassCode}`;
+  if (selected.length === 1) return selected[0].clientId || `lect_${sid}_${activeClassCode}_${selected[0].id}`;
+  return `review_${sid}_${activeClassCode}`;
 }
  
 function loadExchangesForTarget(targetKey) {
@@ -2320,7 +2779,42 @@ function getVisibleExchanges(targetKey) {
   return loadExchangesForTarget(targetKey).filter(ex => !cut || (ex.ts || '') > cut);
 }
  
+function updateToneButton() {
+  const btn = document.getElementById('toneBtn');
+  if (btn) btn.textContent = `🗣️ Voice: ${TONE_PRESETS[getToneKey()].label}`;
+}
+
+function openTonePicker() {
+  const current = getToneKey();
+  const locked = hasClassOverride('tone', activeClassCode);
+  const body = document.getElementById('toneBody');
+  body.innerHTML = `
+    <p style="margin:0 0 10px;font-size:14px">Same question, three voices. Pick the one you would rather study with.<br>
+      <b>Q: ${escText(TONE_SAMPLE_QUESTION)}</b></p>
+    ${locked ? `<p class="banner" style="margin:0 0 10px">A parent set this class to ${TONE_PRESETS[current].label}. Your pick applies to your other classes.</p>` : ''}
+    <div class="tone-grid">
+      ${Object.entries(TONE_PRESETS).map(([k, t]) => `
+        <div class="tone-card ${k === getConfig('tone') ? 'on' : ''}">
+          <b style="color:var(--c)">${t.label}</b>
+          <small style="color:var(--mut)">${escText(t.blurb)}</small>
+          ${mdToHtml(t.sample)}
+          <button class="btn sm" data-pick-tone="${k}">Use ${t.label}</button>
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('toneDlg').showModal();
+}
+
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-pick-tone]');
+  if (!pick) return;
+  saveConfigValue('tone', pick.dataset.pickTone); // his choice applies to every class
+  document.getElementById('toneDlg').close();
+  updateToneButton();
+  showToast(`Coach voice: ${TONE_PRESETS[pick.dataset.pickTone].label}`);
+});
+
 function loadSubjectChat() {
+  updateToneButton();
   const c = CLASSES.find(x => x.code === activeClassCode);
   const targetKey = getActiveChatTargetKey();
   document.getElementById('chatSubjectBadge').textContent = `Active: ${c.name} (${c.teacher || 'Class'})`;
@@ -2330,7 +2824,7 @@ function loadSubjectChat() {
   feed.innerHTML = `
     <div class="msg ai">
       <button class="say btn-speak">🔊</button>
-      Hi Mac, I am your <b>${c.name}</b> study coach. Ask me anything about your current notes, or tap an idea below!
+      ${getStudentName() ? `Hi ${escText(getStudentName())}. ` : ''}Ask me anything about your <b>${c.name}</b> notes, or tap an idea below.
     </div>
   `;
  
@@ -2353,6 +2847,9 @@ document.getElementById('newChatBtn').addEventListener('click', () => {
   }
 });
  
+document.getElementById('toneBtn').addEventListener('click', openTonePicker);
+document.getElementById('closeToneBtn').addEventListener('click', () => document.getElementById('toneDlg').close());
+
 document.getElementById('openChatHistoryBtn').addEventListener('click', () => {
   renderHistoryDrawer();
   document.getElementById('chatHistoryDrawer').classList.add('open');
@@ -2464,6 +2961,31 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
  
 let chatBusy = false;
 
+// Misses in the last 7 days on the selected lectures; 3 or more slows the coach down
+function recentMissCount(lectures) {
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+  let n = 0;
+  lectures.forEach(l => {
+    loadExchangesForTarget(l.clientId || '').forEach(ex => { if (ex.isMiss && (ex.ts || '') > cutoff) n++; });
+  });
+  return n;
+}
+
+function buildCoachSystem(lectures) {
+  const name = getStudentName();
+  const parts = [
+    getConfig('prompt.master', activeClassCode) || DEFAULT_SYSTEM_PROMPT,
+    `[LEARNER PROFILE]\n${getProfileText()}${name ? `\nHis name is ${name}; use it rarely, not in every reply.` : ''}`,
+    TONE_PRESETS[getToneKey()].rule,
+    getAnalogyRule()
+  ];
+  if (recentMissCount(lectures) >= 3) {
+    parts.push('He has missed several questions on this material recently. Slow down, explain step by step, and check understanding before moving on.');
+  }
+  parts.push(buildChatGrounding(lectures));
+  return parts.join('\n\n');
+}
+
 // The coach answers from the lesson itself: concepts, vocab, and the class transcript when one exists
 const CHAT_TRANSCRIPT_BUDGET = 60000; // characters across all selected lectures
 function buildChatGrounding(lectures) {
@@ -2509,11 +3031,7 @@ async function sendChatMessage(query, isRetry = false) {
   }
  
   const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
-  const readingLevel = localStorage.getItem('ss_reading_level') || '5';
-  const hiddenProfile = (localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE).replace('{LEVEL}', readingLevel);
-  const sysInst = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
- 
-  const systemContext = `${sysInst}\n\n[STUDENT FUNCTIONAL PROFILE]\n${hiddenProfile}\n\n${buildChatGrounding(getSelectedLectures())}`;
+  const systemContext = buildCoachSystem(getSelectedLectures());
  
   const targetKey = getActiveChatTargetKey();
   const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss);
@@ -2625,7 +3143,7 @@ async function generateWeakSpotDrill() {
     const lKey = l.clientId || `lect_${activeClassCode}_${l.id}`;
     exchanges.push(...loadExchangesForTarget(lKey));
   });
-  exchanges.push(...loadExchangesForTarget(`review_${activeClassCode}`)
+  exchanges.push(...loadExchangesForTarget(`review_${getStudentId()}_${activeClassCode}`)
     .filter(ex => (ex.lectureIds || []).some(id => selIds.has(id))));
   exchanges.sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
  
@@ -2635,7 +3153,7 @@ async function generateWeakSpotDrill() {
   }
  
   const prompt = `You are a high school study coach generating a 5-question recovery drill.
-Here is the audit log of questions Mac asked and drill questions he missed across these lessons:
+Here is the log of questions the student asked and drill questions he missed across these lessons:
 ${JSON.stringify(exchanges.slice(-15))}
  
 Analyze which 2-3 concepts he struggled with most.
@@ -2835,11 +3353,103 @@ async function fetchGraphWithRetry(url, options = {}, token) {
   throw new Error('Graph request exceeded retries.');
 }
  
+// Student_Config "Value" should be Plain text; if it is rich text, Graph returns HTML, so it is flattened here
+function cfgValueFromSharePoint(v) {
+  if (v === null || v === undefined) return '';
+  const str = String(v);
+  if (!/^\s*<(div|p|br|span)/i.test(str)) return str;
+  const html = str.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div)>/gi, '\n');
+  const text = new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function pushConfigToSharePoint(siteId, token) {
+  const rows = loadConfigRows();
+  let pushed = 0;
+  for (const r of rows) {
+    if (!r.isDirty) continue;
+    const payload = {
+      Title: r.title || `${CONFIG_TITLES[r.configKey] || r.configKey}`,
+      ConfigKey: r.configKey,
+      Scope: r.scope,
+      StudentId: r.studentId || '',
+      ClassCode: r.classCode || '',
+      Value: String(r.value ?? ''),
+      IsActive: r.isActive !== false
+    };
+    const base = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Config/items`;
+    if (r.spItemId) {
+      await fetchGraphWithRetry(`${base}/${r.spItemId}/fields`, { method: 'PATCH', body: JSON.stringify(payload) }, token);
+    } else {
+      const res = await fetchGraphWithRetry(base, { method: 'POST', body: JSON.stringify({ fields: payload }) }, token);
+      const created = await res.json();
+      r.spItemId = created.id;
+    }
+    r.isDirty = false;
+    pushed++;
+    saveConfigRows(rows); // save as we go, so a failure part-way does not re-create rows
+  }
+  return pushed;
+}
+
+async function pullConfigFromSharePoint(siteId, token) {
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Config/items?$expand=fields&$top=200`;
+  const sid = getStudentId();
+  const remote = [];
+  while (url) {
+    const r = await fetchGraphWithRetry(url, { method: 'GET' }, token);
+    const data = await r.json();
+    (data.value || []).forEach(x => {
+      const f = x.fields || {};
+      if (!f.ConfigKey) return;
+      if (f.StudentId && String(f.StudentId).toUpperCase() !== sid) return;
+      remote.push({
+        spItemId: x.id, configKey: f.ConfigKey, scope: f.Scope || 'Default',
+        studentId: f.StudentId || '', classCode: f.ClassCode || '',
+        value: cfgValueFromSharePoint(f.Value), isActive: f.IsActive !== false,
+        title: f.Title || '', isDirty: false
+      });
+    });
+    url = data['@odata.nextLink'] || null;
+  }
+  const localDirty = loadConfigRows().filter(r => r.isDirty); // unsaved local edits win
+  const merged = remote.filter(rr => !localDirty.some(l => l.spItemId && l.spItemId === rr.spItemId)).concat(localDirty);
+  saveConfigRows(merged);
+}
+
+async function getMsalTokenSilent() {
+  const client = getMsalClient();
+  if (!client) return null;
+  const acc = client.getAllAccounts()[0];
+  if (!acc) return null;
+  try { return (await client.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: acc })).accessToken; }
+  catch (e) { return null; }
+}
+
+// Quiet refresh at startup when already signed in: settings and deadlines, no popups
+async function backgroundCloudRefresh() {
+  if (!navigator.onLine) return;
+  const token = await getMsalTokenSilent();
+  if (!token) return;
+  try {
+    const siteId = await resolveSiteId(token);
+    await pushConfigToSharePoint(siteId, token);
+    await pullConfigFromSharePoint(siteId, token);
+    await pullDeadlinesFromSharePoint(siteId, token);
+    updateRadarPills();
+    updateToneButton();
+  } catch (e) {
+    console.warn('Background refresh skipped:', e.message);
+  }
+}
+
 // Which class a chat row key belongs to: lect_<CODE>_…, review_<CODE>, general_<CODE>
 function chatKeyClass(targetKey) {
   const codes = CLASSES.map(c => c.code).sort((a, b) => b.length - a.length);
+  const sid = getStudentId();
   for (const code of codes) {
-    if (targetKey.startsWith(`lect_${code}_`) || targetKey === `review_${code}` || targetKey === `general_${code}`) return code;
+    if (targetKey.startsWith(`lect_${sid}_${code}_`) || targetKey === `review_${sid}_${code}` || targetKey === `general_${sid}_${code}`) return code;
+    if (targetKey.startsWith(`lect_${code}_`) || targetKey === `review_${code}` || targetKey === `general_${code}`) return code; // V9 keys
   }
   return null;
 }
@@ -2859,6 +3469,7 @@ async function pullDeadlinesFromSharePoint(siteId, token) {
 
   for (const x of remote) {
     const f = x.fields || {};
+    if (f.StudentId && String(f.StudentId).toUpperCase() !== getStudentId()) continue; // another student
     // Rows typed straight into SharePoint may have no DeadlineId: give them one and write it back
     const id = f.DeadlineId || `sp_${x.id}`;
     const existing = byId.get(id) || {};
@@ -2875,7 +3486,8 @@ async function pullDeadlinesFromSharePoint(siteId, token) {
       unitsCovered: f.UnitsCovered || '',
       status: f.Status || DL_STATUS_OPEN,
       sourceClientId: f.SourceClientId || existing.sourceClientId || '',
-      isDirty: !f.DeadlineId
+      studentId: f.StudentId || getStudentId(),
+      isDirty: !f.DeadlineId || !f.StudentId
     };
     byId.set(id, merged);
     await idbPut('deadlines', merged);
@@ -2894,6 +3506,10 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     const token = await getMsalToken();
     const siteId = await resolveSiteId(token);
  
+    // 0. SETTINGS FIRST: push local edits, then pull the merged set
+    const syncedConfig = await pushConfigToSharePoint(siteId, token);
+    await pullConfigFromSharePoint(siteId, token);
+
     showToast('Checking for unsynced lectures, deadlines & chats…');
     let syncedLectures = 0, syncedDeadlines = 0, syncedChatsCount = 0;
  
@@ -2905,6 +3521,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
  
       const fieldsPayload = {
         Title: `${r.className} · ${r.topicLabel} (Part ${r.partNumber || 1})`,
+        StudentId: (r.studentId || getStudentId()),
         ClientId: r.clientId,
         ClassCode: r.classCode,
         ClassName: r.className,
@@ -2958,7 +3575,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         UnitsCovered: dl.unitsCovered || '',
         Status: dl.status || DL_STATUS_OPEN,
         DeadlineId: dl.deadlineId,
-        SourceClientId: dl.sourceClientId || ''
+        SourceClientId: dl.sourceClientId || '',
+        StudentId: dl.studentId || getStudentId()
       };
  
       let existingDlId = dl.spItemId || null;
@@ -2998,6 +3616,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
           if (exchanges.length) {
             const chatPayload = {
               Title: `${c.name} · ${targetKey}`,
+              StudentId: getStudentId(),
               ClassCode: c.code,
               ThreadId: targetKey,
               MessageCount: exchanges.length,
@@ -3037,7 +3656,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     await pullDeadlinesFromSharePoint(siteId, token);
     updateRadarPills();
  
-    showToast(`🎉 Sync complete: ${syncedLectures} lectures, ${syncedDeadlines} deadlines & ${syncedChatsCount} chats!`);
+    showToast(`🎉 Sync complete: ${syncedLectures} lectures, ${syncedDeadlines} deadlines, ${syncedChatsCount} chats, ${syncedConfig} setting(s)`);
   } catch (err) {
     alert('SharePoint Sync Error: ' + err.message);
   } finally {
@@ -3059,15 +3678,19 @@ async function pushClassesToSharePoint(siteId, token) {
       NeedsScribe: cls.needsScribe !== false,
       SortOrder: cls.period,
       Term: cls.term || 'Fall 26/27',
-      IsActive: cls.isActive !== false
+      IsActive: cls.isActive !== false,
+      StudentId: getStudentId()
     };
  
     const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
     const cCheckRes = await fetchGraphWithRetry(cCheckUrl, { method: 'GET' }, token);
     const cCheckData = await cCheckRes.json();
  
-    if (cCheckData.value && cCheckData.value.length > 0) {
-      await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items/${cCheckData.value[0].id}/fields`, {
+    const sidNow = getStudentId();
+    const mine = (cCheckData.value || []).find(x => String((x.fields || {}).StudentId || '').toUpperCase() === sidNow)
+      || (cCheckData.value || []).find(x => !(x.fields || {}).StudentId);
+    if (mine) {
+      await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items/${mine.id}/fields`, {
         method: 'PATCH',
         body: JSON.stringify(clsPayload)
       }, token);
@@ -3214,12 +3837,23 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
   }
 });
  
-const PARENT_PIN_KEY = 'ss_parent_pin';
-function getParentPin() { return localStorage.getItem(PARENT_PIN_KEY) || '1971'; }
+// Parent PIN is stored only as a hash in Student_Config. With none set, the first PIN entered becomes the PIN.
+async function checkParentPin(entered) {
+  const stored = getConfig('pin_hash');
+  if (!stored) {
+    if (!/^\d{4}$/.test(entered)) return 'invalid';
+    setConfigOverride('pin_hash', await hashPin(entered));
+    return 'created';
+  }
+  return (await hashPin(entered)) === stored ? 'ok' : 'bad';
+}
  
 document.getElementById('openCfgBtn').addEventListener('click', () => {
   document.getElementById('pinInput').value = '';
   document.getElementById('pinError').style.display = 'none';
+  document.getElementById('pinPrompt').textContent = getConfig('pin_hash')
+    ? 'Enter 4-digit PIN to access cloud & learner settings:'
+    : 'No parent PIN yet. Choose a 4-digit PIN to create it:';
   document.getElementById('pinDlg').showModal();
 });
 document.getElementById('closePinBtn').addEventListener('click', () => document.getElementById('pinDlg').close());
@@ -3227,28 +3861,42 @@ document.getElementById('pinInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('submitPinBtn').click(); }
 });
  
-document.getElementById('submitPinBtn').addEventListener('click', () => {
+document.getElementById('submitPinBtn').addEventListener('click', async () => {
   const entered = document.getElementById('pinInput').value.trim();
-  if (entered === getParentPin()) {
+  const result = await checkParentPin(entered);
+  if (result === 'ok' || result === 'created') {
     document.getElementById('pinDlg').close();
+    if (result === 'created') showToast('Parent PIN created. Sync to save it to SharePoint.');
     openParentVault();
   } else {
-    document.getElementById('pinError').style.display = 'block';
+    const err = document.getElementById('pinError');
+    err.textContent = result === 'invalid' ? 'PIN must be exactly 4 digits.' : 'Incorrect PIN. Try again.';
+    err.style.display = 'block';
   }
 });
  
 function openParentVault() {
   document.getElementById('geminiApiKey').value = localStorage.getItem('ss_gemini_key') || '';
-  document.getElementById('hiddenProfileText').value = localStorage.getItem('ss_hidden_profile') || DEFAULT_PROFILE;
-  document.getElementById('masterSystemPrompt').value = localStorage.getItem('ss_master_prompt') || DEFAULT_SYSTEM_PROMPT;
-  document.getElementById('cfgNewPin').value = getParentPin();
-  document.getElementById('cfgReadingLevel').value = localStorage.getItem('ss_reading_level') || '5';
+  document.getElementById('hiddenProfileText').value = getConfig('prompt.profile') || DEFAULT_PROFILE;
+  document.getElementById('masterSystemPrompt').value = getConfig('prompt.master') || DEFAULT_SYSTEM_PROMPT;
+  document.getElementById('cfgNewPin').value = '';
+  document.getElementById('cfgReadingLevel').value = getConfig('reading_level') || '5';
+  document.getElementById('cfgStudentId').value = getStudentId();
+  document.getElementById('cfgStudentName').value = getStudentName();
+  document.getElementById('cfgInterests').value = getConfig('interests') || '';
+  const clsNow = CLASSES.find(c => c.code === activeClassCode);
+  document.getElementById('cfgClassName').textContent = clsNow ? clsNow.name : activeClassCode;
+  const rowsNow = loadConfigRows();
+  const toneOv = findConfigRow(rowsNow, 'tone', 'Override', getStudentId(), activeClassCode);
+  const anaOv = findConfigRow(rowsNow, 'analogy', 'Override', getStudentId(), activeClassCode);
+  document.getElementById('cfgToneClass').value = toneOv ? toneOv.value : '';
+  document.getElementById('cfgAnalogyClass').value = anaOv ? anaOv.value : '';
   document.getElementById('cfgTtsRate').value = localStorage.getItem('ss_tts_rate') || '0.92';
   document.getElementById('spAuthority').value = localStorage.getItem('ss_sp_authority') || '';
   document.getElementById('spClientId').value = localStorage.getItem('ss_sp_client_id') || '';
  
   const tSel = document.getElementById('transcribeModelSelect');
-  const tModel = localStorage.getItem('ss_transcribe_model') || 'gemini-3.5-flash-lite';
+  const tModel = localStorage.getItem('ss_transcribe_model') || 'gemini-3.5-flash';
   if (!Array.from(tSel.options).some(o => o.value === tModel)) {
     const o = document.createElement('option'); o.value = tModel; o.textContent = tModel; tSel.appendChild(o);
   }
@@ -3360,7 +4008,7 @@ document.addEventListener('click', (e) => {
   if (archBtn) {
     const code = archBtn.dataset.archiveCls;
     const cls = CLASSES.find(c => c.code === code);
-    if (cls && confirm(`Archive ${cls.name}? It will be removed from Mac's active ribbon, but past notes and SharePoint records will remain safe.`)) {
+    if (cls && confirm(`Archive ${cls.name}? It will be removed from the active ribbon, but past notes and SharePoint records will remain safe.`)) {
       cls.isActive = false;
       localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
       localStorage.setItem('ss_dirty_classes', 'true');
@@ -3463,6 +4111,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
     if (data.value && data.value.length > 0) {
       const loaded = data.value
         .map(x => x.fields)
+        .filter(f => !f.StudentId || String(f.StudentId).toUpperCase() === getStudentId())
         .filter(f => f.IsActive !== false)
         .sort((a,b) => (a.PeriodNumber || 1) - (b.PeriodNumber || 1))
         .map(f => ({
@@ -3597,14 +4246,55 @@ document.getElementById('testGeminiBtn').addEventListener('click', async () => {
   }
 });
  
-document.getElementById('saveCfgBtn').addEventListener('click', () => {
+document.getElementById('resetProfileBtn').addEventListener('click', () => {
+  document.getElementById('hiddenProfileText').value = getConfig('prompt.profile', '', { skipOverride: true }) || DEFAULT_PROFILE;
+  showToast('Profile reset to default. Save to apply.');
+});
+document.getElementById('resetMasterBtn').addEventListener('click', () => {
+  document.getElementById('masterSystemPrompt').value = getConfig('prompt.master', '', { skipOverride: true }) || DEFAULT_SYSTEM_PROMPT;
+  showToast('Master prompt reset to default. Save to apply.');
+});
+document.getElementById('seedDefaultsBtn').addEventListener('click', () => {
+  const added = seedDefaultConfigRows();
+  showToast(added ? `${added} default row(s) ready. Tap Sync to save them to SharePoint.` : 'Baseline already exists. Nothing added.');
+});
+document.getElementById('pullConfigBtn').addEventListener('click', async () => {
+  try {
+    const token = await getMsalToken();
+    const siteId = await resolveSiteId(token);
+    const pushed = await pushConfigToSharePoint(siteId, token);
+    await pullConfigFromSharePoint(siteId, token);
+    openParentVault();
+    showToast(`Settings refreshed${pushed ? ` (${pushed} change(s) saved first)` : ''}.`);
+  } catch (err) {
+    alert('Settings sync error: ' + err.message);
+  }
+});
+
+document.getElementById('saveCfgBtn').addEventListener('click', async () => {
   localStorage.setItem('ss_gemini_key', document.getElementById('geminiApiKey').value.trim());
   localStorage.setItem('ss_gemini_model', document.getElementById('geminiModelSelect').value);
   localStorage.setItem('ss_transcribe_model', document.getElementById('transcribeModelSelect').value);
   localStorage.setItem('ss_audio_raw_test', document.getElementById('cfgAudioRawTest').checked ? 'true' : 'false');
-  localStorage.setItem('ss_reading_level', document.getElementById('cfgReadingLevel').value);
-  localStorage.setItem('ss_hidden_profile', document.getElementById('hiddenProfileText').value);
-  localStorage.setItem('ss_master_prompt', document.getElementById('masterSystemPrompt').value);
+  // Student ID first, so the settings below are saved for the student shown
+  const newSid = document.getElementById('cfgStudentId').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (newSid && newSid !== getStudentId()) {
+    if (!confirm(`Switch this device to student ${newSid}? Lectures, chats and settings will show for ${newSid} only.`)) return;
+    localStorage.setItem('ss_student_id', newSid);
+    await loadLecturesFromDB();
+    pickedLectures = {};
+  }
+
+  saveConfigValue('reading_level', document.getElementById('cfgReadingLevel').value);
+  saveConfigValue('prompt.profile', document.getElementById('hiddenProfileText').value);
+  saveConfigValue('prompt.master', document.getElementById('masterSystemPrompt').value);
+  saveConfigValue('student_name', document.getElementById('cfgStudentName').value.trim());
+  saveConfigValue('interests', document.getElementById('cfgInterests').value.trim() || BUILTIN_CONFIG.interests);
+
+  const toneCls = document.getElementById('cfgToneClass').value;
+  if (toneCls) setConfigOverride('tone', toneCls, activeClassCode); else clearConfigOverride('tone', activeClassCode);
+  const anaCls = document.getElementById('cfgAnalogyClass').value;
+  if (anaCls) setConfigOverride('analogy', anaCls, activeClassCode); else clearConfigOverride('analogy', activeClassCode);
   localStorage.setItem('ss_tts_rate', document.getElementById('cfgTtsRate').value);
   localStorage.setItem('ss_sp_authority', document.getElementById('spAuthority').value.trim());
   localStorage.setItem('ss_sp_client_id', document.getElementById('spClientId').value.trim());
@@ -3614,7 +4304,10 @@ document.getElementById('saveCfgBtn').addEventListener('click', () => {
  
   const newPin = document.getElementById('cfgNewPin').value.trim();
   if (newPin && !/^\d{4}$/.test(newPin)) { alert('PIN must be exactly 4 digits.'); return; }
-  if (newPin) localStorage.setItem(PARENT_PIN_KEY, newPin);
+  if (newPin) setConfigOverride('pin_hash', await hashPin(newPin));
+  renderAll();
+  loadSubjectChat();
+  updateRadarPills();
  
   document.getElementById('cfgDlg').close();
   showToast('Settings saved!');
@@ -3678,6 +4371,21 @@ document.getElementById('recBtn').addEventListener('click', () => {
  
 // V8 saved missed drill questions under the short lecture id (bio_1_…). Move them into that lecture's row.
 function migrateLegacyMissKeys() {
+  const sid = getStudentId();
+  // review_BIO_1 → review_MAC_BIO_1 (same for general_)
+  CLASSES.forEach(c => {
+    ['review', 'general'].forEach(kind => {
+      const oldKey = `${kind}_${c.code}`, newKey = `${kind}_${sid}_${c.code}`;
+      const old = loadExchangesForTarget(oldKey);
+      if (!old.length) return;
+      const merged = loadExchangesForTarget(newKey).concat(old).sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+      saveExchangesForTarget(newKey, merged);
+      localStorage.removeItem(`ss_exchanges_${oldKey}`);
+      localStorage.removeItem(`ss_dirty_chat_${oldKey}`);
+      const cleared = localStorage.getItem(`ss_cleared_${oldKey}`);
+      if (cleared) { localStorage.setItem(`ss_cleared_${newKey}`, cleared); localStorage.removeItem(`ss_cleared_${oldKey}`); }
+    });
+  });
   const all = Object.values(CURRICULUM).flatMap(ds => ds.lectures || []);
   Object.keys(localStorage).filter(k => k.startsWith('ss_exchanges_')).forEach(k => {
     const key = k.replace('ss_exchanges_', '');
@@ -3716,6 +4424,8 @@ function migrateLegacyMissKeys() {
     pickedLectures[ds.lectures[ds.lectures.length - 1].id] = true;
   }
  
+  migrateLegacySettings();
+  await migrateLegacyPin();
   migrateLegacyMissKeys();
   await recoverStrandedSessions();
   pruneProcessedAudio().catch(() => {});
@@ -3726,6 +4436,8 @@ function migrateLegacyMissKeys() {
   loadSubjectChat();
   renderPendingRecordings();
   updateRadarPills();
+
+  backgroundCloudRefresh();
 
   // Offline shell: needs sw.js next to this page on GitHub Pages
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
