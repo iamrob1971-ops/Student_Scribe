@@ -1782,8 +1782,10 @@ function renderStudyGuide() {
       <div class="card">
         ${getSourceBadgeHtml(l.src || 'Notes')}
         ${l.isDemo ? '<span class="badge" style="background:#FEF3C7;color:#B45309">Sample Demo</span>' : ''}
-        <h3>💡 The Big Idea <button class="say btn-speak" data-target="bigIdeaText_${l.id}">🔊 Read</button></h3>
-        <p id="bigIdeaText_${l.id}">${applyBionic(l.c)}</p>
+        <h3>💡 ${(l.bigIdeas || []).length > 1 ? 'Big Ideas' : 'The Big Idea'} <button class="say btn-speak" data-target="bigIdeaText_${l.id}">🔊 Read</button></h3>
+        ${(l.bigIdeas || []).length > 1
+          ? `<ol id="bigIdeaText_${l.id}" style="margin:0;padding-left:22px">${l.bigIdeas.map(b => `<li>${applyBionic(escText(b))}</li>`).join('')}</ol>`
+          : `<p id="bigIdeaText_${l.id}">${applyBionic(escText(l.c || ''))}</p>`}
       </div>
       <div class="card">
         <h3>🔑 Core Concepts <button class="say btn-speak" data-target="conceptsList_${l.id}">🔊 Read</button></h3>
@@ -1845,16 +1847,47 @@ function renderStudyGuide() {
   container.innerHTML = html;
 }
  
+/* Question sets: each lecture keeps every set it has had. Set 1 is the original quiz.
+   New sets made together share a batchId, so the selector can offer them as one drill. */
+let drillSetChoice = 'newest'; // 'newest' | 'original' | a batchId
+
+function getLectureSets(l) {
+  if (Array.isArray(l.quizSets) && l.quizSets.length) return l.quizSets;
+  if (l.quizItems && l.quizItems.length) {
+    return [{ id: 's1', batchId: 'original', createdAt: l.recordedDate || '', items: l.quizItems }];
+  }
+  if (Array.isArray(l.q) && l.q.length === 3) { // single-question legacy and demo lectures
+    return [{ id: 's1', batchId: 'original', createdAt: l.recordedDate || '',
+      items: [{ q: l.q[0], options: l.q[1], correct: l.q[2], feedback: '' }] }];
+  }
+  return [];
+}
+
+function pickSetsFor(l) {
+  const sets = getLectureSets(l);
+  if (!sets.length) return [];
+  if (drillSetChoice === 'newest') return [sets[sets.length - 1]];
+  if (drillSetChoice === 'original') return [sets[0]];
+  return sets.filter(st => st.batchId === drillSetChoice);
+}
+
+function questionIdFor(l, setId, qIdx) {
+  // Set 1 keeps the V10/V11 id so earlier misses and follow-ups stay attached
+  return setId === 's1' ? `${l.id}_q${qIdx}` : `${l.id}_${setId}_q${qIdx}`;
+}
+
 function getQuizSet() {
   const selected = getSelectedLectures();
   let questions = [];
  
   selected.forEach(l => {
-    if (l.quizItems && l.quizItems.length) {
-      l.quizItems.forEach((qi, qIdx) => {
+    const chosenSets = pickSetsFor(l);
+    if (chosenSets.length) {
+      chosenSets.forEach(st => st.items.forEach((qi, qIdx) => {
         questions.push({
           parentLecture: l,
-          id: `${l.id}_q${qIdx}`,
+          setId: st.id,
+          id: questionIdFor(l, st.id, qIdx),
           lectureId: l.id,
           q: qi.q,
           options: qi.options,
@@ -1867,7 +1900,7 @@ function getQuizSet() {
           t: l.t,
           i: l.i
         });
-      });
+      }));
     } else if (l.q) {
       questions.push({
         parentLecture: l,
@@ -1884,12 +1917,44 @@ function getQuizSet() {
     }
   });
  
+  // A chosen batch that is not part of this selection falls back to the newest sets
+  if (!questions.length && drillSetChoice !== 'newest' && selected.some(l => getLectureSets(l).length)) {
+    drillSetChoice = 'newest';
+    return getQuizSet();
+  }
   if (quizRetryIds && quizRetryIds.length) {
     const filtered = questions.filter(item => quizRetryIds.includes(item.id));
     return filtered.length ? filtered : questions;
   }
   return questions;
 }
+
+function drillSetOptions() {
+  const lectures = getSelectedLectures();
+  const batches = new Map();
+  lectures.forEach(l => getLectureSets(l).forEach(st => {
+    if (st.batchId === 'original') return;
+    const b = batches.get(st.batchId) || { createdAt: st.createdAt, count: 0 };
+    b.count += st.items.length;
+    batches.set(st.batchId, b);
+  }));
+  if (!batches.size) return '';
+  const sorted = [...batches.entries()].sort((a, b) => String(a[1].createdAt).localeCompare(String(b[1].createdAt)));
+  const fmt = iso => iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const opts = [
+    `<option value="newest" ${drillSetChoice === 'newest' ? 'selected' : ''}>Newest set</option>`,
+    `<option value="original" ${drillSetChoice === 'original' ? 'selected' : ''}>Set 1 · Original</option>`,
+    ...sorted.map(([id, b], i) => `<option value="${id}" ${drillSetChoice === id ? 'selected' : ''}>Set ${i + 2} · ${fmt(b.createdAt)} (${b.count})</option>`)
+  ];
+  return `<select id="drillSetSelect" title="Question set" style="width:auto;padding:4px 8px;font-size:13px">${opts.join('')}</select>`;
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'drillSetSelect') return;
+  drillSetChoice = e.target.value;
+  resetQuiz();
+  renderQuiz();
+});
  
 function resetQuiz(retryIds) {
   quizIndex = 0;
@@ -1944,11 +2009,18 @@ function renderQuiz() {
           <button class="btn ${missed.length ? 'alt' : ''}" id="retryQuizBtn">Retake full drill</button>
         </div>
         <div class="chips" style="justify-content:center;margin-top:6px">
+          <button class="btn" id="newSetBtn">🔄 New question set</button>
+          <button class="btn alt" id="reviewQsBtn">← Review questions</button>
+        </div>
+        <div class="chips" style="justify-content:center;margin-top:6px">
           <button class="btn alt" data-print="results">🖨 Print results</button>
           <button class="btn alt" data-print="blank">🖨 Print blank test</button>
         </div>
+        <p style="font-size:13px;color:var(--mut);margin:8px 0 0">New question set: same material, different questions, aimed at what you missed.</p>
       </div>
     `;
+    document.getElementById('newSetBtn').onclick = generateNewQuestionSet;
+    document.getElementById('reviewQsBtn').onclick = () => { quizIndex = set.length - 1; renderQuiz(); };
     document.getElementById('retryQuizBtn').onclick = () => { resetQuiz(); renderQuiz(); };
     const rm = document.getElementById('retryMissedBtn');
     if (rm) rm.onclick = () => { resetQuiz(missed); renderQuiz(); };
@@ -1966,7 +2038,8 @@ function renderQuiz() {
       <div>
         <div class="row">
           <b>${quizRetryIds ? 'Retry' : 'Self-Test'} Question ${quizIndex + 1} of ${set.length}</b>
-          <span style="display:flex;gap:6px;align-items:center">
+          <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            ${drillSetOptions()}
             <span class="badge">${cur.i} ${escText(cur.t)}</span>
             <button class="say sm" data-print="blank" title="Print this test blank, to do on paper">🖨 Blank test</button>
           </span>
@@ -1981,11 +2054,13 @@ function renderQuiz() {
             return `<button class="opt ${cls}" data-opt="${idx}" ${answered ? 'disabled' : ''}>${escText(opt)}</button>`;
           }).join('')}
           ${answered ? renderAnswerPanel(cur, chosen) : ''}
-          ${answered ? `
-            <div class="quiz-nav">
-              <button class="say sm" data-print-q="${cur.id}">🖨 Print this question</button>
-              <button class="btn" id="quizNextBtn">${isLast ? 'See results →' : 'Next →'}</button>
-            </div>` : ''}
+          <div class="quiz-nav">
+            <span style="display:flex;gap:6px;align-items:center">
+              ${quizIndex > 0 ? '<button class="btn alt" id="quizPrevBtn">← Previous</button>' : ''}
+              ${answered ? `<button class="say sm" data-print-q="${cur.id}">🖨 Print this question</button>` : ''}
+            </span>
+            ${answered ? `<button class="btn" id="quizNextBtn">${isLast ? 'See results →' : 'Next →'}</button>` : ''}
+          </div>
         </div>
       </div>
       <div class="card followup" id="followupPanel">
@@ -2000,6 +2075,9 @@ function renderQuiz() {
       </div>
     </div>
   `;
+
+  const prevBtn = document.getElementById('quizPrevBtn');
+  if (prevBtn) prevBtn.onclick = () => { quizIndex--; renderQuiz(); };
 
   if (!answered) {
     container.querySelectorAll('.opt').forEach(btn => {
@@ -2037,6 +2115,125 @@ document.addEventListener('keydown', (e) => {
   const next = document.getElementById('quizNextBtn');
   if (next) { e.preventDefault(); next.click(); }
 });
+
+const SET_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    quiz_questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      lecture: { type: 'STRING' },
+      q: { type: 'STRING' }, options: { type: 'ARRAY', items: { type: 'STRING' } },
+      correct: { type: 'INTEGER' }, feedback: { type: 'STRING' }, section: { type: 'STRING' },
+      kind: { type: 'STRING', enum: ['recall', 'understanding'] }, evidence: { type: 'STRING' } },
+      required: ['lecture', 'q', 'options', 'correct', 'feedback', 'section', 'kind', 'evidence'] } }
+  },
+  required: ['quiz_questions']
+};
+
+async function persistLectureQuiz(l) {
+  const all = await idbGetAll('lectures');
+  const rec = all.find(r => r.clientId === l.clientId);
+  if (!rec) return;
+  const clean = { ...l };
+  rec.studyPayload = JSON.stringify(clean);
+  let practice = {};
+  try { practice = JSON.parse(rec.practicePayloadClean || '{}'); } catch (e) {}
+  const sets = getLectureSets(l);
+  practice.quiz = sets.length ? sets[sets.length - 1].items : [];
+  practice.sets = sets.map(st => ({ id: st.id, batchId: st.batchId, createdAt: st.createdAt, quiz: st.items }));
+  rec.practicePayloadClean = JSON.stringify(practice);
+  rec.isDirty = true;
+  await idbPut('lectures', rec);
+}
+
+async function generateNewQuestionSet() {
+  const lectures = getSelectedLectures();
+  if (!lectures.length) return;
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
+  const btn = document.getElementById('newSetBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Writing new questions…'; }
+
+  try {
+    const tagged = lectures.map((l, i) => ({ tag: `L${i + 1}`, l }));
+    const budget = Math.floor(60000 / lectures.length);
+    const material = tagged.map(({ tag, l }) => {
+      const concepts = (l.concepts || []).map(c => `- [${c.section || ''}] ${c.bold_stem}: ${c.text}`).join('\n');
+      const vocab = (l.vocab || []).map(v => `- ${v.term}: ${v.definition}`).join('\n');
+      const ideas = (l.bigIdeas && l.bigIdeas.length ? l.bigIdeas : [l.c]).map(b => `- ${b}`).join('\n');
+      const text = [l.transcript || '', l.notesText || ''].join('\n').slice(0, budget);
+      return `### ${tag}: ${l.t}\nBig ideas:\n${ideas}\nConcepts:\n${concepts}\nVocabulary:\n${vocab}${text.trim() ? `\nSource text:\n${text}` : ''}`;
+    }).join('\n\n');
+
+    const existing = lectures.flatMap(l => getLectureSets(l).flatMap(st => st.items.map(q => q.q))).slice(-80);
+    const misses = lectures.flatMap(l => loadExchangesForTarget(l.clientId || '').filter(ex => ex.isMiss)
+      .map(ex => ex.q.replace(/^Missed Drill Question:\s*/, ''))).slice(-20);
+    const target = Math.min(12, Math.max(8, lectures.length * 3));
+    const level = getConfig('reading_level') || '5';
+    const cls = CLASSES.find(c => c.code === activeClassCode) || { name: '' };
+
+    const prompt = `${material}
+
+Write ${target} NEW practice questions for a high school ${cls.name} student on the material above.
+1. Do not repeat or reword any of these existing questions:
+${existing.map(q => '- ' + q).join('\n') || '- (none)'}
+2. Spend extra questions on what he missed before:
+${misses.map(q => '- ' + q).join('\n') || '- (no misses yet)'}
+3. Cover every section. Lean toward "understanding" questions (why, how, which example fits) over recall.
+4. Exactly 4 options, one correct; "correct" is its 0-based index. Wrong options must be plausible and from this subject; never jokes, hobbies, games, or aviation.
+5. "lecture": the tag of the lecture the question is about (${tagged.map(t => t.tag).join(', ')}). "evidence": a short phrase (under 20 words) from the material. "feedback": one sentence on why the answer is right, no praise.
+6. Plain wording at a Grade ${level} reading level.
+Return only JSON: { "quiz_questions":[{"lecture":string,"q":string,"options":[string,string,string,string],"correct":integer,"feedback":string,"section":string,"kind":"recall"|"understanding","evidence":string}] }`;
+
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: prompt }] }], key, model, {
+      system: 'You write fair, accurate practice questions for high school students. Questions test the material, not trivia about the student.',
+      temperature: 0.5, maxOutputTokens: 12288, responseMimeType: 'application/json', responseSchema: SET_SCHEMA
+    });
+
+    const parsed = parseModelJson(res.text);
+    const seen = new Set(existing.map(q => q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
+    const corpusOf = l => [l.transcript, l.notesText, l.c, ...(l.bigIdeas || []),
+      ...(l.concepts || []).map(c => `${c.bold_stem} ${c.text}`), ...(l.vocab || []).map(v => `${v.term} ${v.definition}`)]
+      .join('\n').toLowerCase();
+    const byLecture = new Map();
+    let dropped = 0;
+    arrOf(parsed.quiz_questions).forEach(raw => {
+      const q = validateAndShuffle(raw);
+      if (!q) { dropped++; return; }
+      const sig = q.q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (seen.has(sig)) { dropped++; return; }
+      const hit = tagged.find(t => t.tag === String(raw.lecture || '').trim().toUpperCase()) || tagged[0];
+      if (isOffTopicQuestion(q, corpusOf(hit.l))) { dropped++; return; }
+      seen.add(sig);
+      const evidence = strOf(raw.evidence);
+      const srcText = [hit.l.transcript, hit.l.notesText].filter(Boolean).join('\n');
+      const item = { ...q, section: strOf(raw.section), kind: strOf(raw.kind) || 'understanding', evidence,
+        evidenceStatus: evidenceStatusFor(evidence, srcText) };
+      if (!byLecture.has(hit.l)) byLecture.set(hit.l, []);
+      byLecture.get(hit.l).push(item);
+    });
+
+    const total = [...byLecture.values()].reduce((n, a) => n + a.length, 0);
+    if (!total) throw new Error('No usable new questions came back. Please try again.');
+
+    const batchId = 'b' + Date.now();
+    const createdAt = new Date().toISOString();
+    for (const [l, items] of byLecture) {
+      const sets = getLectureSets(l).slice();
+      sets.push({ id: `s${sets.length + 1}`, batchId, createdAt, items });
+      l.quizSets = sets;
+      await persistLectureQuiz(l);
+    }
+
+    drillSetChoice = 'newest';
+    resetQuiz();
+    renderQuiz();
+    showToast(`New set ready: ${total} question(s)${dropped ? ` · ${dropped} weak or repeated removed` : ''}`);
+  } catch (err) {
+    alert('New question set error: ' + err.message);
+    renderQuiz();
+  }
+}
 
 /* ---------- Follow-up questions about a drill question ----------
    Saved in the lecture's own chat row, tagged with the question id,
@@ -2584,7 +2781,7 @@ const STUDY_SCHEMA = {
       title: { type: 'STRING' }, sources: { type: 'ARRAY', items: SRC } }, required: ['title', 'sources'] } },
     topic_label: { type: 'STRING' },
     topic_icon: { type: 'STRING' },
-    big_idea: { type: 'STRING' },
+    big_ideas: { type: 'ARRAY', items: { type: 'STRING' } },
     core_concepts: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
       section: { type: 'STRING' }, bold_stem: { type: 'STRING' }, text: { type: 'STRING' },
       analogy: { type: 'STRING', nullable: true }, source: SRC },
@@ -2600,8 +2797,8 @@ const STUDY_SCHEMA = {
       due_iso: { type: 'STRING', nullable: true }, source: SRC },
       required: ['title', 'type', 'source'] } }
   },
-  required: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines'],
-  propertyOrdering: ['sections_found', 'topic_label', 'topic_icon', 'big_idea', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines']
+  required: ['sections_found', 'topic_label', 'topic_icon', 'big_ideas', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines'],
+  propertyOrdering: ['sections_found', 'topic_label', 'topic_icon', 'big_ideas', 'core_concepts', 'vocab', 'teacher_cues', 'deadlines']
 };
 
 const QUIZ_SCHEMA = {
@@ -2631,6 +2828,7 @@ The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on.
 1. INVENTORY FIRST: fill "sections_found" before anything else. List every distinct part, section, or topic that appears in ANY source, with the IDs of the sources where it appears. Keep separate parts separate, even when two sources are by the same author or on a similar theme.
 2. CONCEPTS: write 2 to 5 core concepts for EVERY entry in sections_found (more when a source covers it in depth, at least 1 for a brief mention), and set "section" to that entry's exact title. A long source with many points needs several concepts, not one summary line. Every source (${sourceList.map(x => x.id).join(', ')}) must be the source of at least one core concept. Never drop material because only one source mentions it.
 3. SOURCE IDS: every concept, vocab term, cue, and deadline carries "source", the ID of the source it came from (for example "S2").
+3b. BIG IDEAS: 1 to 3 big ideas, each one sentence. Use 1 when the material has a single theme; use 2 or 3 when it covers distinct themes, sermons, or topics. It is fine for a big idea to overlap a core concept.
 4. ${analogyRule} Put an analogy in a concept's "analogy" field only when it helps; otherwise null. Most concepts should have no analogy.
 5. TEACHER CUES: only explicit emphasis by the teacher or speaker, such as "this will be on the test", "remember this", or "know this for Friday". Restating content is not a cue. Return [] if there are none. For audio cues, copy the [mm:ss] timestamp from the transcript.
 6. DEADLINES: only assignments, quizzes, or tests whose date is stated in the sources. due_iso is YYYY-MM-DD resolved against the reference date, or null when no date is stated.
@@ -2638,7 +2836,7 @@ The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on.
 8. Write all explanations at a Grade ${readingLevel} reading level, in plain, mature language.
 
 Return only JSON with this shape:
-{ "sections_found":[{"title":string,"sources":[sourceId]}], "topic_label":string, "topic_icon":emoji, "big_idea":string,
+{ "sections_found":[{"title":string,"sources":[sourceId]}], "topic_label":string, "topic_icon":emoji, "big_ideas":[string],
   "core_concepts":[{"section":string,"bold_stem":string,"text":string,"analogy":string|null,"source":sourceId}],
   "vocab":[{"term":string,"definition":string,"source":sourceId}],
   "teacher_cues":[{"cue":string,"timestamp":string|null,"source":sourceId}],
@@ -2704,6 +2902,12 @@ function parseModelJson(text) {
 const arrOf = v => Array.isArray(v) ? v : [];
 const strOf = v => (v === null || v === undefined) ? '' : String(v).trim();
 
+function bigIdeasOf(parsed) {
+  const list = arrOf(parsed.big_ideas).map(strOf).filter(Boolean).slice(0, 3);
+  if (!list.length && strOf(parsed.big_idea)) list.push(strOf(parsed.big_idea));
+  return list;
+}
+
 function normalizeStudy(parsed, sourceList) {
   const kinds = [...new Set(sourceList.map(x => x.kind))];
   const sections = arrOf(parsed.sections_found).filter(x => x && strOf(x.title))
@@ -2735,7 +2939,8 @@ function normalizeStudy(parsed, sourceList) {
   return {
     topic_label: strOf(parsed.topic_label) || 'New Topic',
     topic_icon: strOf(parsed.topic_icon) || '📖',
-    big_idea: strOf(parsed.big_idea),
+    big_idea: (bigIdeasOf(parsed)[0] || ''),
+    big_ideas: bigIdeasOf(parsed),
     sections, concepts, vocab, cues, deadlines, quiz: [],
     missingSections
   };
@@ -3006,7 +3211,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     if (!study.concepts.length) throw new Error('Gemini returned no study concepts. Please try again.');
 
     // Practice quiz in its own call: no learner profile, so hobbies cannot leak into the options
-    const corpus = [transcriptAll, pastedNotes, study.big_idea,
+    const corpus = [transcriptAll, pastedNotes, ...study.big_ideas,
       ...study.concepts.map(c => `${c.bold_stem} ${c.text} ${c.analogy || ''}`),
       ...study.vocab.map(v => `${v.term} ${v.definition}`)].join('\n').toLowerCase();
     let quizResult = { quiz: [], extraVocab: [], dropped: 0, target: 0 };
@@ -3040,6 +3245,8 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       t: study.topic_label,
       src: computedSourceType,
       c: study.big_idea,
+      bigIdeas: study.big_ideas,
+      notesText: pastedNotes || '',
       bold_stem: study.concepts[0].bold_stem,
       concepts: study.concepts,
       sectionsFound: study.sections,
@@ -3064,6 +3271,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     const studyPayloadClean = {
       source_type: computedSourceType,
       big_idea: newLecture.c,
+      big_ideas: study.big_ideas,
       sections_found: study.sections,
       core_concepts: study.concepts,
       vocab: study.vocab,
@@ -3280,18 +3488,51 @@ function renderHistoryDrawer() {
     return;
   }
  
-  exchanges.forEach(ex => {
+  exchanges.slice().reverse().forEach(ex => {
     const item = document.createElement('div');
     item.className = 'thread-item';
+    const label = ex.isMiss ? '⚠️ Missed Concept' : ex.context === 'drill' ? '🎯 Drill follow-up' : '💬 Question';
+    const when = new Date(ex.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     item.innerHTML = `
-      <div style="font-weight:600;font-size:13px;color:var(--c)">${ex.isMiss ? '⚠️ Missed Concept' : '💬 Question'}</div>
+      <div style="font-weight:600;font-size:13px;color:var(--c)">${label}</div>
       <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}</div>
-      <small style="color:var(--mut)">${new Date(ex.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
+      <small style="color:var(--mut)">${when}</small>
+      ${ex.isMiss ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
+        ${ex.context === 'drill' ? '' : `<button class="say sm" data-continue-ts="${escapeHtml(ex.ts)}">↪ Continue from here</button>`}
+        <button class="say sm" data-ask-again="${escapeHtml(ex.ts)}">✎ Ask again</button>
+      </div>`}
     `;
     body.appendChild(item);
   });
 }
  
+// Continue: show the conversation from that exchange on, with its lectures selected, ready for the next question
+document.addEventListener('click', (e) => {
+  const cont = e.target.closest('[data-continue-ts]');
+  const again = e.target.closest('[data-ask-again]');
+  if (!cont && !again) return;
+  const targetKey = getActiveChatTargetKey();
+  const ts = (cont || again).dataset.continueTs || (cont || again).dataset.askAgain;
+  const ex = loadExchangesForTarget(targetKey).find(x => x.ts === ts);
+  document.getElementById('chatHistoryDrawer').classList.remove('open');
+  if (!ex) return;
+  if (cont) {
+    const ds = getActiveDataset();
+    const ids = (ex.lectureIds || []).filter(id => ds.lectures.some(l => l.id === id));
+    if (ids.length) { pickedLectures = {}; ids.forEach(id => { pickedLectures[id] = true; }); resetQuiz(); }
+    const key2 = getActiveChatTargetKey();
+    const before = new Date(new Date(ex.ts).getTime() - 1).toISOString();
+    localStorage.setItem(`ss_cleared_${key2}`, before);
+    navigateTo('chat');
+    loadSubjectChat();
+    showToast('Picked up where you left off');
+  } else {
+    navigateTo('chat');
+    document.getElementById('chatInput').value = ex.q.replace(/^Missed Drill Question:\s*/, '');
+  }
+  document.getElementById('chatInput').focus();
+});
+
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -3430,7 +3671,9 @@ function buildChatGrounding(lectures, opts = {}) {
     const vocab = (l.vocab || []).map(v => `- ${v.term}: ${v.definition}`).join('\n');
     let tr = includeTranscript ? (l.transcript || '') : '';
     if (tr.length > perLecture) tr = tr.slice(0, perLecture) + '\n[transcript shortened]';
-    return `### ${l.t} (${l.d || ''} ${l.n || ''})\nBig idea: ${l.c}\nConcepts:\n${concepts}` +
+    const ideas = (l.bigIdeas && l.bigIdeas.length ? l.bigIdeas : [l.c]).map(b => `- ${b}`).join('\n');
+    const notes = includeTranscript && l.notesText ? `\nTyped notes:\n${String(l.notesText).slice(0, 15000)}` : '';
+    return `### ${l.t} (${l.d || ''} ${l.n || ''})\nBig ideas:\n${ideas}\nConcepts:\n${concepts}` + notes +
       (vocab ? `\nVocabulary:\n${vocab}` : '') +
       (tr ? `\nClass transcript:\n${tr}` : '');
   }).join('\n\n');
