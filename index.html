@@ -145,6 +145,17 @@ main { padding: 4px 18px 140px; flex: 1; }
 .nav-badge { position: absolute; top: 4px; margin-left: 14px; background: var(--bad); color: #fff; border-radius: 10px; font-size: 11px; font-style: normal; padding: 0 6px; line-height: 18px; display: none; }
 nav.dock button { position: relative; }
 textarea.grow { resize: none; overflow-y: auto; max-height: 8.5em; line-height: 1.4; font: inherit; }
+/* Teacher study guide */
+.sg-dots { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.sg-dot { min-width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink); }
+.sg-dot.ans { border-color: var(--c); }
+.sg-dot.ok { background: var(--ok-bg); border-color: var(--ok); }
+.sg-dot.rev { background: var(--warn-bg); border-color: var(--warn-line); }
+.sg-dot.cur { outline: 2px solid var(--c); outline-offset: 1px; }
+.sg-info { user-select: none; -webkit-user-select: none; background: var(--sel); border-radius: 12px; padding: 10px 12px; font-size: 14.5px; }
+.sg-teacher { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 13px; }
+.sg-teacher .say.on { background: var(--c); color: #fff; }
+.sg-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .same-day { text-align: left; background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 0 auto 14px; max-width: 720px; font-size: 14px; }
 .same-day label { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 500; cursor: pointer; }
 .same-day input { width: auto; margin: 0; }
@@ -335,6 +346,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
           </div>
           <div id="stagedFilesContainer" class="staged-chips-box"></div>
           <textarea id="mainPastedNotes" rows="2" placeholder="Or paste student notes, whiteboard transcripts, or homework details here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut);margin-top:4px">
+            <input type="checkbox" id="notesIsGuide" style="width:auto;margin:0"> These notes are a teacher study guide (questions only)
+          </label>
         </div>
       </div>
  
@@ -404,6 +418,10 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <section class="screen" id="s-quiz">
       <div class="scope" data-scope></div>
       <div id="quizContent"></div>
+    </section>
+
+    <section class="screen" id="s-sg">
+      <div id="sgContent"></div>
     </section>
   </main>
  
@@ -605,7 +623,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V14</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V15</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -682,6 +700,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <h4>Student &amp; Coach</h4>
     <label>Student ID on this device (part of every saved key; keep it short and stable)
       <input type="text" id="cfgStudentId" maxlength="12" style="width:160px;text-transform:uppercase">
+    </label>
+    <label>This device's name (shown when the same item was changed on two devices)
+      <input type="text" id="cfgDeviceName" maxlength="40" placeholder="e.g. Mac's Chromebook or Rob's laptop" style="width:260px">
     </label>
     <label>Student first name (optional, used sparingly by the coach)
       <input type="text" id="cfgStudentName" maxlength="30" style="width:220px">
@@ -1048,7 +1069,17 @@ function getDB() {
   return dbPromise;
 }
  
+function getDeviceName() {
+  return (localStorage.getItem('ss_device_name') || '').trim() || 'This device';
+}
+
 async function idbPut(storeName, data) {
+  // Every local change to a lecture is stamped, so two-way sync can tell which side is newer
+  if (storeName === 'lectures' && data && data.isDirty === true && !data._pulled) {
+    data.updatedAt = new Date().toISOString();
+    data.updatedBy = getDeviceName();
+  }
+  if (data && data._pulled) delete data._pulled;
   const db = await getDB();
   return new Promise((res, rej) => {
     const tx = db.transaction(storeName, 'readwrite');
@@ -2149,6 +2180,15 @@ function renderStudyGuide() {
     const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
  
     html += renderCoverageBar(l);
+    (l.studyGuides || []).forEach(g => {
+      const total = g.questions.length;
+      const answered = g.questions.filter(q => (q.myAnswer || '').trim()).length;
+      const checked = g.questions.filter(q => q.teacher === 'confirmed' || q.teacher === 'revised').length;
+      html += `<div class="card"><div class="sg-card-head">
+        <h3 style="margin:0">📝 Teacher Study Guide · ${escText(g.name)}</h3>
+        <button class="btn" data-open-sg="${escText(l.clientId)}|${escText(g.id)}">Work on it →</button></div>
+        <p style="margin:6px 0 0;color:var(--mut);font-size:14px">${total} questions · ${answered} answered · ${checked} checked by teacher</p></div>`;
+    });
  
     html += `
       <div class="card">
@@ -2683,6 +2723,323 @@ Otherwise, answer his follow-up about this question. If he got it wrong, help hi
   }
 }
 
+/* =====================================================================
+   TEACHER STUDY GUIDE: he types his answer; Check, Hint and the read-only ⓘ suggested
+   answer help; teacher check marks; parent fill behind the PIN; three print layouts.
+   ===================================================================== */
+let sgState = null; // { clientId, guideId, idx }
+const sgInfoOpen = new Set(JSON.parse(localStorage.getItem('ss_sg_info_open') || '[]'));
+let sgSaveTimer = null;
+let sgBusy = false;
+
+function sgFind() {
+  if (!sgState) return {};
+  const l = findLectureByClientId(sgState.clientId);
+  const g = l && (l.studyGuides || []).find(x => x.id === sgState.guideId);
+  const q = g && g.questions[sgState.idx];
+  return { l, g, q };
+}
+
+function sgQid(g, q) { return `${g.id}:${q.id}`; }
+
+function openStudyGuide(clientId, guideId, idx = 0) {
+  sgState = { clientId, guideId, idx };
+  navigateTo('sg');
+  renderStudyGuideScreen();
+}
+
+document.addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open-sg]');
+  if (o) { const [c, g] = o.dataset.openSg.split('|'); openStudyGuide(c, g, 0); return; }
+  const oq = e.target.closest('[data-open-sgq]');
+  if (oq) {
+    document.getElementById('chatHistoryDrawer').classList.remove('open');
+    const [gid, qid] = oq.dataset.openSgq.split(':');
+    for (const ds of Object.values(CURRICULUM)) for (const l of (ds.lectures || [])) {
+      const g = (l.studyGuides || []).find(x => x.id === gid);
+      if (g) { openStudyGuide(l.clientId, gid, Math.max(0, g.questions.findIndex(q => q.id === qid))); return; }
+    }
+    showToast('That study guide is not on this device yet. Try Sync.');
+  }
+});
+
+function sgFeed(l, g, q) {
+  const qid = sgQid(g, q);
+  const list = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === qid);
+  if (!list.length) return `<p class="hint">Write your answer, then tap ✓ Check my answer. Stuck? Try 💡 Hint.</p>`;
+  return list.map(ex => `<div class="msg me">${escText(ex.q)}</div>
+    <div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}</div>`).join('');
+}
+
+function renderStudyGuideScreen() {
+  const box = document.getElementById('sgContent');
+  const { l, g, q } = sgFind();
+  if (!l || !g || !q) { box.innerHTML = '<div class="card center"><p>Study guide not found.</p><button class="btn" data-go="guide">Back to Study Guide</button></div>'; return; }
+  const i = sgState.idx, total = g.questions.length;
+  const open = sgInfoOpen.has(sgQid(g, q));
+  const dots = g.questions.map((x, k) => {
+    const cls = [x.teacher === 'confirmed' ? 'ok' : x.teacher === 'revised' ? 'rev' : (x.myAnswer || '').trim() ? 'ans' : '', k === i ? 'cur' : ''].join(' ');
+    return `<button class="sg-dot ${cls}" data-sg-go="${k}" title="Question ${x.n}">${x.n}</button>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="row" style="flex-wrap:wrap;gap:8px">
+      <b>📝 ${escText(g.name)} · ${escText(l.t)} · Question ${i + 1} of ${total}</b>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="say sm" data-sg-print="questions">🖨 Questions only</button>
+        <button class="say sm" data-sg-print="mine">🖨 With my answers</button>
+        <button class="say sm" data-sg-print="suggested">🖨 With suggested answers</button>
+        <button class="say sm" id="sgParentFillBtn" title="Parent: fill a suggested answer for every question">👪 Fill suggested answers</button>
+      </span>
+    </div>
+    ${g.parentFilledAt ? `<p style="margin:4px 0 0;font-size:12.5px;color:var(--mut)">Suggested answers filled by parent · ${new Date(g.parentFilledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>` : ''}
+    <div class="sg-dots">${dots}</div>
+    <div class="quiz-layout">
+      <div class="card">
+        <h3 style="font-size:16px"><span id="sgQText">${q.n}. ${applyBionic(escText(q.text))}</span> <button class="say btn-speak" data-target="sgQText">🔊</button></h3>
+        <label style="font-weight:600;font-size:14px">Your answer (in your own words)
+          <textarea id="sgAnswer" class="grow" rows="3" placeholder="Type your answer here." style="width:100%;margin-top:4px">${escText(q.myAnswer || '')}</textarea>
+        </label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn" id="sgCheckBtn">✓ Check my answer</button>
+        </div>
+        <div class="sg-teacher">
+          <span>Teacher check:</span>
+          <button class="say sm ${q.teacher === 'none' ? 'on' : ''}" data-sg-teacher="none">Not checked yet</button>
+          <button class="say sm ${q.teacher === 'confirmed' ? 'on' : ''}" data-sg-teacher="confirmed">✓ Teacher confirmed</button>
+          <button class="say sm ${q.teacher === 'revised' ? 'on' : ''}" data-sg-teacher="revised">✎ Teacher revised</button>
+        </div>
+        ${q.teacher === 'revised' ? `<label style="font-size:14px;margin-top:8px;display:block">Teacher's answer or correction
+          <textarea id="sgTeacherNote" class="grow" rows="2" style="width:100%;margin-top:4px">${escText(q.teacherNote || '')}</textarea></label>` : ''}
+        <div class="quiz-nav">
+          <span>${i > 0 ? '<button class="btn alt" id="sgPrevBtn">← Previous</button>' : ''}</span>
+          ${i < total - 1 ? '<button class="btn" id="sgNextBtn">Next →</button>' : '<button class="btn alt" data-go="guide">Done ✓</button>'}
+        </div>
+      </div>
+      <div class="card followup">
+        <div class="sg-card-head">
+          <h3 style="font-size:16px;margin:0">💬 Ask about this question</h3>
+          <span style="display:flex;gap:6px">
+            <button class="say sm" id="sgHintBtn">💡 Hint</button>
+            <button class="say sm ${open ? 'on' : ''}" id="sgInfoBtn" title="Show or hide a suggested answer (read-only)">ⓘ Suggested answer</button>
+          </span>
+        </div>
+        ${open ? `<div class="sg-info" id="sgInfo">${q.suggested
+          ? applyBionic(mdToHtml(q.suggested)) + `<div style="font-size:12px;color:var(--mut);margin-top:6px">${q.suggestedBy === 'parent' ? 'Filled by parent' : 'Suggested by the coach'} · read-only, type it in your own words</div>`
+          : 'Writing a suggested answer…'}</div>` : ''}
+        <div class="followup-feed" id="sgFeed">${sgFeed(l, g, q)}</div>
+        <div class="row" style="gap:8px">
+          <textarea id="sgAskInput" class="grow" rows="1" placeholder="Ask anything about this question" style="flex:1"></textarea>
+          <button class="btn" id="sgAskBtn" style="min-height:40px;padding:8px 14px">Ask</button>
+        </div>
+      </div>
+    </div>`;
+
+  const ans = document.getElementById('sgAnswer');
+  autoGrow(ans);
+  ans.addEventListener('paste', (e) => { e.preventDefault(); showToast('Type it in your own words. That is how it sticks.'); });
+  ans.addEventListener('input', () => {
+    q.myAnswer = ans.value;
+    q.updatedAt = new Date().toISOString();
+    clearTimeout(sgSaveTimer);
+    sgSaveTimer = setTimeout(() => persistLectureObj(l), 700);
+  });
+  const tn = document.getElementById('sgTeacherNote');
+  if (tn) tn.addEventListener('input', () => {
+    q.teacherNote = tn.value;
+    q.updatedAt = new Date().toISOString();
+    clearTimeout(sgSaveTimer);
+    sgSaveTimer = setTimeout(() => persistLectureObj(l), 700);
+  });
+  const info = document.getElementById('sgInfo');
+  if (info) ['copy', 'cut', 'contextmenu', 'dragstart'].forEach(ev => info.addEventListener(ev, x => x.preventDefault()));
+  const fd = document.getElementById('sgFeed');
+  fd.scrollTop = fd.scrollHeight;
+  const askInput = document.getElementById('sgAskInput');
+  askInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sgAsk('ask'); }
+  });
+  if (open && !q.suggested) sgEnsureSuggested(l, g, q);
+}
+
+async function sgFlush() {
+  clearTimeout(sgSaveTimer);
+  const { l } = sgFind();
+  if (l) await persistLectureObj(l);
+}
+
+function sgContextBlock(q, mode) {
+  return `[STUDY GUIDE QUESTION]
+Question: ${q.text}
+His answer so far: ${(q.myAnswer || '').trim() || '(blank)'}
+${q.teacher === 'revised' && q.teacherNote ? `Teacher's answer: ${q.teacherNote}` : ''}
+${q.suggested ? `Reference answer (do not reveal it word for word): ${q.suggested}` : ''}
+${mode === 'check' ? 'TASK: Grade his answer. Say clearly whether it is right, partly right, or not right yet. Then up to 3 bullets on what is missing or wrong. Do NOT write the full answer for him.' : ''}
+${mode === 'hint' ? 'TASK: Give ONE short hint that points him toward the answer without stating it.' : ''}`;
+}
+
+async function sgAsk(mode) {
+  if (sgBusy) return;
+  const { l, g, q } = sgFind();
+  if (!q) return;
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
+  let userText;
+  if (mode === 'check') {
+    if (!(q.myAnswer || '').trim()) { showToast('Write your answer first, then check it'); return; }
+    userText = `Check my answer: ${q.myAnswer.trim()}`;
+  } else if (mode === 'hint') {
+    userText = '💡 Hint please';
+  } else {
+    const inp = document.getElementById('sgAskInput');
+    userText = (inp.value || '').trim();
+    if (!userText) return;
+    inp.value = ''; autoGrow(inp);
+  }
+  await sgFlush();
+  sgBusy = true;
+  const feed = document.getElementById('sgFeed');
+  if (feed.querySelector('.hint')) feed.innerHTML = '';
+  feed.insertAdjacentHTML('beforeend', `<div class="msg me">${escText(userText)}</div>`);
+  const wait = document.createElement('div');
+  wait.className = 'msg ai';
+  feed.appendChild(wait);
+  feed.scrollTop = feed.scrollHeight;
+  const stop = startThinkingTimer(wait);
+  const ctrl = new AbortController();
+  const tmo = setTimeout(() => ctrl.abort(), CHAT_TIMEOUT_MS);
+  try {
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: userText }] }], key, model, {
+      system: buildCoachSystem([l]) + '\n\n' + sgContextBlock(q, mode), signal: ctrl.signal, temperature: 0.2
+    });
+    stop();
+    wait.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(res.text))}`;
+    recordExchange(l.clientId, userText, res.text, false, [l.id], { context: 'guide', qid: sgQid(g, q), kind: mode, model: res.modelUsed });
+  } catch (err) {
+    stop();
+    wait.className = 'msg ai err';
+    wait.textContent = ctrl.signal.aborted ? '⚠️ That took too long. Try again.' : `⚠️ ${err.message}`;
+  } finally {
+    clearTimeout(tmo);
+    sgBusy = false;
+    feed.scrollTop = feed.scrollHeight;
+  }
+}
+
+const SG_ANSWER_RULES = 'Write the answer a teacher would accept for this study guide question. Start with the one-line source tag. Then a short, plain first sentence that answers it, then up to 3 bullets with key details. Follow the learner profile and reading level.';
+
+async function sgEnsureSuggested(l, g, q) {
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
+  try {
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: `Study guide question: ${q.text}` }] }], key, model, {
+      system: buildCoachSystem([l]) + '\n\n' + SG_ANSWER_RULES, temperature: 0.2
+    });
+    q.suggested = res.text.trim();
+    q.suggestedBy = 'coach';
+    q.updatedAt = new Date().toISOString();
+    await persistLectureObj(l);
+  } catch (err) {
+    showToast('Could not write a suggested answer: ' + err.message);
+  }
+  if (sgFind().q === q) renderStudyGuideScreen();
+}
+
+const SG_FILL_SCHEMA = {
+  type: 'OBJECT',
+  properties: { answers: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+    n: { type: 'INTEGER' }, answer: { type: 'STRING' } }, required: ['n', 'answer'] } } },
+  required: ['answers']
+};
+
+async function sgParentFill() {
+  const { l, g } = sgFind();
+  if (!g) return;
+  const pin = prompt('Parent PIN to fill suggested answers for every question:');
+  if (pin === null) return;
+  const r = await checkParentPin(pin.trim());
+  if (r !== 'ok') { showToast(r === 'created' ? 'Parent PIN created.' : 'Incorrect PIN'); if (r !== 'created') return; }
+  const todo = g.questions.filter(q => !(q.suggested || '').trim());
+  if (!todo.length) { showToast('Every question already has a suggested answer'); return; }
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  const btn = document.getElementById('sgParentFillBtn');
+  btn.disabled = true; btn.textContent = `⏳ Filling ${todo.length}…`;
+  try {
+    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
+      `Answer each study guide question.\n${todo.map(q => `${q.n}. ${q.text}`).join('\n')}\n\nReturn only JSON: { "answers":[{"n":integer,"answer":string}] }. Each answer follows these rules: ${SG_ANSWER_RULES}` }] }],
+      key, model, { system: buildCoachSystem([l]), temperature: 0.2, maxOutputTokens: 16384,
+        responseMimeType: 'application/json', responseSchema: SG_FILL_SCHEMA });
+    const parsed = parseModelJson(res.text);
+    const now = new Date().toISOString();
+    let filled = 0;
+    arrOf(parsed.answers).forEach(a => {
+      const q = todo.find(x => x.n === Number(a.n));
+      if (q && strOf(a.answer)) { q.suggested = strOf(a.answer); q.suggestedBy = 'parent'; q.updatedAt = now; filled++; }
+    });
+    g.parentFilledAt = now;
+    await persistLectureObj(l);
+    showToast(`Filled ${filled} suggested answer(s). They show on each ⓘ card and in print.`);
+  } catch (err) {
+    alert('Fill error: ' + err.message);
+  }
+  renderStudyGuideScreen();
+}
+
+function sgPrint(kind) {
+  const { l, g } = sgFind();
+  if (!g) return;
+  const title = { questions: 'Study Guide', mine: 'Study Guide · My Answers', suggested: 'Study Guide · Suggested Answers' }[kind];
+  const lines = n => `<div class="lines">${'<div></div>'.repeat(n)}</div>`;
+  const teacherBox = `<div class="tag" style="margin-top:6px">Teacher check: ☐ Correct &nbsp; ☐ Revise: _______________________________</div>`;
+  const body = g.questions.map(q => {
+    let ans = '';
+    if (kind === 'questions') ans = lines(3);
+    if (kind === 'mine') ans = (q.myAnswer || '').trim() ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(q.myAnswer)}</div>` : lines(3);
+    if (kind === 'suggested') {
+      const text = (q.suggested || '').replace(/^\s*(📒|📘|🌐)[^\n]*\n+/, '');
+      ans = text ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(text.replace(/\*\*/g, ''))}</div>` : lines(3);
+      if ((q.myAnswer || '').trim()) ans = `<div class="tag" style="margin-top:4px">My answer: ${escText(q.myAnswer)}</div>` + ans;
+    }
+    if (q.teacher === 'revised' && q.teacherNote) ans += `<div class="tag">Teacher's answer: ${escText(q.teacherNote)}</div>`;
+    return `<div class="pq"><b>${q.n}. ${escText(q.text)}</b>${ans}${teacherBox}</div>`;
+  }).join('');
+  printHtml(`<div class="page">${printHeader(title)}<div class="meta">${escText(g.name)} · ${escText(l.t)}${kind === 'suggested' && g.parentFilledAt ? ' · suggested answers filled by parent' : ''}</div>${body}</div>`);
+}
+
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('s-sg').classList.contains('on')) return;
+  const t = e.target;
+  const go = t.closest('[data-sg-go]');
+  if (go) { sgFlush(); sgState.idx = Number(go.dataset.sgGo); renderStudyGuideScreen(); return; }
+  if (t.closest('#sgPrevBtn')) { sgFlush(); sgState.idx--; renderStudyGuideScreen(); return; }
+  if (t.closest('#sgNextBtn')) { sgFlush(); sgState.idx++; renderStudyGuideScreen(); return; }
+  if (t.closest('#sgCheckBtn')) { sgAsk('check'); return; }
+  if (t.closest('#sgHintBtn')) { sgAsk('hint'); return; }
+  if (t.closest('#sgAskBtn')) { sgAsk('ask'); return; }
+  if (t.closest('#sgParentFillBtn')) { sgParentFill(); return; }
+  const pr = t.closest('[data-sg-print]');
+  if (pr) { sgFlush(); sgPrint(pr.dataset.sgPrint); return; }
+  if (t.closest('#sgInfoBtn')) {
+    const { g, q } = sgFind();
+    const id = sgQid(g, q);
+    if (sgInfoOpen.has(id)) sgInfoOpen.delete(id); else sgInfoOpen.add(id);
+    localStorage.setItem('ss_sg_info_open', JSON.stringify([...sgInfoOpen]));
+    renderStudyGuideScreen();
+    return;
+  }
+  const tb = t.closest('[data-sg-teacher]');
+  if (tb) {
+    const { l, q } = sgFind();
+    q.teacher = tb.dataset.sgTeacher;
+    q.updatedAt = new Date().toISOString();
+    persistLectureObj(l);
+    renderStudyGuideScreen();
+  }
+});
+
 /* ---------- Printing: results, blank test, single question ---------- */
 function printHtml(html) {
   const area = document.getElementById('printArea');
@@ -2882,7 +3239,11 @@ function renderStagedFiles() {
     const chip = document.createElement('div');
     chip.className = 'staged-chip';
     chip.innerHTML = `
-      <span>${f.type === 'pdf' ? '📄' : f.type === 'audio' ? '🎧' : '📷'} ${escText(f.name)}${f.size ? ` <small style="color:var(--mut)">${(f.size / 1048576).toFixed(1)} MB</small>` : ''}</span>
+      <span>${f.role === 'guide' ? '📝' : f.type === 'pdf' ? '📄' : f.type === 'audio' ? '🎧' : '📷'} ${escText(f.name)}${f.size ? ` <small style="color:var(--mut)">${(f.size / 1048576).toFixed(1)} MB</small>` : ''}</span>
+      ${f.type === 'pdf' || f.type === 'image' ? `<select data-file-role="${f.id}" title="What is this file?" style="width:auto;padding:1px 4px;font-size:11.5px">
+        <option value="handout" ${f.role !== 'guide' ? 'selected' : ''}>Handout</option>
+        <option value="guide" ${f.role === 'guide' ? 'selected' : ''}>Study guide (questions)</option>
+      </select>` : ''}
       <button class="say sm" data-remove-file="${f.id}" style="padding:1px 5px;font-size:11px">✕</button>
     `;
     container.appendChild(chip);
@@ -2897,10 +3258,19 @@ document.addEventListener('click', (e) => {
   }
 });
  
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest && e.target.closest('[data-file-role]');
+  if (!sel) return;
+  const f = stagedFiles.find(x => x.id === sel.dataset.fileRole);
+  if (f) { f.role = sel.value; renderStagedFiles(); }
+});
+
 function clearStagedFiles() {
   stagedFiles = [];
   mainFileInput.value = '';
   document.getElementById('mainPastedNotes').value = '';
+  const ng = document.getElementById('notesIsGuide');
+  if (ng) ng.checked = false;
   renderStagedFiles();
 }
  
@@ -3143,8 +3513,8 @@ async function transcribeAudioSource(blob, label, key, onProgress) {
 /* ---------------------------------------------------------------------
    STUDY GUIDE SCHEMA, PROMPT AND VALIDATION
    --------------------------------------------------------------------- */
-const SOURCE_KINDS = ['audio', 'pdf', 'photo', 'notes'];
-const SOURCE_ICONS = { audio: '🎙️', pdf: '📄', photo: '📷', notes: '✍️' };
+const SOURCE_KINDS = ['audio', 'pdf', 'photo', 'notes', 'guide'];
+const SOURCE_ICONS = { audio: '🎙️', pdf: '📄', photo: '📷', notes: '✍️', guide: '📝' };
 const SRC = { type: 'STRING' }; // source ID such as "S2"
 
 const STUDY_SCHEMA = {
@@ -3207,6 +3577,7 @@ The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on.
 6. DEADLINES: only assignments, quizzes, or tests whose date is stated in the sources. due_iso is YYYY-MM-DD resolved against the reference date, or null when no date is stated.
 7. VOCABULARY: at least 6 key terms a student would need to define on a test (more when the material has them), each with a short definition. Include names of people, places, and technical terms that matter.
 8. Write all explanations at a Grade ${readingLevel} reading level, in plain, mature language.
+9. Sources of kind "guide" are the teacher's study guide: a list of questions, not answers. Treat each question's topic as something to cover, explaining it from the other sources (or general knowledge when they are silent). Never treat a question as a fact.
 
 Return only JSON with this shape:
 { "sections_found":[{"title":string,"sources":[sourceId]}], "topic_label":string, "topic_icon":emoji, "big_ideas":[string],
@@ -3247,6 +3618,7 @@ Return only JSON: { "quiz_questions":[{"q":string,"options":[string,string,strin
 function normKind(k) {
   const x = String(k || '').toLowerCase().trim();
   if (SOURCE_KINDS.includes(x)) return x;
+  if (/guide|question/.test(x)) return 'guide';
   if (/audio|transcript|recording|lecture/.test(x)) return 'audio';
   if (/pdf|handout|document|slide/.test(x)) return 'pdf';
   if (/photo|image|whiteboard|picture/.test(x)) return 'photo';
@@ -3424,6 +3796,7 @@ async function mergeIntoLecture(l, study, ctx) {
     src: kinds.length > 1 ? 'Mixed' : (typeNames[kinds[0]] || l.src),
     c: study.big_idea,
     bigIdeas: study.big_ideas,
+    notesEntries: [...notesEntriesOf(l), ...(ctx.newNotes ? [{ id: 'n' + Date.now(), ts: new Date().toISOString(), text: ctx.newNotes, device: getDeviceName() }] : [])],
     notesText: ctx.notesText,
     bold_stem: study.concepts[0].bold_stem,
     concepts: study.concepts,
@@ -3436,7 +3809,8 @@ async function mergeIntoLecture(l, study, ctx) {
     coverage: study.coverage,
     sourcesUsed: study.coverage.tagged,
     transcript: ctx.transcriptAll,
-    durationSeconds: ((l.durationSeconds || 0) + (ctx.addedSeconds || 0)) || null
+    durationSeconds: ((l.durationSeconds || 0) + (ctx.addedSeconds || 0)) || null,
+    studyGuides: [...(l.studyGuides || []), ...(ctx.newGuides || [])]
   });
   const sets = getLectureSets(l).slice();
   if (study.quiz.length) sets.push({ id: `s${sets.length + 1}`, batchId: 'b' + Date.now(), createdAt: new Date().toISOString(), items: study.quiz });
@@ -3463,6 +3837,26 @@ async function mergeIntoLecture(l, study, ctx) {
     await idbPut('lectures', rec);
   }
   return l;
+}
+
+const GUIDE_SCHEMA = {
+  type: 'OBJECT',
+  properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+    n: { type: 'INTEGER' }, text: { type: 'STRING' } }, required: ['n', 'text'] } } },
+  required: ['questions']
+};
+
+async function extractStudyGuide(input, key, model, idx) {
+  const res = await queryGeminiWaterfall([{ role: 'user', parts: [...input.parts, { text:
+    'This is a teacher\'s study guide. List every question or prompt on it, in order, exactly as written (fix only obvious scanning errors). Include fill-in-the-blank and "define" items as questions. Number them as they are numbered on the page. Return only JSON: { "questions":[{"n":integer,"text":string}] }' }] }],
+    key, model, { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json', responseSchema: GUIDE_SCHEMA });
+  const parsed = parseModelJson(res.text);
+  const now = new Date().toISOString();
+  const questions = arrOf(parsed.questions).filter(q => q && strOf(q.text)).map((q, i) => ({
+    id: 'q' + (i + 1), n: Number(q.n) || i + 1, text: strOf(q.text),
+    myAnswer: '', suggested: '', suggestedBy: '', teacher: 'none', teacherNote: '', updatedAt: now
+  }));
+  return { id: 'g' + Date.now() + idx, name: input.name, createdAt: now, questions };
 }
 
 function normTitle(t) {
@@ -3643,17 +4037,26 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     }
 
     // 2. PDFs and photos
+    const guideInputs = []; // teacher study guides: questions are pulled out after the guide is built
     docFiles.forEach(f => {
-      const kind = f.type === 'pdf' ? 'pdf' : 'photo';
-      parts.push({ text: `[${addSource(kind, f.name)} · ${kind}: ${f.name}]` });
-      parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+      const kind = f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo');
+      const sidx = addSource(kind, f.name);
+      const label = { text: `[${sidx} · ${kind}: ${f.name}]` };
+      const data = { inlineData: { mimeType: f.mime, data: f.base64 } };
+      parts.push(label, data);
+      if (kind === 'guide') guideInputs.push({ name: f.name, parts: [label, data] });
     });
 
     // 3. Typed or pasted notes
+    const notesAreGuide = hasNotes && document.getElementById('notesIsGuide').checked;
     if (hasNotes) {
-      const notesId = addSource('notes', 'Typed notes');
+      const kind = notesAreGuide ? 'guide' : 'notes';
+      const label = notesAreGuide ? 'Study guide (typed)' : 'Typed notes';
+      const notesId = addSource(kind, label);
       sourceTexts[notesId] = pastedNotes;
-      parts.push({ text: `[${notesId} · notes: Typed notes]\n${pastedNotes}` });
+      const part = { text: `[${notesId} · ${kind}: ${label}]\n${pastedNotes}` };
+      parts.push(part);
+      if (notesAreGuide) guideInputs.push({ name: label, parts: [part] });
     }
 
     // Size guard: base64 and text both count toward the request limit
@@ -3694,11 +4097,23 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
     study.coverage = computeCoverage(study, sourceList, { failedSlices, gaps: gapCount });
 
+    // Teacher study guides: pull out each question
+    const newGuides = [];
+    for (let gi = 0; gi < guideInputs.length; gi++) {
+      setStatus('⏳ Reading the study guide questions…');
+      try {
+        newGuides.push(await extractStudyGuide(guideInputs[gi], key, model, gi));
+      } catch (gErr) {
+        console.warn('Study guide extraction failed', gErr);
+      }
+    }
+
     const ds = CURRICULUM[classCodeAtStart] || getActiveDataset();
     let targetLecture;
     if (addTarget) {
       targetLecture = await mergeIntoLecture(addTarget, study, {
-        transcriptAll, notesText: [carriedNotes, pastedNotes].filter(Boolean).join('\n\n'),
+        transcriptAll, notesText: [carriedNotes, notesAreGuide ? '' : pastedNotes].filter(Boolean).join('\n\n'),
+        newNotes: notesAreGuide ? '' : pastedNotes, newGuides,
         sourceList, addedSeconds: totalAudioSec
       });
       if (activeClassCode === classCodeAtStart) pickedLectures = { [targetLecture.id]: true };
@@ -3721,7 +4136,9 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       src: computedSourceType,
       c: study.big_idea,
       bigIdeas: study.big_ideas,
-      notesText: pastedNotes || '',
+      notesText: notesAreGuide ? '' : (pastedNotes || ''),
+      notesEntries: pastedNotes && !notesAreGuide ? [{ id: 'n' + Date.now(), ts: new Date().toISOString(), text: pastedNotes, device: getDeviceName() }] : [],
+      studyGuides: newGuides,
       bold_stem: study.concepts[0].bold_stem,
       concepts: study.concepts,
       sectionsFound: study.sections,
@@ -3830,6 +4247,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     if (unverified) notes.push(`${unverified} quote(s) not found in the material, hidden`);
     if (newDeadlines) notes.push(`${newDeadlines} deadline(s) added`);
     if (addTarget) notes.unshift('added to this day\'s lecture');
+    if (newGuides.length) notes.unshift(`study guide: ${newGuides.reduce((n, g) => n + g.questions.length, 0)} question(s)`);
     showToast(notes.length ? `Study guide ready · ${notes.join(' · ')}` : '🎉 Study guide and practice drill ready!');
     sameDayChoice = null;
     renderSameDayBanner();
@@ -3875,6 +4293,44 @@ function recordExchange(targetKey, qText, aText, isMiss = false, lectureIds = nu
     ...(meta || {})
   });
   saveExchangesForTarget(targetKey, list);
+  return list[list.length - 1].ts;
+}
+
+// ⭐ Save this answer: the reply becomes a typed-notes entry on the lecture, so it counts as class material
+function saveAnswerButton(ts, saved) {
+  if (!ts) return '';
+  return `<div style="margin-top:6px"><button class="say sm" data-save-answer="${escText(ts)}" ${saved ? 'disabled' : ''}>${saved ? '⭐ Saved to notes' : '⭐ Save this answer'}</button></div>`;
+}
+
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-save-answer]');
+  if (!b) return;
+  const sel = getSelectedLectures().filter(l => !l.isDemo && l.clientId);
+  if (sel.length !== 1) { showToast('Pick one lecture in the Unit Map to save this answer to'); return; }
+  const key = getActiveChatTargetKey();
+  const list = loadExchangesForTarget(key);
+  const ex = list.find(x => x.ts === b.dataset.saveAnswer);
+  if (!ex) return;
+  const l = sel[0];
+  const entry = { id: 'n' + Date.now(), ts: new Date().toISOString(), device: getDeviceName(),
+    text: `Saved answer. Q: ${ex.q}\n${ex.a.replace(/^\s*(📒|📘|🌐)[^\n]*\n+/, '')}` };
+  l.notesEntries = [...notesEntriesOf(l), entry];
+  l.notesText = l.notesEntries.map(n => n.text).join('\n\n');
+  await persistLectureObj(l);
+  ex.saved = true;
+  saveExchangesForTarget(key, list);
+  b.textContent = '⭐ Saved to notes';
+  b.disabled = true;
+  showToast(`Saved to ${l.t}. The coach will use it as class material.`);
+});
+
+async function persistLectureObj(l) {
+  const all = await idbGetAll('lectures');
+  const rec = all.find(r => r.clientId === l.clientId);
+  if (!rec) return;
+  rec.studyPayload = JSON.stringify(l);
+  rec.isDirty = true;
+  await idbPut('lectures', rec);
 }
 
 // "New Chat" only hides older exchanges on screen; nothing is deleted, so SharePoint keeps the full history
@@ -3950,9 +4406,9 @@ function loadSubjectChat() {
   `;
  
   exchanges.forEach(ex => {
-    if (!ex.isMiss && ex.context !== 'drill') {
+    if (!ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide') {
       feed.innerHTML += `<div class="msg me">${escText(ex.q)}</div>`;
-      feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}</div>`;
+      feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}${saveAnswerButton(ex.ts, ex.saved)}</div>`;
     }
   });
  
@@ -3996,14 +4452,16 @@ function renderHistoryDrawer() {
   exchanges.slice().reverse().forEach(ex => {
     const item = document.createElement('div');
     item.className = 'thread-item';
-    const label = ex.isMiss ? '⚠️ Missed Concept' : ex.context === 'drill' ? '🎯 Drill follow-up' : '💬 Question';
+    const label = ex.isMiss ? '⚠️ Missed Concept' : ex.context === 'drill' ? '🎯 Drill follow-up' : ex.context === 'guide' ? '📝 Study guide' : '💬 Question';
     const when = new Date(ex.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     item.innerHTML = `
       <div style="font-weight:600;font-size:13px;color:var(--c)">${label}</div>
       <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}</div>
       <small style="color:var(--mut)">${when}</small>
       ${ex.isMiss ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
-        ${ex.context === 'drill'
+        ${ex.context === 'guide'
+          ? `<button class="say sm" data-open-sgq="${escapeHtml(ex.qid || '')}">📝 Open question</button>`
+          : ex.context === 'drill'
           ? `<button class="say sm" data-open-q="${escapeHtml(ex.qid || '')}">🎯 Open question</button>`
           : `<button class="say sm" data-continue-ts="${escapeHtml(ex.ts)}">↪ Continue from here</button>
              <button class="say sm" data-ask-again="${escapeHtml(ex.ts)}">✎ Ask again</button>`}
@@ -4177,6 +4635,8 @@ function buildSourceTierRules(code) {
 2. ${textbook ? `The course textbook: ${textbook}. Use its vocabulary and the way it usually explains the topic.` : 'No course textbook is set for this class.'}
 3. General knowledge.
 Answer the question fully either way. Do not open with apologies or "this is not in your notes" disclaimers. Start the reply with exactly one short tag line: ${tags}.
+Choose the tag by where the EXPLANATION'S FACTS come from. If the class material only names or asks about the topic (for example a study guide question or a vocabulary list) without explaining it, do not use 📒.
+Teacher-checked study guide answers (listed below when present) outrank everything else.
 Never claim to quote the textbook, and never invent page numbers, chapter numbers, or quotes.
 If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.` +
     (syllabus ? `\n\n[SYLLABUS / PACING GUIDE]\n${syllabus.slice(0, 8000)}` : '');
@@ -4229,8 +4689,14 @@ function buildChatGrounding(lectures, opts = {}) {
     let tr = includeTranscript ? (l.transcript || '') : '';
     if (tr.length > perLecture) tr = tr.slice(0, perLecture) + '\n[transcript shortened]';
     const ideas = (l.bigIdeas && l.bigIdeas.length ? l.bigIdeas : [l.c]).map(b => `- ${b}`).join('\n');
-    const notes = includeTranscript && l.notesText ? `\nTyped notes:\n${String(l.notesText).slice(0, 15000)}` : '';
+    const notes = l.notesText ? `\nTyped notes and saved answers:\n${String(l.notesText).slice(0, 15000)}` : '';
+    const checked = (l.studyGuides || []).flatMap(g => g.questions)
+      .filter(q => q.teacher === 'confirmed' || q.teacher === 'revised')
+      .map(q => q.teacher === 'revised'
+        ? `- Q: ${q.text}\n  Teacher's answer: ${q.teacherNote || q.myAnswer}`
+        : `- Q: ${q.text}\n  Answer confirmed by teacher: ${q.myAnswer}`).join('\n');
     return `### ${l.t} (${l.d || ''} ${l.n || ''})\nBig ideas:\n${ideas}\nConcepts:\n${concepts}` + notes +
+      (checked ? `\n[TEACHER-CHECKED STUDY GUIDE ANSWERS]\n${checked}` : '') +
       (vocab ? `\nVocabulary:\n${vocab}` : '') +
       (tr ? `\nClass transcript:\n${tr}` : '');
   }).join('\n\n');
@@ -4270,7 +4736,7 @@ async function sendChatMessage(query, isRetry = false) {
   const systemContext = buildCoachSystem(getSelectedLectures(), { includeTranscript: !broad });
  
   const targetKey = getActiveChatTargetKey();
-  const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss && ex.context !== 'drill');
+  const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide');
  
   const contentsPayload = [];
   exchanges.slice(-4).forEach(h => {
@@ -4290,19 +4756,18 @@ async function sendChatMessage(query, isRetry = false) {
   const t0 = Date.now();
  
   try {
-    const result = await queryGeminiWaterfall(contentsPayload, key, model, { system: systemContext, signal: ctrl.signal });
+    const result = await queryGeminiWaterfall(contentsPayload, key, model, { system: systemContext, signal: ctrl.signal, temperature: 0.2 });
     stopTimer();
     thinkingEl.remove();
  
     const formattedHtml = applyBionic(mdToHtml(result.text));
     const aiMsgEl = document.createElement('div');
     aiMsgEl.className = 'msg ai';
-    aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}`;
+    // Which model answered and how long it took, for diagnosing slow answers from SharePoint
+    const exTs = recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
+    aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}${saveAnswerButton(exTs)}`;
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
- 
-    // Which model answered and how long it took, for diagnosing slow answers from SharePoint
-    recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
   } catch (err) {
     stopTimer();
     thinkingEl.remove();
@@ -4770,11 +5235,227 @@ async function backgroundCloudRefresh() {
     await pushConfigToSharePoint(siteId, token);
     await pullConfigFromSharePoint(siteId, token);
     await pullDeadlinesFromSharePoint(siteId, token);
+    const pulled = await pullLecturesFromSharePoint(siteId, token);
+    const pulledChats = await pullChatsFromSharePoint(siteId, token);
+    if (pulled.added || pulled.updated || pulled.merged || pulledChats) {
+      await loadLecturesFromDB();
+      renderAll();
+      renderSameDayBanner();
+      if (pulled.added || pulled.updated) showToast(`⬇️ ${pulled.added + pulled.updated} lecture(s) updated from other devices`);
+    }
     updateRadarPills();
     updateToneButton();
   } catch (e) {
     console.warn('Background refresh skipped:', e.message);
   }
+}
+
+/* =====================================================================
+   TWO-WAY SYNC: pull before push. Lists that grow (question sets, notes, study guide
+   answers, chat exchanges) are combined from both sides; single values keep the newer one.
+   ===================================================================== */
+function buildPushStudyJson(r) {
+  let lec = {};
+  try { lec = JSON.parse(r.studyPayload || '{}'); } catch (e) {}
+  const out = { ...lec };
+  delete out.quizItems; delete out.quizSets; delete out.q; // quizzes travel in PracticePayload_JSON
+  out.schema = 'full';
+  out.updatedAt = r.updatedAt || '';
+  out.updatedBy = r.updatedBy || '';
+  return JSON.stringify(out);
+}
+
+function lectureIdFromClientId(clientId, classCode) {
+  const i = clientId.indexOf(classCode + '_');
+  return i >= 0 ? clientId.slice(i + classCode.length + 1) : clientId;
+}
+
+function buildRecFromRemote(x) {
+  const f = x.fields || {};
+  let study = {}, practice = {};
+  try { study = JSON.parse(f.StudyPayload_JSON || '{}'); } catch (e) {}
+  try { practice = JSON.parse(f.PracticePayload_JSON || '{}'); } catch (e) {}
+  const recorded = f.RecordedDate || study.recordedDate || new Date().toISOString();
+  const dt = new Date(recorded);
+  let lec;
+  if (study.schema === 'full' || Array.isArray(study.concepts)) {
+    lec = { ...study };
+  } else {
+    // rows pushed before V15 carry the cleaned payload
+    lec = {
+      c: study.big_idea || '', bigIdeas: study.big_ideas || (study.big_idea ? [study.big_idea] : []),
+      concepts: study.core_concepts || [], vocab: study.vocab || [], cues: study.teacher_cues || [],
+      sectionsFound: study.sections_found || [], coverage: study.coverage || null,
+      transcript: study.transcript || '', src: study.source_type || 'Mixed'
+    };
+  }
+  delete lec.schema;
+  const updatedAt = lec.updatedAt || '';
+  const updatedBy = lec.updatedBy || '';
+  delete lec.updatedAt; delete lec.updatedBy;
+  Object.assign(lec, {
+    id: lec.id || lectureIdFromClientId(f.ClientId, f.ClassCode),
+    clientId: f.ClientId, studentId: f.StudentId || getStudentId(), isDemo: false,
+    t: f.TopicLabel || lec.t || 'Lecture', i: f.TopicIcon || lec.i || '📖',
+    d: dt.toLocaleDateString('en-US', { weekday: 'short' }), n: dt.getDate(),
+    unitKey: f.UnitKey || lec.unitKey || 'U1', recordedDate: recorded,
+    durationSeconds: f.DurationSeconds || lec.durationSeconds || null
+  });
+  if (!lec.bold_stem && lec.concepts && lec.concepts[0]) lec.bold_stem = lec.concepts[0].bold_stem;
+  if (Array.isArray(practice.sets) && practice.sets.length) {
+    lec.quizSets = practice.sets.map(st => ({ id: st.id, batchId: st.batchId, createdAt: st.createdAt, items: st.quiz || [] }));
+    lec.quizItems = lec.quizSets[0].items;
+  } else {
+    lec.quizItems = practice.quiz || [];
+  }
+  return {
+    clientId: f.ClientId, studentId: f.StudentId || getStudentId(), classCode: f.ClassCode,
+    className: f.ClassName || '', periodNumber: f.PeriodNumber || 1, recordedDate: recorded,
+    durationSeconds: f.DurationSeconds || null, unitKey: f.UnitKey || 'U1', unitTitle: f.UnitTitle || '',
+    partNumber: f.PartNumber || 1, topicLabel: lec.t, topicIcon: lec.i, processingStatus: 'Completed',
+    isDemo: false, isDirty: false,
+    studyPayload: JSON.stringify(lec), studyPayloadClean: f.StudyPayload_JSON || '',
+    practicePayloadClean: f.PracticePayload_JSON || '',
+    spItemId: x.id, spModified: x.lastModifiedDateTime || f.Modified || '',
+    updatedAt, updatedBy
+  };
+}
+
+function notesEntriesOf(lec) {
+  if (Array.isArray(lec.notesEntries)) return lec.notesEntries;
+  return lec.notesText ? [{ id: 'legacy', ts: lec.recordedDate || '', text: lec.notesText }] : [];
+}
+
+function unionBy(a, b, keyFn) {
+  const map = new Map();
+  [...(a || []), ...(b || [])].forEach(x => { const k = keyFn(x); if (!map.has(k)) map.set(k, x); });
+  return [...map.values()];
+}
+
+function mergeStudyGuides(a, b) {
+  const byId = new Map();
+  [...(a || []), ...(b || [])].forEach(g => {
+    const cur = byId.get(g.id);
+    if (!cur) { byId.set(g.id, JSON.parse(JSON.stringify(g))); return; }
+    // per question, the newer edit wins
+    const qmap = new Map(cur.questions.map(q => [q.id, q]));
+    (g.questions || []).forEach(q => {
+      const mine = qmap.get(q.id);
+      if (!mine || String(q.updatedAt || '') > String(mine.updatedAt || '')) qmap.set(q.id, q);
+    });
+    cur.questions = [...qmap.values()].sort((x, y) => (x.n || 0) - (y.n || 0));
+    if (g.parentFilledAt && !cur.parentFilledAt) cur.parentFilledAt = g.parentFilledAt;
+  });
+  return [...byId.values()];
+}
+
+function mergeLectureRecs(localRec, remoteRec) {
+  const L = JSON.parse(localRec.studyPayload || '{}');
+  const R = JSON.parse(remoteRec.studyPayload || '{}');
+  const remoteNewer = String(remoteRec.updatedAt || '') > String(localRec.updatedAt || '');
+  const base = JSON.parse(JSON.stringify(remoteNewer ? R : L));
+
+  // question sets: combine by batch; a clashing set id gets a batch-based id
+  const lsets = getLectureSets(L), rsets = getLectureSets(R);
+  const sets = lsets.slice();
+  rsets.forEach(st => {
+    if (sets.some(x => x.batchId === st.batchId)) return;
+    const copy = { ...st };
+    if (sets.some(x => x.id === copy.id)) copy.id = `s_${copy.batchId}`;
+    sets.push(copy);
+  });
+  sets.sort((x, y) => (x.batchId === 'original' ? -1 : y.batchId === 'original' ? 1 : String(x.createdAt).localeCompare(String(y.createdAt))));
+  base.quizSets = sets;
+  base.quizItems = sets.length ? sets[0].items : [];
+
+  base.notesEntries = unionBy(notesEntriesOf(L), notesEntriesOf(R), e => e.id).sort((x, y) => String(x.ts).localeCompare(String(y.ts)));
+  base.notesText = base.notesEntries.map(e => e.text).join('\n\n');
+  base.studyGuides = mergeStudyGuides(L.studyGuides, R.studyGuides);
+
+  const rec = { ...localRec };
+  rec.studyPayload = JSON.stringify(base);
+  rec.topicLabel = base.t; rec.topicIcon = base.i;
+  rec.practicePayloadClean = JSON.stringify({
+    quiz: sets.length ? sets[sets.length - 1].items : [],
+    sets: sets.map(st => ({ id: st.id, batchId: st.batchId, createdAt: st.createdAt, quiz: st.items })),
+    flashcards: (base.vocab || []).map(v => ({ front: v.term, back: v.definition }))
+  });
+  rec.spItemId = remoteRec.spItemId;
+  rec.spModified = remoteRec.spModified;
+  rec.isDirty = true;
+  return rec;
+}
+
+async function pullLecturesFromSharePoint(siteId, token) {
+  const result = { added: 0, updated: 0, merged: 0, mergedNames: [], mergedFrom: '' };
+  const sid = getStudentId();
+  const local = await idbGetAll('lectures');
+  const byClient = new Map(local.map(r => [r.clientId, r]));
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$expand=fields&$top=200`;
+  while (url) {
+    const res = await fetchGraphWithRetry(url, { method: 'GET' }, token);
+    const data = await res.json();
+    for (const x of (data.value || [])) {
+      const f = x.fields || {};
+      if (!f.ClientId) continue;
+      if (f.StudentId && String(f.StudentId).toUpperCase() !== sid) continue;
+      const stamp = x.lastModifiedDateTime || f.Modified || '';
+      const mine = byClient.get(f.ClientId);
+      if (mine && mine.spModified && mine.spModified === stamp) continue; // unchanged since this device's last sync
+      const remoteRec = buildRecFromRemote(x);
+      if (!mine) {
+        remoteRec._pulled = true;
+        await idbPut('lectures', remoteRec);
+        result.added++;
+      } else if (!mine.isDirty) {
+        remoteRec._pulled = true;
+        await idbPut('lectures', remoteRec);
+        result.updated++;
+      } else {
+        const merged = mergeLectureRecs(mine, remoteRec);
+        merged._pulled = true;
+        merged.updatedAt = new Date().toISOString();
+        merged.updatedBy = getDeviceName();
+        await idbPut('lectures', merged);
+        result.merged++;
+        result.mergedNames.push(remoteRec.topicLabel);
+        result.mergedFrom = remoteRec.updatedBy || result.mergedFrom;
+      }
+    }
+    url = data['@odata.nextLink'] || null;
+  }
+  return result;
+}
+
+// Chats: exchanges from both sides are combined; nothing is overwritten
+async function pullChatsFromSharePoint(siteId, token) {
+  const sid = getStudentId();
+  let changed = 0;
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Chats/items?$expand=fields&$top=200`;
+  while (url) {
+    const res = await fetchGraphWithRetry(url, { method: 'GET' }, token);
+    const data = await res.json();
+    for (const x of (data.value || [])) {
+      const f = x.fields || {};
+      if (!f.ThreadId) continue;
+      if (f.StudentId && String(f.StudentId).toUpperCase() !== sid) continue;
+      let remote = [];
+      try { remote = JSON.parse(f.Thread_JSON || '[]'); } catch (e) {}
+      const local = loadExchangesForTarget(f.ThreadId);
+      const key = ex => `${ex.ts}|${ex.q}`;
+      const remoteKeys = new Set(remote.map(key));
+      const localKeys = new Set(local.map(key));
+      const remoteHasNew = remote.some(ex => !localKeys.has(key(ex)));
+      if (!remoteHasNew) continue;
+      const merged = unionBy(local, remote, key).sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+      const localHasExtra = local.some(ex => !remoteKeys.has(key(ex)));
+      if (localHasExtra) saveExchangesForTarget(f.ThreadId, merged); // marks dirty so the union is pushed
+      else localStorage.setItem(`ss_exchanges_${f.ThreadId}`, JSON.stringify(merged));
+      changed++;
+    }
+    url = data['@odata.nextLink'] || null;
+  }
+  return changed;
 }
 
 // Which class a chat row key belongs to: lect_<CODE>_…, review_<CODE>, general_<CODE>
@@ -4847,6 +5528,16 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     if (localStorage.getItem('ss_dirty_classes')) await pushClassesToSharePoint(siteId, token);
     await pullConfigFromSharePoint(siteId, token);
 
+    // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
+    showToast('Checking for changes from other devices…');
+    const pulled = await pullLecturesFromSharePoint(siteId, token);
+    const pulledChats = await pullChatsFromSharePoint(siteId, token);
+    if (pulled.added || pulled.updated || pulled.merged || pulledChats) {
+      await loadLecturesFromDB();
+      renderAll();
+      renderSameDayBanner();
+    }
+
     showToast('Checking for unsynced lectures, deadlines & chats…');
     let syncedLectures = 0, syncedDeadlines = 0, syncedChatsCount = 0;
  
@@ -4871,29 +5562,39 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         TopicLabel: r.topicLabel,
         TopicIcon: r.topicIcon,
         ProcessingStatus: 'Completed',
-        StudyPayload_JSON: r.studyPayloadClean || r.studyPayload,
+        StudyPayload_JSON: buildPushStudyJson(r),
         PracticePayload_JSON: r.practicePayloadClean || '',
-        SchemaVersion: 5
+        SchemaVersion: 6
       };
  
-      const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${r.clientId}'&$expand=fields`;
-      const checkRes = await fetchGraphWithRetry(checkUrl, { method: 'GET' }, token);
-      const checkData = await checkRes.json();
+      let itemId = r.spItemId || null;
+      if (!itemId) {
+        const checkUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items?$filter=fields/ClientId eq '${r.clientId}'&$expand=fields`;
+        const checkRes = await fetchGraphWithRetry(checkUrl, { method: 'GET' }, token);
+        const checkData = await checkRes.json();
+        if (checkData.value && checkData.value.length > 0) itemId = checkData.value[0].id;
+      }
  
-      if (checkData.value && checkData.value.length > 0) {
-        const itemId = checkData.value[0].id;
-        await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${itemId}/fields`, {
+      if (itemId) {
+        const pr = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${itemId}/fields`, {
           method: 'PATCH',
           body: JSON.stringify(fieldsPayload)
         }, token);
+        const pf = await pr.json().catch(() => ({}));
+        r.spModified = pf.Modified || r.spModified || '';
       } else {
-        await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
+        const pr = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items`, {
           method: 'POST',
           body: JSON.stringify({ fields: fieldsPayload })
         }, token);
+        const created = await pr.json().catch(() => ({}));
+        itemId = created.id;
+        r.spModified = created.lastModifiedDateTime || (created.fields || {}).Modified || '';
       }
  
+      r.spItemId = itemId;
       r.isDirty = false;
+      r._pulled = true; // not a local edit: keep updatedAt as is
       await idbPut('lectures', r);
       syncedLectures++;
     }
@@ -5002,7 +5703,11 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
       showToast('To-do email not sent: ' + mailErr.message);
     }
  
-    showToast(`🎉 Sync complete: ${syncedLectures} lectures, ${syncedDeadlines} deadlines, ${syncedChatsCount} chats, ${syncedConfig} setting(s)`);
+    const downTxt = (pulled.added || pulled.updated) ? ` · ${pulled.added + pulled.updated} lecture(s) from other devices` : '';
+    showToast(`🎉 Sync complete: ${syncedLectures} lectures, ${syncedDeadlines} deadlines, ${syncedChatsCount} chats, ${syncedConfig} setting(s) up${downTxt}`);
+    if (pulled.merged) {
+      setTimeout(() => showToast(`${pulled.mergedNames.join(', ')} also changed on ${pulled.mergedFrom || 'another device'}: combined both, kept the newer study guide.`), 2600);
+    }
   } catch (err) {
     alert('SharePoint Sync Error: ' + err.message);
   } finally {
@@ -5261,6 +5966,7 @@ function openParentVault() {
   document.getElementById('cfgReadingLevel').value = getConfig('reading_level') || '5';
   document.getElementById('cfgStudentId').value = getStudentId();
   document.getElementById('cfgStudentName').value = getStudentName();
+  document.getElementById('cfgDeviceName').value = localStorage.getItem('ss_device_name') || '';
   document.getElementById('cfgInterests').value = getConfig('interests') || '';
   document.getElementById('cfgNotifyTodos').checked = getConfig('notify.todos') === 'on';
   document.getElementById('cfgNotifyEmails').value = getConfig('notify.emails') || '';
@@ -5683,6 +6389,7 @@ document.getElementById('saveCfgBtn').addEventListener('click', async () => {
   saveConfigValue('prompt.profile', document.getElementById('hiddenProfileText').value);
   saveConfigValue('prompt.master', document.getElementById('masterSystemPrompt').value);
   saveConfigValue('student_name', document.getElementById('cfgStudentName').value.trim());
+  localStorage.setItem('ss_device_name', document.getElementById('cfgDeviceName').value.trim());
   saveConfigValue('interests', document.getElementById('cfgInterests').value.trim() || BUILTIN_CONFIG.interests);
   saveConfigValue('notify.todos', document.getElementById('cfgNotifyTodos').checked ? 'on' : 'off');
   saveConfigValue('notify.emails', document.getElementById('cfgNotifyEmails').value.trim());
@@ -5796,7 +6503,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V14';
+const APP_VERSION = 'V15';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
