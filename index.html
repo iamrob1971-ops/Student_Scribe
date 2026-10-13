@@ -126,6 +126,25 @@ main { padding: 4px 18px 140px; flex: 1; }
 .tone-card { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
 .tone-card.on { border-color: var(--c); box-shadow: 0 0 0 2px var(--sel); }
 .tone-card .md p { margin: 4px 0; }
+/* To-dos */
+.todo-card { margin: 0 0 14px; padding: 10px 14px; }
+.todo-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.todo-head b { font-size: 15px; }
+.todo-count { font-size: 13px; color: var(--mut); }
+.todo-count .od { color: var(--bad); font-weight: 700; }
+.todo-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.todo-group h4 { margin: 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
+.todo-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); }
+.todo-item input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.todo-item .main { flex: 1; min-width: 0; }
+.todo-item .meta { font-size: 12px; color: var(--mut); }
+.todo-item .ctx { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
+.todo-item.done .main b { text-decoration: line-through; color: var(--mut); }
+.todo-item.overdue { border-color: var(--bad); }
+.todo-tag { font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--sel); color: var(--ink); margin-left: 4px; }
+.nav-badge { position: absolute; top: 4px; margin-left: 14px; background: var(--bad); color: #fff; border-radius: 10px; font-size: 11px; font-style: normal; padding: 0 6px; line-height: 18px; display: none; }
+nav.dock button { position: relative; }
+textarea.grow { resize: none; overflow-y: auto; max-height: 8.5em; line-height: 1.4; font: inherit; }
 .same-day { text-align: left; background: var(--bg); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 0 auto 14px; max-width: 720px; font-size: 14px; }
 .same-day label { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 500; cursor: pointer; }
 .same-day input { width: auto; margin: 0; }
@@ -274,6 +293,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button class="say sm" id="clearDemoBannerBtn" style="background:#fff">Clear Demo Deck</button>
       </div>
  
+      <div class="card todo-card" id="todoModule"></div>
       <p class="center" id="recScheduleHint" style="font-weight:600;font-size:18px"></p>
  
       <!-- Active Class Test Prep Banner -->
@@ -374,7 +394,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button class="btn alt sample-q">Give me a quick 3-question drill</button>
       </div>
       <div class="card row" style="padding:10px 14px">
-        <input type="text" id="chatInput" placeholder="Ask your coach anything..." style="flex:1;border:0;background:transparent;outline:none">
+        <textarea id="chatInput" class="grow" rows="1" placeholder="Ask your coach anything... (Shift+Enter for a new line)" style="flex:1;border:0;background:transparent;outline:none"></textarea>
         <button class="say" id="chatMicBtn">🎤 Speak</button>
         <button class="btn" id="chatSendBtn" style="min-height:40px;padding:8px 16px">Send</button>
       </div>
@@ -406,7 +426,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
  
   <!-- Bottom Navigation Dock -->
   <nav class="dock">
-    <button class="on" data-go="rec"><span>🎙️</span>Intake</button>
+    <button class="on" data-go="rec"><span>🎙️</span>Intake<i class="nav-badge" id="todoBadge"></i></button>
     <button data-go="cls"><span>🗺️</span>Unit Map</button>
     <button data-go="guide"><span>📝</span>Study Guide</button>
     <button data-go="chat"><span>💬</span>Ask Coach</button>
@@ -415,9 +435,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 </div>
  
 <!-- Student-Level Schedule Quick Edit Modal -->
-<dialog class="cfg-dlg" id="studentScheduleDlg" style="max-width:440px">
+<dialog class="cfg-dlg" id="studentScheduleDlg" style="max-width:520px">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">✏️ Edit Class Schedule</h3>
+    <h3 style="margin:0;color:var(--c)">✏️ Edit Class</h3>
     <button class="say" id="closeStudentSchedBtn">✕</button>
   </div>
   <div class="dlg-body">
@@ -438,9 +458,20 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <label>Teacher Name
       <input type="text" id="studentSchedTeacher" placeholder="e.g. Erhart">
     </label>
+    <label>Textbook (include the edition)
+      <input type="text" id="studentSchedTextbook" placeholder="e.g. Biology, Miller & Levine, Pearson, 2019">
+    </label>
+    <label>Syllabus / pacing guide
+      <textarea id="studentSchedSyllabus" rows="5" placeholder="Units, topics, and textbook chapters. Paste it, or upload the teacher's syllabus below."></textarea>
+    </label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button type="button" class="say sm" id="uploadSyllabusBtn">📎 Upload syllabus (PDF or photo)</button>
+      <input type="file" id="syllabusFileInput" accept=".pdf,application/pdf,image/*" style="display:none">
+      <small id="syllabusStatus" style="color:var(--mut)"></small>
+    </div>
   </div>
   <div class="dlg-foot">
-    <button class="btn" id="saveStudentSchedBtn">Save Schedule</button>
+    <button class="btn" id="saveStudentSchedBtn">Save Class</button>
   </div>
 </dialog>
  
@@ -465,6 +496,34 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
  
 <!-- Parent PIN Access Modal -->
 <div id="printArea"></div>
+
+<dialog class="cfg-dlg" id="todoDlg" style="max-width:460px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)" id="todoDlgTitle">📋 New To-Do</h3>
+    <button class="say" id="closeTodoBtn">✕</button>
+  </div>
+  <div class="dlg-body">
+    <label>What to do
+      <input type="text" id="todoTitle" maxlength="200" placeholder="e.g. Finish study guide questions 1-10">
+    </label>
+    <label>Class
+      <select id="todoClass"></select>
+    </label>
+    <label>Lecture (optional)
+      <select id="todoLecture"></select>
+    </label>
+    <label>Due date (optional)
+      <input type="date" id="todoDue">
+    </label>
+    <label>Notes for context (optional)
+      <textarea id="todoNotes" rows="3" placeholder="Page numbers, what the teacher said, anything that helps"></textarea>
+    </label>
+  </div>
+  <div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
+    <button class="btn alt" id="deleteTodoBtn" style="color:var(--bad)">Delete</button>
+    <button class="btn" id="saveTodoBtn">Save</button>
+  </div>
+</dialog>
 
 <dialog class="cfg-dlg" id="intakeMoveDlg" style="max-width:440px">
   <div class="dlg-head">
@@ -546,7 +605,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V13</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V14</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -580,6 +639,16 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       </div>
     </div>
  
+    <h4>To-Do Email Updates</h4>
+    <p style="font-size:12px;color:var(--mut);margin:0">Sent from your Microsoft account when Sync runs and to-dos have changed. Needs the Mail.Send permission on the Student Study app registration.</p>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+      <input type="checkbox" id="cfgNotifyTodos" style="width:auto"> Email to-do updates on Sync
+    </label>
+    <label>Send to (comma-separated)
+      <input type="text" id="cfgNotifyEmails" placeholder="you@example.com, other@example.com">
+    </label>
+    <button class="btn alt sm" id="sendTodoEmailNowBtn" type="button">✉️ Send a to-do summary now</button>
+
     <h4>SharePoint Sync (rmr1971.sharepoint.com:/sites/Bible_App)</h4>
     <p style="font-size:13px;color:var(--mut);margin:0">Syncs <code>Student_Lectures</code>, <code>Student_Deadlines</code>, <code>Student_Chats</code>, and <code>Student_Classes</code>.</p>
     <label>Tenant Authority
@@ -697,7 +766,7 @@ Reading level: Grade {LEVEL}. Short, direct sentences. Scannable answers, no wal
 Speak to him as a capable young adult, never as a child.`;
 
 const DEFAULT_SYSTEM_PROMPT = `You are a study coach for a high school student.
-Answer from the class material provided. Accuracy comes first: if the material does not cover something, say so before adding general knowledge.
+Answer from the class material provided first. Accuracy comes first; follow the SOURCE ORDER given below.
 Keep answers short: a few sentences or 2 to 4 bullets. Bold only the key terms.
 Do not open every reply with a greeting, do not use acrostics or first-letter word games, and do not end every reply with the same sign-off.
 Ask a check question only when it would genuinely help him remember.`;
@@ -746,12 +815,15 @@ const BUILTIN_CONFIG = {
   'analogy': 'on',
   'reading_level': '5',
   'interests': 'everyday life, sports, and technology',
-  'student_name': ''
+  'student_name': '',
+  'notify.todos': 'off',
+  'notify.emails': ''
 };
 const CONFIG_TITLES = {
   'prompt.master': 'Master prompt', 'prompt.profile': 'Learner profile', 'tone': 'Coach voice',
   'analogy': 'Analogies', 'reading_level': 'Reading level', 'interests': 'Interests',
-  'student_name': 'Student first name', 'pin_hash': 'Parent PIN (hashed)'
+  'student_name': 'Student first name', 'pin_hash': 'Parent PIN (hashed)',
+  'notify.todos': 'To-do email updates', 'notify.emails': 'To-do email recipients'
 };
 const CONFIG_CACHE_KEY = 'ss_config_rows';
 
@@ -1668,7 +1740,216 @@ function isExamType(d) {
   return d.typeDesc === 'Test' || d.typeDesc === 'Quiz';
 }
 
+/* =====================================================================
+   TO-DOS: stored as Student_Deadlines rows with TypeDesc "To-do" (and AI-found "Homework")
+   ===================================================================== */
+const TODO_TYPES = ['To-do', 'Homework'];
+let todoExpanded = localStorage.getItem('ss_todo_open') !== '0';
+let todoFilter = 'all';
+let todoShowDone = false;
+let editingTodoId = null;
+
+function isTodo(d) {
+  return d && isMyRecord(d) && TODO_TYPES.includes(d.typeDesc) && !/^archived$/i.test(String(d.status || ''));
+}
+
+function todoBucket(d) {
+  if (isDeadlineDone(d)) return 'done';
+  const n = calendarDaysUntil(d.dueDate);
+  if (n === null) return 'nodate';
+  if (n < 0) return 'overdue';
+  if (n === 0) return 'today';
+  if (n <= 7) return 'week';
+  return 'later';
+}
+
+function findLectureByClientId(clientId) {
+  if (!clientId) return null;
+  for (const ds of Object.values(CURRICULUM)) {
+    const l = (ds.lectures || []).find(x => x.clientId === clientId);
+    if (l) return l;
+  }
+  return null;
+}
+
+function dueLabel(d) {
+  const n = calendarDaysUntil(d.dueDate);
+  if (n === null) return 'No due date';
+  const day = parseDueDate(d.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  if (n < 0) return `Overdue · ${day}`;
+  if (n === 0) return 'Due today';
+  if (n === 1) return `Due tomorrow · ${day}`;
+  return `Due ${day}`;
+}
+
+function renderTodoItem(d) {
+  const cls = CLASSES.find(c => c.code === d.classCode) || { name: d.class || d.classCode, icon: '📚' };
+  const lec = findLectureByClientId(d.sourceClientId);
+  const bucket = todoBucket(d);
+  const id = escText(d.deadlineId);
+  return `<div class="todo-item ${bucket === 'done' ? 'done' : ''} ${bucket === 'overdue' ? 'overdue' : ''}">
+    <input type="checkbox" data-todo-done="${id}" ${bucket === 'done' ? 'checked' : ''} title="Mark done">
+    <div class="main">
+      <b>${escText(d.title || 'Untitled')}</b>${d.typeDesc === 'Homework' ? '<span class="todo-tag">Homework</span>' : ''}${d.suggested ? '<span class="todo-tag">Suggested</span>' : ''}
+      <div class="meta">${cls.icon || ''} ${escText(cls.name)}${lec ? ` · ${escText(lec.t)}` : ''} · ${escText(dueLabel(d))}</div>
+      ${d.notes ? `<div class="ctx">${escText(d.notes)}</div>` : ''}
+      ${d.suggested ? `<div style="display:flex;gap:6px;margin-top:6px">
+        <button class="say sm" data-todo-keep="${id}">✔ Keep</button>
+        <button class="say sm" data-todo-dismiss="${id}">✕ Dismiss</button></div>` : ''}
+    </div>
+    <button class="say sm" data-todo-edit="${id}" title="Edit">✎</button>
+  </div>`;
+}
+
+function renderTodos() {
+  const box = document.getElementById('todoModule');
+  if (!box) return;
+  const all = (cachedDeadlines || []).filter(isTodo);
+  const open = all.filter(d => !isDeadlineDone(d));
+  const overdue = open.filter(d => todoBucket(d) === 'overdue').length;
+
+  const badge = document.getElementById('todoBadge');
+  if (badge) { badge.textContent = open.length; badge.style.display = open.length ? 'inline-block' : 'none'; }
+
+  const head = `<div class="todo-head" id="todoHead">
+    <b>📋 To-Dos</b>
+    <span class="todo-count">${open.length} open${overdue ? ` · <span class="od">${overdue} overdue</span>` : ''}</span>
+    <span style="margin-left:auto;display:flex;gap:6px">
+      <button class="say sm" data-todo-add="1">+ Add</button>
+      <button class="say sm" id="todoToggleBtn">${todoExpanded ? '▲ Hide' : '▼ Show'}</button>
+    </span></div>`;
+  if (!todoExpanded) { box.innerHTML = head; return; }
+
+  const inFilter = d => todoFilter === 'all' || d.classCode === todoFilter;
+  const classesWithTodos = CLASSES.filter(c => open.some(d => d.classCode === c.code));
+  const chips = `<div class="chips" style="margin:0">
+    <button class="say sm ${todoFilter === 'all' ? 'on' : ''}" data-todo-filter="all">All (${open.length})</button>
+    ${classesWithTodos.map(c => `<button class="say sm ${todoFilter === c.code ? 'on' : ''}" data-todo-filter="${c.code}">${c.icon || ''} ${escText(c.name)} (${open.filter(d => d.classCode === c.code).length})</button>`).join('')}
+  </div>`;
+
+  const groups = [['overdue', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['later', 'Later'], ['nodate', 'No due date']];
+  const sorted = list => list.slice().sort((a, b) => {
+    const da = calendarDaysUntil(a.dueDate), db = calendarDaysUntil(b.dueDate);
+    return (da === null ? 9999 : da) - (db === null ? 9999 : db);
+  });
+  let body = groups.map(([k, label]) => {
+    const items = sorted(open.filter(d => todoBucket(d) === k && inFilter(d)));
+    return items.length ? `<div class="todo-group"><h4>${label}</h4>${items.map(renderTodoItem).join('')}</div>` : '';
+  }).join('');
+  if (!body) body = `<p style="color:var(--mut);margin:0;font-size:14px">Nothing to do${todoFilter === 'all' ? '' : ' for this class'}. Add one with + Add.</p>`;
+
+  const done = all.filter(d => isDeadlineDone(d) && inFilter(d));
+  const doneHtml = done.length ? `<div class="todo-group">
+    <button class="say sm" id="todoDoneToggle">${todoShowDone ? '▲' : '▼'} Done (${done.length})</button>
+    ${todoShowDone ? done.slice(-15).reverse().map(renderTodoItem).join('') : ''}</div>` : '';
+
+  box.innerHTML = head + `<div class="todo-body">${chips}${body}${doneHtml}</div>`;
+}
+
+async function saveTodo(d) {
+  d.isDirty = true;
+  await idbPut('deadlines', d);
+  const i = cachedDeadlines.findIndex(x => x.deadlineId === d.deadlineId);
+  if (i >= 0) cachedDeadlines[i] = d; else cachedDeadlines.push(d);
+  renderTodos();
+}
+
+function fillTodoLectureSelect(classCode, selectedClientId) {
+  const sel = document.getElementById('todoLecture');
+  const ds = CURRICULUM[classCode] || { lectures: [] };
+  const lectures = (ds.lectures || []).filter(l => !l.isDemo && l.clientId);
+  sel.innerHTML = `<option value="">No specific lecture</option>` + lectures.map((l, i) => {
+    const day = lectureDay(l);
+    const dayTxt = day ? ' · ' + new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    return `<option value="${escText(l.clientId)}" ${l.clientId === selectedClientId ? 'selected' : ''}>Part ${i + 1} · ${escText(l.t)}${dayTxt}</option>`;
+  }).join('');
+}
+
+function openTodoDialog(opts = {}) {
+  const existing = opts.id ? cachedDeadlines.find(d => d.deadlineId === opts.id) : null;
+  editingTodoId = existing ? existing.deadlineId : null;
+  const classCode = existing ? existing.classCode : (opts.classCode || activeClassCode);
+  document.getElementById('todoDlgTitle').textContent = existing ? '📋 Edit To-Do' : '📋 New To-Do';
+  document.getElementById('todoTitle').value = existing ? existing.title || '' : '';
+  const clsSel = document.getElementById('todoClass');
+  clsSel.innerHTML = CLASSES.map(c => `<option value="${c.code}" ${c.code === classCode ? 'selected' : ''}>${c.icon || ''} ${escText(c.name)}</option>`).join('');
+  fillTodoLectureSelect(classCode, existing ? existing.sourceClientId : (opts.lectureClientId || ''));
+  document.getElementById('todoDue').value = existing && existing.dueDate ? String(existing.dueDate).slice(0, 10) : '';
+  document.getElementById('todoNotes').value = existing ? existing.notes || '' : '';
+  document.getElementById('deleteTodoBtn').style.visibility = existing ? 'visible' : 'hidden';
+  document.getElementById('todoDlg').showModal();
+  setTimeout(() => document.getElementById('todoTitle').focus(), 50);
+}
+
+document.getElementById('todoClass').addEventListener('change', (e) => fillTodoLectureSelect(e.target.value, ''));
+document.getElementById('closeTodoBtn').addEventListener('click', () => document.getElementById('todoDlg').close());
+document.getElementById('saveTodoBtn').addEventListener('click', async () => {
+  const title = document.getElementById('todoTitle').value.trim();
+  if (!title) { showToast('Add what needs to be done'); return; }
+  const classCode = document.getElementById('todoClass').value;
+  const cls = CLASSES.find(c => c.code === classCode) || { name: classCode };
+  const base = editingTodoId ? cachedDeadlines.find(d => d.deadlineId === editingTodoId) : null;
+  const d = base || {
+    deadlineId: `todo_${getStudentId()}_${classCode}_${Date.now()}`,
+    typeDesc: 'To-do', status: DL_STATUS_OPEN, studentId: getStudentId(), unitsCovered: ''
+  };
+  Object.assign(d, {
+    title, classCode, class: cls.name,
+    sourceClientId: document.getElementById('todoLecture').value || '',
+    dueDate: document.getElementById('todoDue').value || null,
+    notes: document.getElementById('todoNotes').value.trim()
+  });
+  await saveTodo(d);
+  document.getElementById('todoDlg').close();
+  showToast(base ? 'To-do updated' : 'To-do added');
+});
+document.getElementById('deleteTodoBtn').addEventListener('click', async () => {
+  const d = cachedDeadlines.find(x => x.deadlineId === editingTodoId);
+  if (!d || !confirm('Delete this to-do?')) return;
+  d.status = 'Archived'; // kept in SharePoint history, hidden everywhere in the app
+  await saveTodo(d);
+  document.getElementById('todoDlg').close();
+});
+
+document.addEventListener('click', async (e) => {
+  const t = e.target;
+  if (t.closest('#todoToggleBtn') || (t.closest('#todoHead') && !t.closest('button'))) {
+    todoExpanded = !todoExpanded;
+    localStorage.setItem('ss_todo_open', todoExpanded ? '1' : '0');
+    renderTodos();
+    return;
+  }
+  if (t.closest('#todoDoneToggle')) { todoShowDone = !todoShowDone; renderTodos(); return; }
+  const add = t.closest('[data-todo-add]');
+  if (add) { openTodoDialog({ classCode: add.dataset.todoClass || activeClassCode, lectureClientId: add.dataset.todoLecture || '' }); return; }
+  const f = t.closest('[data-todo-filter]');
+  if (f) { todoFilter = f.dataset.todoFilter; renderTodos(); return; }
+  const ed = t.closest('[data-todo-edit]');
+  if (ed) { openTodoDialog({ id: ed.dataset.todoEdit }); return; }
+  const keep = t.closest('[data-todo-keep]');
+  const dismiss = t.closest('[data-todo-dismiss]');
+  if (keep || dismiss) {
+    const d = cachedDeadlines.find(x => x.deadlineId === (keep || dismiss).dataset[keep ? 'todoKeep' : 'todoDismiss']);
+    if (!d) return;
+    d.suggested = false;
+    if (dismiss) d.status = 'Archived';
+    await saveTodo(d);
+  }
+});
+document.addEventListener('change', async (e) => {
+  const cb = e.target.closest && e.target.closest('[data-todo-done]');
+  if (!cb) return;
+  const d = cachedDeadlines.find(x => x.deadlineId === cb.dataset.todoDone);
+  if (!d) return;
+  d.status = cb.checked ? DL_STATUS_DONE : DL_STATUS_OPEN;
+  d.completedAt = cb.checked ? new Date().toISOString() : null;
+  d.suggested = false;
+  await saveTodo(d);
+  if (cb.checked) showToast('Nice. Marked done.');
+});
+
 function updateRadarPills() {
+  renderTodos();
   const radarEl = document.getElementById('globalRadarPill');
   const radarText = document.getElementById('radarPillText');
   const classBanner = document.getElementById('classTestPrepBanner');
@@ -1762,6 +2043,7 @@ function renderScopeHeader() {
     ${selected.map(l => `<span>${l.i}</span>`).join('')}
     <span><b>${selected.length}</b> ${selected.length === 1 ? 'part' : 'parts combined'}</span>
     <span class="date-pill">${escText(lectureDateLabel(selected))}</span>
+    <button class="say sm" data-todo-add="1" data-todo-class="${activeClassCode}" data-todo-lecture="${selected.length === 1 ? escText(selected[0].clientId || '') : ''}">+ To-do</button>
     <button class="say" data-go="cls" style="margin-left:auto">Change</button>
   `;
   document.querySelectorAll('[data-scope]').forEach(el => el.innerHTML = h);
@@ -2158,7 +2440,7 @@ function renderQuiz() {
         ${answered ? `
           <div class="followup-feed" id="followupFeed">${renderFollowupFeed(cur)}</div>
           <div class="row" style="gap:8px">
-            <input type="text" id="followupInput" placeholder="Why is that the answer? What does it mean?" style="flex:1">
+            <textarea id="followupInput" class="grow" rows="1" placeholder="Why is that the answer? What does it mean?" style="flex:1"></textarea>
             <button class="btn" id="followupSendBtn" style="min-height:40px;padding:8px 14px">Ask</button>
           </div>`
         : `<p class="hint">Answer first. Then you can ask why, get it explained another way, or see an example.</p>`}
@@ -2192,7 +2474,7 @@ function renderQuiz() {
     if (fb) fb.scrollTop = fb.scrollHeight;
     document.getElementById('followupSendBtn').onclick = () => sendFollowup(cur);
     document.getElementById('followupInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendFollowup(cur); }
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendFollowup(cur); }
     });
   }
 }
@@ -2352,7 +2634,7 @@ async function sendFollowup(cur) {
 
   const feed = document.getElementById('followupFeed');
   const sendBtn = document.getElementById('followupSendBtn');
-  followupBusy = true; sendBtn.disabled = true; input.value = '';
+  followupBusy = true; sendBtn.disabled = true; input.value = ''; autoGrow(input);
   if (feed.querySelector('.hint')) feed.innerHTML = '';
   feed.insertAdjacentHTML('beforeend', `<div class="msg me">${escText(text)}</div>`);
   const waitEl = document.createElement('div');
@@ -3879,6 +4161,27 @@ function recentMissCount(lectures) {
   return n;
 }
 
+function courseRefsFor(code) {
+  const c = CLASSES.find(x => x.code === code) || {};
+  return { textbook: String(c.textbook || '').trim(), syllabus: String(c.syllabus || '').trim() };
+}
+
+// Source order for every coach answer: class material, then the course textbook, then general knowledge
+function buildSourceTierRules(code) {
+  const { textbook, syllabus } = courseRefsFor(code);
+  const tags = textbook
+    ? `"📒 From your class notes" | "📘 Matches your textbook (${textbook})" (add " · see Ch. N" ONLY when the syllabus below maps this topic to a chapter) | "🌐 General knowledge"`
+    : `"📒 From your class notes" | "🌐 General knowledge"`;
+  return `[SOURCE ORDER]
+1. The class material below (lectures, handouts, transcripts, typed notes). This always wins.
+2. ${textbook ? `The course textbook: ${textbook}. Use its vocabulary and the way it usually explains the topic.` : 'No course textbook is set for this class.'}
+3. General knowledge.
+Answer the question fully either way. Do not open with apologies or "this is not in your notes" disclaimers. Start the reply with exactly one short tag line: ${tags}.
+Never claim to quote the textbook, and never invent page numbers, chapter numbers, or quotes.
+If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.` +
+    (syllabus ? `\n\n[SYLLABUS / PACING GUIDE]\n${syllabus.slice(0, 8000)}` : '');
+}
+
 function buildCoachSystem(lectures, opts = {}) {
   const name = getStudentName();
   const parts = [
@@ -3890,6 +4193,7 @@ function buildCoachSystem(lectures, opts = {}) {
   if (recentMissCount(lectures) >= 3) {
     parts.push('He has missed several questions on this material recently. Slow down, explain step by step, and check understanding before moving on.');
   }
+  parts.push(buildSourceTierRules(activeClassCode));
   parts.push(buildChatGrounding(lectures, opts));
   return parts.join('\n\n');
 }
@@ -3938,6 +4242,7 @@ async function sendChatMessage(query, isRetry = false) {
   const text = (query || document.getElementById('chatInput').value).trim();
   if (!text) return;
   document.getElementById('chatInput').value = '';
+  autoGrow(document.getElementById('chatInput'));
   setChatBusy(true);
  
   const feed = document.getElementById('chatFeed');
@@ -4031,7 +4336,17 @@ function setChatBusy(on) {
  
 document.getElementById('chatSendBtn').addEventListener('click', () => sendChatMessage());
 document.getElementById('chatInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendChatMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChatMessage(); }
+});
+
+// Text boxes marked .grow get taller as he types (up to about 5 lines), so nothing scrolls out of sight
+function autoGrow(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+}
+document.addEventListener('input', (e) => {
+  if (e.target.classList && e.target.classList.contains('grow')) autoGrow(e.target);
 });
  
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4230,6 +4545,83 @@ async function getMsalToken() {
   }
 }
  
+/* ---------- To-do email updates (Microsoft Graph /me/sendMail) ---------- */
+async function getMailToken() {
+  const client = getMsalClient();
+  if (!client) throw new Error('Microsoft sign-in is not set up in Settings.');
+  await getMsalToken(); // makes sure someone is signed in
+  const acc = client.getAllAccounts()[0];
+  try {
+    return (await client.acquireTokenSilent({ scopes: ['Mail.Send'], account: acc })).accessToken;
+  } catch (e) {
+    return (await client.acquireTokenPopup({ scopes: ['Mail.Send'], account: acc })).accessToken;
+  }
+}
+
+function todoSnapshot() {
+  const snap = {};
+  (cachedDeadlines || []).filter(d => d && isMyRecord(d) && TODO_TYPES.includes(d.typeDesc)).forEach(d => {
+    snap[d.deadlineId] = { s: isDeadlineDone(d) ? 'done' : /^archived$/i.test(d.status || '') ? 'gone' : 'open',
+      t: d.title || '', due: d.dueDate ? String(d.dueDate).slice(0, 10) : '' };
+  });
+  return snap;
+}
+
+function buildTodoEmail(changes) {
+  const name = getStudentName() || getStudentId();
+  const clsName = code => (CLASSES.find(c => c.code === code) || { name: code }).name;
+  const row = d => `<li><b>${escText(d.title || '')}</b> <span style="color:#666">· ${escText(clsName(d.classCode))} · ${escText(dueLabel(d))}</span>${d.notes ? `<br><span style="color:#444">${escText(d.notes)}</span>` : ''}</li>`;
+  const section = (title, list) => list.length ? `<h3 style="margin:16px 0 6px;font-family:sans-serif">${title} (${list.length})</h3><ul style="font-family:sans-serif;margin:0">${list.map(row).join('')}</ul>` : '';
+  const open = (cachedDeadlines || []).filter(d => isTodo(d) && !isDeadlineDone(d));
+  const bucket = k => open.filter(d => todoBucket(d) === k);
+  const html = `<div style="font-family:sans-serif">
+    <h2 style="margin:0 0 4px">To-dos for ${escText(name)}</h2>
+    <div style="color:#666">${new Date().toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${open.length} open</div>
+    ${section('✅ Completed since last update', changes.completed)}
+    ${section('🆕 New', changes.added)}
+    ${section('⚠️ Overdue', bucket('overdue'))}
+    ${section('📅 Due today', bucket('today'))}
+    ${section('🗓️ This week', bucket('week'))}
+    ${section('Later', bucket('later'))}
+    ${section('No due date', bucket('nodate'))}
+    <p style="color:#888;font-size:12px;margin-top:18px">Sent by Student Study.</p></div>`;
+  const subject = `To-dos for ${name}: ${open.length} open${bucket('overdue').length ? `, ${bucket('overdue').length} overdue` : ''}${changes.completed.length ? `, ${changes.completed.length} done` : ''}`;
+  return { subject, html };
+}
+
+// Sends only when something changed since the last email (or when forced from Settings)
+async function maybeSendTodoEmail(force) {
+  if (!force && getConfig('notify.todos') !== 'on') return 'off';
+  const emails = String(getConfig('notify.emails') || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /@/.test(x));
+  if (!emails.length) return 'noemails';
+  const prev = JSON.parse(localStorage.getItem('ss_todo_snapshot') || '{}');
+  const now = todoSnapshot();
+  const byId = id => cachedDeadlines.find(d => d.deadlineId === id);
+  const added = Object.keys(now).filter(id => now[id].s === 'open' && !prev[id]).map(byId).filter(Boolean);
+  const completed = Object.keys(now).filter(id => now[id].s === 'done' && prev[id] && prev[id].s !== 'done').map(byId).filter(Boolean);
+  const changed = Object.keys(now).some(id => prev[id] && (prev[id].s !== now[id].s || prev[id].due !== now[id].due || prev[id].t !== now[id].t));
+  if (!force && !added.length && !completed.length && !changed) return 'nochange';
+
+  const { subject, html } = buildTodoEmail({ added, completed });
+  const token = await getMailToken();
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: emails.map(a => ({ emailAddress: { address: a } })) },
+      saveToSentItems: true
+    })
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { msg = (await res.json()).error.message || msg; } catch (e) {}
+    if (res.status === 403) msg += ' (add the Mail.Send delegated permission to the Student Study app registration)';
+    throw new Error(msg);
+  }
+  localStorage.setItem('ss_todo_snapshot', JSON.stringify(now));
+  return 'sent';
+}
+
 function updateUserBadge(acc) {
   const badge = document.getElementById('msUserBadge');
   const btn = document.getElementById('msSignInBtn');
@@ -4428,6 +4820,7 @@ async function pullDeadlinesFromSharePoint(siteId, token) {
       unitsCovered: f.UnitsCovered || '',
       status: f.Status || DL_STATUS_OPEN,
       sourceClientId: f.SourceClientId || existing.sourceClientId || '',
+      notes: f.Notes || '',
       studentId: f.StudentId || getStudentId(),
       isDirty: !f.DeadlineId || !f.StudentId
     };
@@ -4450,6 +4843,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
  
     // 0. SETTINGS FIRST: push local edits, then pull the merged set
     const syncedConfig = await pushConfigToSharePoint(siteId, token);
+    // Class edits (schedule, textbook, syllabus) go with every sync now
+    if (localStorage.getItem('ss_dirty_classes')) await pushClassesToSharePoint(siteId, token);
     await pullConfigFromSharePoint(siteId, token);
 
     showToast('Checking for unsynced lectures, deadlines & chats…');
@@ -4518,7 +4913,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
         Status: dl.status || DL_STATUS_OPEN,
         DeadlineId: dl.deadlineId,
         SourceClientId: dl.sourceClientId || '',
-        StudentId: dl.studentId || getStudentId()
+        StudentId: dl.studentId || getStudentId(),
+        Notes: dl.notes || ''
       };
  
       let existingDlId = dl.spItemId || null;
@@ -4597,6 +4993,14 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     // 5. PULL DEADLINES (all pages) and merge into local records instead of replacing them
     await pullDeadlinesFromSharePoint(siteId, token);
     updateRadarPills();
+
+    // 6. TO-DO EMAIL (only when something changed and it is turned on)
+    try {
+      const mailResult = await maybeSendTodoEmail(false);
+      if (mailResult === 'sent') showToast('✉️ To-do update emailed');
+    } catch (mailErr) {
+      showToast('To-do email not sent: ' + mailErr.message);
+    }
  
     showToast(`🎉 Sync complete: ${syncedLectures} lectures, ${syncedDeadlines} deadlines, ${syncedChatsCount} chats, ${syncedConfig} setting(s)`);
   } catch (err) {
@@ -4621,7 +5025,9 @@ async function pushClassesToSharePoint(siteId, token) {
       SortOrder: cls.period,
       Term: cls.term || 'Fall 26/27',
       IsActive: cls.isActive !== false,
-      StudentId: getStudentId()
+      StudentId: getStudentId(),
+      Textbook: cls.textbook || '',
+      Syllabus: cls.syllabus || ''
     };
  
     const cCheckUrl = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$filter=fields/ClassCode eq '${cls.code}'&$expand=fields`;
@@ -4731,6 +5137,9 @@ function openStudentScheduleModal(code) {
   document.getElementById('studentSchedDays').value = cls.days || '';
   document.getElementById('studentSchedTime').value = cls.time || '';
   document.getElementById('studentSchedTeacher').value = cls.teacher || '';
+  document.getElementById('studentSchedTextbook').value = cls.textbook || '';
+  document.getElementById('studentSchedSyllabus').value = cls.syllabus || '';
+  document.getElementById('syllabusStatus').textContent = '';
  
   const currentDays = (cls.days || '').toLowerCase();
   document.querySelectorAll('.day-toggle-btn').forEach(btn => {
@@ -4762,6 +5171,31 @@ document.querySelectorAll('.day-toggle-btn').forEach(btn => {
   });
 });
  
+// Syllabus upload: the teacher's PDF or photo becomes editable text in the box
+document.getElementById('uploadSyllabusBtn').addEventListener('click', () => document.getElementById('syllabusFileInput').click());
+document.getElementById('syllabusFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  const status = document.getElementById('syllabusStatus');
+  if (!key) { status.textContent = 'Add the Gemini key in ⚙️ first.'; return; }
+  status.textContent = '⏳ Reading the syllabus…';
+  try {
+    const b64 = await blobToBase64(file);
+    const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+    const res = await queryGeminiWaterfall([{ role: 'user', parts: [
+      { inlineData: { mimeType: mime, data: b64 } },
+      { text: 'Extract this course syllabus or pacing guide as plain text. Keep every unit, topic, textbook chapter or section number, date, and major assignment. Use one line per unit or week, like "Unit 3: Cell Energy · Ch. 8-9 · Oct 6-24". No commentary.' }
+    ] }], key, localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash', { temperature: 0.1, maxOutputTokens: 6000 });
+    const box = document.getElementById('studentSchedSyllabus');
+    box.value = (box.value.trim() ? box.value.trim() + '\n\n' : '') + res.text.trim();
+    status.textContent = '✔ Added. Review it, then Save Class.';
+  } catch (err) {
+    status.textContent = '⚠️ ' + err.message;
+  }
+});
+
 document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
   if (!editingClassCode) return;
   const cls = CLASSES.find(c => c.code === editingClassCode);
@@ -4769,13 +5203,15 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
     cls.days = document.getElementById('studentSchedDays').value.trim();
     cls.time = document.getElementById('studentSchedTime').value.trim();
     cls.teacher = document.getElementById('studentSchedTeacher').value.trim();
+    cls.textbook = document.getElementById('studentSchedTextbook').value.trim();
+    cls.syllabus = document.getElementById('studentSchedSyllabus').value.trim();
  
     localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
     localStorage.setItem('ss_dirty_classes', 'true');
     renderClassRibbon();
     updateRecScheduleHint();
     document.getElementById('studentScheduleDlg').close();
-    showToast(`Saved schedule for ${cls.name}!`);
+    showToast(`Saved ${cls.name}. Tap Sync to save it to SharePoint.`);
   }
 });
  
@@ -4826,6 +5262,8 @@ function openParentVault() {
   document.getElementById('cfgStudentId').value = getStudentId();
   document.getElementById('cfgStudentName').value = getStudentName();
   document.getElementById('cfgInterests').value = getConfig('interests') || '';
+  document.getElementById('cfgNotifyTodos').checked = getConfig('notify.todos') === 'on';
+  document.getElementById('cfgNotifyEmails').value = getConfig('notify.emails') || '';
   const clsNow = CLASSES.find(c => c.code === activeClassCode);
   document.getElementById('cfgClassName').textContent = clsNow ? clsNow.name : activeClassCode;
   const rowsNow = loadConfigRows();
@@ -5067,6 +5505,8 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
           icon: f.IconEmoji || '📚',
           needsScribe: f.NeedsScribe !== false,
           term: f.Term || 'Fall 26/27',
+          textbook: f.Textbook || '',
+          syllabus: f.Syllabus || '',
           isActive: true
         }));
  
@@ -5188,6 +5628,18 @@ document.getElementById('testGeminiBtn').addEventListener('click', async () => {
   }
 });
  
+document.getElementById('sendTodoEmailNowBtn').addEventListener('click', async () => {
+  // Use what is typed in the box, even before Save
+  const typed = document.getElementById('cfgNotifyEmails').value.trim();
+  if (typed) saveConfigValue('notify.emails', typed);
+  try {
+    const r = await maybeSendTodoEmail(true);
+    showToast(r === 'sent' ? '✉️ To-do summary sent' : r === 'noemails' ? 'Add at least one email address first' : 'Nothing sent');
+  } catch (err) {
+    alert('Email error: ' + err.message);
+  }
+});
+
 document.getElementById('resetProfileBtn').addEventListener('click', () => {
   document.getElementById('hiddenProfileText').value = getConfig('prompt.profile', '', { skipOverride: true }) || DEFAULT_PROFILE;
   showToast('Profile reset to default. Save to apply.');
@@ -5232,6 +5684,8 @@ document.getElementById('saveCfgBtn').addEventListener('click', async () => {
   saveConfigValue('prompt.master', document.getElementById('masterSystemPrompt').value);
   saveConfigValue('student_name', document.getElementById('cfgStudentName').value.trim());
   saveConfigValue('interests', document.getElementById('cfgInterests').value.trim() || BUILTIN_CONFIG.interests);
+  saveConfigValue('notify.todos', document.getElementById('cfgNotifyTodos').checked ? 'on' : 'off');
+  saveConfigValue('notify.emails', document.getElementById('cfgNotifyEmails').value.trim());
 
   const toneCls = document.getElementById('cfgToneClass').value;
   if (toneCls) setConfigOverride('tone', toneCls, activeClassCode); else clearConfigOverride('tone', activeClassCode);
@@ -5342,7 +5796,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V13';
+const APP_VERSION = 'V14';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
