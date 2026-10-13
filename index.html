@@ -674,7 +674,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V18</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V19</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -2885,6 +2885,7 @@ function renderStudyGuideScreen() {
         <button class="say sm" id="sgReviewBtn">👀 Review all</button>
         <button class="say sm" id="sgOriginalBtn" title="Open the teacher's original file to print">🖨 Original worksheet</button>
         <button class="say sm" id="sgParentFillBtn" title="Parent: fill a suggested answer for every question">👪 Fill suggested answers</button>
+        <button class="say sm" id="sgResetBtn" title="Parent: clear his answers and teacher checks to start this guide over">↺ Start over</button>
       </span>
     </div>
     ${g.parentFilledAt ? `<p style="margin:4px 0 0;font-size:12.5px;color:var(--mut)">Suggested answers filled by parent · ${new Date(g.parentFilledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>` : ''}
@@ -3313,6 +3314,39 @@ const SG_FILL_SCHEMA = {
 
 let sgFilling = false;
 
+// ↺ Start over (parent PIN): clears his answers, teacher checks and step positions; questions and chats stay
+async function sgStartOver() {
+  await sgFlush();
+  const { l, g } = sgFind();
+  if (!g) return;
+  const pin = prompt('Parent PIN to start this study guide over:');
+  if (pin === null) return;
+  const r = await checkParentPin(pin.trim());
+  if (r !== 'ok' && r !== 'created') { showToast('Incorrect PIN'); return; }
+  if (!confirm(`Start "${g.name}" over?\n\nThis clears his answers, the teacher checks, and teacher notes for all ${g.questions.length} questions. The questions and his coach chats stay.`)) return;
+  const clearSuggested = confirm('Also clear the suggested answers?\n\nOK = clear them (they will be rewritten when needed)\nCancel = keep them');
+  const now = new Date().toISOString();
+  g.questions.forEach(q => {
+    q.myAnswer = '';
+    q.teacher = 'none';
+    q.teacherNote = '';
+    if (clearSuggested) { q.suggested = ''; q.suggestedBy = ''; delete q.sa; }
+    q.updatedAt = now; // newer than any older copy, so the reset wins when devices sync
+  });
+  if (clearSuggested) g.parentFilledAt = null;
+  g.resetAt = now;
+  // forget where he was in step-by-step answers and which ⓘ cards were open
+  Object.keys(sgStepState).filter(k => k.startsWith(g.id + ':')).forEach(k => delete sgStepState[k]);
+  saveStepState();
+  [...sgInfoOpen].filter(k => k.startsWith(g.id + ':')).forEach(k => sgInfoOpen.delete(k));
+  localStorage.setItem('ss_sg_info_open', JSON.stringify([...sgInfoOpen]));
+  await persistLectureObj(l);
+  sgState.idx = 0;
+  sgState.review = false;
+  renderStudyGuideScreen();
+  showToast(`Started over${clearSuggested ? ', suggested answers cleared' : ', suggested answers kept'}. Tap Sync to update his other device.`);
+}
+
 async function sgParentFill() {
   const { l, g } = sgFind();
   if (!g) return;
@@ -3463,6 +3497,7 @@ document.addEventListener('click', (e) => {
   if (t.closest('#sgHintBtn')) { sgAsk('hint'); return; }
   if (t.closest('#sgAskBtn')) { sgAsk('ask'); return; }
   if (t.closest('#sgParentFillBtn')) { sgParentFill(); return; }
+  if (t.closest('#sgResetBtn')) { sgStartOver(); return; }
   if (t.closest('#sgReviewBtn')) { sgFlush(); sgState.review = true; renderStudyGuideScreen(); return; }
   if (t.closest('#sgReviewBackBtn')) { sgState.review = false; renderStudyGuideScreen(); return; }
   const op = t.closest('[data-sg-open]');
@@ -7146,7 +7181,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V18';
+const APP_VERSION = 'V19';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
