@@ -145,6 +145,17 @@ main { padding: 4px 18px 140px; flex: 1; }
 .nav-badge { position: absolute; top: 4px; margin-left: 14px; background: var(--bad); color: #fff; border-radius: 10px; font-size: 11px; font-style: normal; padding: 0 6px; line-height: 18px; display: none; }
 nav.dock button { position: relative; }
 textarea.grow { resize: none; overflow-y: auto; max-height: 8.5em; line-height: 1.4; font: inherit; }
+/* Drawn visuals */
+.vis-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.vis { background: #fff; color: #222; border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+.vis-title { font-size: 12px; font-weight: 600; color: #444; margin: 0 0 4px; }
+.vis table { border-collapse: collapse; font-size: 13px; }
+.vis td, .vis th { border: 1px solid #999; padding: 3px 12px; text-align: center; }
+.step-list { margin: 6px 0 0; padding-left: 22px; }
+.step-list li { margin-bottom: 6px; }
+.step-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.review-q { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.review-q:last-child { border-bottom: 0; }
 /* Teacher study guide */
 .sg-dots { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
 .sg-dot { min-width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink); }
@@ -515,6 +526,18 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent PIN Access Modal -->
 <div id="printArea"></div>
 
+<dialog class="cfg-dlg" id="correctionDlg" style="max-width:480px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">✎ Add a correction</h3>
+    <button class="say" id="closeCorrectionBtn">✕</button>
+  </div>
+  <div class="dlg-body">
+    <p style="margin:0;font-size:14px;color:var(--mut)">What was wrong, and what is right? This outranks everything else in the lecture, and the study guide is rebuilt with it.</p>
+    <textarea id="correctionText" rows="5" style="width:100%" placeholder="e.g. Mrs. Smith said translation happens at the ribosome, not the nucleus."></textarea>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="saveCorrectionBtn">Save and rebuild</button></div>
+</dialog>
+
 <dialog class="cfg-dlg" id="todoDlg" style="max-width:460px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)" id="todoDlgTitle">📋 New To-Do</h3>
@@ -623,7 +646,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V15</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V16</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -2148,8 +2171,10 @@ function renderCoverageBar(l) {
   if (Array.isArray(cov.files) && cov.files.length) {
     cov.files.forEach(f => {
       const state = f.used ? '✔' : f.covered ? '✔ covered by another source' : '⚠️ not used';
-      h += `<span class="coverage-chip ${f.used || f.covered ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${state}</span>`;
+      const rm = l.clientId && !l.isDemo ? ` <button class="say sm" data-remove-src="${escText(l.clientId)}" data-src-label="${escText(f.label)}" title="Remove this source and rebuild" style="padding:0 5px;font-size:11px">✕</button>` : '';
+      h += `<span class="coverage-chip ${f.used || f.covered ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${state}${rm}</span>`;
     });
+    if (l.clientId && !l.isDemo) h += `<button class="say sm" data-add-correction="${escText(l.clientId)}">✎ Add correction</button>`;
   } else (cov.expected || []).forEach(src => {
     const ok = (cov.tagged || []).includes(src);
     h += `<span class="coverage-chip ${ok ? '' : 'coverage-warn'}">${SOURCE_LABELS[src] || escText(src)} ${ok ? '✔' : '⚠️ not used'}</span>`;
@@ -2775,6 +2800,7 @@ function renderStudyGuideScreen() {
   const box = document.getElementById('sgContent');
   const { l, g, q } = sgFind();
   if (!l || !g || !q) { box.innerHTML = '<div class="card center"><p>Study guide not found.</p><button class="btn" data-go="guide">Back to Study Guide</button></div>'; return; }
+  if (sgState.review) { renderReviewAll(l, g); return; }
   const i = sgState.idx, total = g.questions.length;
   const open = sgInfoOpen.has(sgQid(g, q));
   const dots = g.questions.map((x, k) => {
@@ -2789,6 +2815,8 @@ function renderStudyGuideScreen() {
         <button class="say sm" data-sg-print="questions">🖨 Questions only</button>
         <button class="say sm" data-sg-print="mine">🖨 With my answers</button>
         <button class="say sm" data-sg-print="suggested">🖨 With suggested answers</button>
+        <button class="say sm" id="sgReviewBtn">👀 Review all</button>
+        <button class="say sm" id="sgOriginalBtn" title="Open the teacher's original file to print">🖨 Original worksheet</button>
         <button class="say sm" id="sgParentFillBtn" title="Parent: fill a suggested answer for every question">👪 Fill suggested answers</button>
       </span>
     </div>
@@ -2825,7 +2853,8 @@ function renderStudyGuideScreen() {
           </span>
         </div>
         ${open ? `<div class="sg-info" id="sgInfo">${q.suggested
-          ? applyBionic(mdToHtml(q.suggested)) + `<div style="font-size:12px;color:var(--mut);margin-top:6px">${q.suggestedBy === 'parent' ? 'Filled by parent' : 'Suggested by the coach'} · read-only, type it in your own words</div>`
+          ? (q.sa ? renderSACard(q.sa, sgQid(g, q)) : applyBionic(mdToHtml(q.suggested))) +
+            `<div style="font-size:12px;color:var(--mut);margin-top:6px">${q.suggestedBy === 'parent' ? 'Filled by parent' : 'Suggested by the coach'} · read-only, type it in your own words</div>`
           : 'Writing a suggested answer…'}</div>` : ''}
         <div class="followup-feed" id="sgFeed">${sgFeed(l, g, q)}</div>
         <div class="row" style="gap:8px">
@@ -2860,6 +2889,27 @@ function renderStudyGuideScreen() {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sgAsk('ask'); }
   });
   if (open && !q.suggested) sgEnsureSuggested(l, g, q);
+}
+
+// 👀 Review all: every question, his answer, the full suggested answer with visuals, and the teacher check
+function renderReviewAll(l, g) {
+  const box = document.getElementById('sgContent');
+  const tchr = q => q.teacher === 'confirmed' ? '✓ Teacher confirmed' : q.teacher === 'revised' ? '✎ Teacher revised' : 'Not checked yet';
+  box.innerHTML = `
+    <div class="row" style="flex-wrap:wrap;gap:8px">
+      <b>👀 Review all · ${escText(g.name)} · ${escText(l.t)}</b>
+      <span style="display:flex;gap:6px"><button class="say sm" id="sgReviewWriteBtn">✍️ Write missing suggested answers</button>
+      <button class="btn alt" id="sgReviewBackBtn">← Back to questions</button></span>
+    </div>
+    <div class="card">${g.questions.map((q, i) => `
+      <div class="review-q">
+        <div class="sg-card-head"><b>${q.n}. ${escText(q.text)}</b><button class="say sm" data-sg-open="${i}">Open →</button></div>
+        <div style="margin-top:6px"><span class="todo-tag">His answer</span> ${(q.myAnswer || '').trim() ? escText(q.myAnswer) : '<i style="color:var(--mut)">not answered yet</i>'}</div>
+        ${q.teacher === 'revised' && q.teacherNote ? `<div style="margin-top:4px"><span class="todo-tag">Teacher</span> ${escText(q.teacherNote)}</div>` : ''}
+        <div style="margin-top:6px"><span class="todo-tag">Suggested</span>
+          ${q.sa ? renderSACard(q.sa, '', { forceAll: true }) : q.suggested ? applyBionic(mdToHtml(q.suggested)) : '<i style="color:var(--mut)">none yet</i>'}</div>
+        <div style="margin-top:4px;font-size:12.5px;color:var(--mut)">${tchr(q)}</div>
+      </div>`).join('')}</div>`;
 }
 
 async function sgFlush() {
@@ -2927,17 +2977,250 @@ async function sgAsk(mode) {
   }
 }
 
-const SG_ANSWER_RULES = 'Write the answer a teacher would accept for this study guide question. Start with the one-line source tag. Then a short, plain first sentence that answers it, then up to 3 bullets with key details. Follow the learner profile and reading level.';
+/* =====================================================================
+   VISUALS: coordinate planes, tables of values, mapping diagrams, drawn as SVG.
+   The model returns them as data; the app checks them before drawing.
+   ===================================================================== */
+const VIS_ITEM = {
+  type: 'OBJECT',
+  properties: {
+    kind: { type: 'STRING', enum: ['plane', 'table', 'mapping'] },
+    title: { type: 'STRING' },
+    step: { type: 'INTEGER' },
+    points: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      x: { type: 'NUMBER' }, y: { type: 'NUMBER' }, label: { type: 'STRING' }, step: { type: 'INTEGER' } }, required: ['x', 'y'] } },
+    lines: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      type: { type: 'STRING', enum: ['through', 'vertical', 'horizontal'] },
+      x1: { type: 'NUMBER' }, y1: { type: 'NUMBER' }, x2: { type: 'NUMBER' }, y2: { type: 'NUMBER' },
+      x: { type: 'NUMBER' }, y: { type: 'NUMBER' }, label: { type: 'STRING' }, step: { type: 'INTEGER' } }, required: ['type'] } },
+    headers: { type: 'ARRAY', items: { type: 'STRING' } },
+    rows: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'STRING' } } },
+    domain: { type: 'ARRAY', items: { type: 'STRING' } },
+    range: { type: 'ARRAY', items: { type: 'STRING' } },
+    arrows: { type: 'ARRAY', items: { type: 'OBJECT', properties: { from: { type: 'STRING' }, to: { type: 'STRING' } }, required: ['from', 'to'] } }
+  },
+  required: ['kind']
+};
+
+const SA_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    tag: { type: 'STRING' },
+    answer_type: { type: 'STRING', enum: ['plain', 'steps'] },
+    answer: { type: 'STRING' },
+    steps: { type: 'ARRAY', items: { type: 'STRING' } },
+    final: { type: 'STRING' },
+    visuals: { type: 'ARRAY', items: VIS_ITEM }
+  },
+  required: ['tag', 'answer_type', 'answer', 'steps', 'final', 'visuals'],
+  propertyOrdering: ['tag', 'answer_type', 'answer', 'steps', 'final', 'visuals']
+};
+
+const SA_RULES = `Write the answer a teacher would accept for this question. Return JSON.
+- "tag": the one-line source tag (📒, 📘 or 🌐 line as described in SOURCE ORDER).
+- "answer_type": "steps" ONLY for problems he has to work out (calculating, solving, evaluating, finding intercepts, graphing, completing a table). Everything else (explaining, defining, listing, "is this a function and why", Bible or history questions) is "plain".
+- "answer": for plain, a short plain first sentence that answers it, then up to 3 bullet lines (markdown). For steps, one sentence saying what we will do.
+- "steps": for steps, 2 to 6 steps, each showing the work in plain text (no step numbers, they are added). For plain, [].
+- "final": the final answer in a few words (for steps), else "".
+- "visuals": draw only when the question asks for a graph, table of values, or mapping diagram, or plotting points; otherwise []. Coordinate planes use the -10 to 10 grid. Give each point and line a "step" (which step it first appears in, starting at 1); for plain answers use step 1. A "through" line needs x1,y1,x2,y2 (two points on it); "vertical" needs x; "horizontal" needs y. Label intercepts like "(0, 7)". "one on each coordinate plane" means separate plane visuals.
+Follow the learner profile and reading level.`;
+
+const SG_ANSWER_RULES = SA_RULES;
+
+function nearlyOnLine(p, ln) {
+  const eps = 0.06;
+  if (ln.type === 'vertical') return Math.abs(p.x - ln.x) < eps;
+  if (ln.type === 'horizontal') return Math.abs(p.y - ln.y) < eps;
+  const dx = ln.x2 - ln.x1, dy = ln.y2 - ln.y1;
+  const len = Math.hypot(dx, dy) || 1;
+  return Math.abs(dy * (p.x - ln.x1) - dx * (p.y - ln.y1)) / len < eps;
+}
+
+// Keeps only visuals that make sense: lines need their numbers, and points on a plane with lines must sit on one
+function validateVisuals(list) {
+  const num = v => typeof v === 'number' && isFinite(v);
+  return arrOf(list).map(v => {
+    if (!v || !v.kind) return null;
+    if (v.kind === 'plane') {
+      const lines = arrOf(v.lines).filter(ln =>
+        (ln.type === 'vertical' && num(ln.x)) || (ln.type === 'horizontal' && num(ln.y)) ||
+        (ln.type === 'through' && num(ln.x1) && num(ln.y1) && num(ln.x2) && num(ln.y2) && (ln.x1 !== ln.x2 || ln.y1 !== ln.y2)));
+      const points = arrOf(v.points).filter(p => num(p.x) && num(p.y));
+      if (!lines.length && !points.length) return null;
+      if (lines.length && points.some(p => !lines.some(ln => nearlyOnLine(p, ln)))) return null; // would draw a wrong picture
+      return { kind: 'plane', title: strOf(v.title), step: v.step || 1, lines, points };
+    }
+    if (v.kind === 'table') {
+      const rows = arrOf(v.rows).map(r => arrOf(r).map(strOf)).filter(r => r.length);
+      return rows.length ? { kind: 'table', title: strOf(v.title), step: v.step || 1, headers: arrOf(v.headers).map(strOf), rows } : null;
+    }
+    if (v.kind === 'mapping') {
+      const domain = arrOf(v.domain).map(strOf), range = arrOf(v.range).map(strOf);
+      return domain.length && range.length ? { kind: 'mapping', title: strOf(v.title), step: v.step || 1, domain, range,
+        arrows: arrOf(v.arrows).filter(a => a && domain.includes(strOf(a.from)) && range.includes(strOf(a.to))) } : null;
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+function fmtNum(n) { return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100); }
+
+function renderPlaneSVG(v, upto) {
+  const shown = x => (x.step || 1) <= upto;
+  const pts = v.points.filter(shown), lines = v.lines.filter(shown);
+  let R = 10;
+  [...v.points.flatMap(p => [p.x, p.y]), ...v.lines.flatMap(l => [l.x, l.y, l.x1, l.y1, l.x2, l.y2])].forEach(n => {
+    if (typeof n === 'number' && Math.abs(n) > R) R = Math.min(20, Math.ceil(Math.abs(n) / 2) * 2);
+  });
+  const S = 260, pad = 14, W = S + pad * 2, k = S / (2 * R);
+  const X = x => pad + (x + R) * k, Y = y => pad + (R - y) * k;
+  let g = '';
+  for (let i = -R; i <= R; i++) {
+    g += `<line x1="${X(i)}" y1="${Y(-R)}" x2="${X(i)}" y2="${Y(R)}" stroke="#ddd" stroke-width="1"/>`;
+    g += `<line x1="${X(-R)}" y1="${Y(i)}" x2="${X(R)}" y2="${Y(i)}" stroke="#ddd" stroke-width="1"/>`;
+  }
+  g += `<line x1="${X(-R)}" y1="${Y(0)}" x2="${X(R)}" y2="${Y(0)}" stroke="#333" stroke-width="1.5"/>`;
+  g += `<line x1="${X(0)}" y1="${Y(-R)}" x2="${X(0)}" y2="${Y(R)}" stroke="#333" stroke-width="1.5"/>`;
+  for (let i = -R; i <= R; i += 2) {
+    if (i === 0) continue;
+    g += `<text x="${X(i)}" y="${Y(0) + 11}" font-size="8" text-anchor="middle" fill="#555">${i}</text>`;
+    g += `<text x="${X(0) - 4}" y="${Y(i) + 3}" font-size="8" text-anchor="end" fill="#555">${i}</text>`;
+  }
+  g += `<text x="${X(R) - 2}" y="${Y(0) - 4}" font-size="9" text-anchor="end" fill="#333">x</text><text x="${X(0) + 4}" y="${Y(R) + 9}" font-size="9" fill="#333">y</text>`;
+  const clipId = 'clp' + Math.random().toString(36).slice(2, 8);
+  g += `<defs><clipPath id="${clipId}"><rect x="${pad}" y="${pad}" width="${S}" height="${S}"/></clipPath></defs><g clip-path="url(#${clipId})">`;
+  lines.forEach(ln => {
+    let a, b;
+    if (ln.type === 'vertical') { a = [ln.x, -R]; b = [ln.x, R]; }
+    else if (ln.type === 'horizontal') { a = [-R, ln.y]; b = [R, ln.y]; }
+    else {
+      const m = (ln.y2 - ln.y1) / (ln.x2 - ln.x1);
+      if (!isFinite(m)) { a = [ln.x1, -R]; b = [ln.x1, R]; }
+      else { const c = ln.y1 - m * ln.x1; a = [-R, m * -R + c]; b = [R, m * R + c]; }
+    }
+    g += `<line x1="${X(a[0])}" y1="${Y(a[1])}" x2="${X(b[0])}" y2="${Y(b[1])}" stroke="#1f5fbf" stroke-width="2.2"/>`;
+    if (ln.label) g += `<text x="${pad + 4}" y="${pad + 12}" font-size="10" fill="#1f5fbf">${escText(ln.label)}</text>`;
+  });
+  g += '</g>';
+  pts.forEach(p => {
+    g += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="3.6" fill="#c0392b"/>`;
+    const lab = p.label || `(${fmtNum(p.x)}, ${fmtNum(p.y)})`;
+    g += `<text x="${X(p.x) + 5}" y="${Y(p.y) - 5}" font-size="10" font-weight="600" fill="#c0392b">${escText(lab)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${W}" width="${W}" height="${W}" role="img" aria-label="${escText(v.title || 'graph')}">${g}</svg>`;
+}
+
+function renderTableHTML(v) {
+  const head = v.headers.length ? `<tr>${v.headers.map(h => `<th>${escText(h)}</th>`).join('')}</tr>` : '';
+  return `<table>${head}${v.rows.map(r => `<tr>${r.map(c => `<td>${escText(c)}</td>`).join('')}</tr>`).join('')}</table>`;
+}
+
+function renderMappingSVG(v) {
+  const n = Math.max(v.domain.length, v.range.length);
+  const H = 40 + n * 26, W = 220;
+  const dy = i => 30 + i * 26;
+  let g = `<ellipse cx="50" cy="${H / 2}" rx="34" ry="${H / 2 - 8}" fill="none" stroke="#333"/><ellipse cx="170" cy="${H / 2}" rx="34" ry="${H / 2 - 8}" fill="none" stroke="#333"/>`;
+  const off = (len) => (n - len) * 13;
+  v.domain.forEach((d, i) => { g += `<text x="50" y="${dy(i) + off(v.domain.length) + 4}" font-size="12" text-anchor="middle">${escText(d)}</text>`; });
+  v.range.forEach((r, i) => { g += `<text x="170" y="${dy(i) + off(v.range.length) + 4}" font-size="12" text-anchor="middle">${escText(r)}</text>`; });
+  v.arrows.forEach(a => {
+    const i = v.domain.indexOf(a.from), j = v.range.indexOf(a.to);
+    const y1 = dy(i) + off(v.domain.length), y2 = dy(j) + off(v.range.length);
+    g += `<line x1="64" y1="${y1}" x2="152" y2="${y2}" stroke="#c0392b" stroke-width="1.6" marker-end="url(#arr)"/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H + 16}" width="${W}" height="${H + 16}"><defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#c0392b"/></marker></defs>${g}
+    <text x="50" y="${H + 12}" font-size="11" text-anchor="middle" fill="#555">Domain</text><text x="170" y="${H + 12}" font-size="11" text-anchor="middle" fill="#555">Range</text></svg>`;
+}
+
+function renderVisuals(list, upto = 99) {
+  const items = arrOf(list).filter(v => (v.step || 1) <= upto || v.kind === 'plane');
+  if (!items.length) return '';
+  return `<div class="vis-wrap">${items.map(v => {
+    const body = v.kind === 'plane' ? renderPlaneSVG(v, upto) : v.kind === 'table' ? renderTableHTML(v) : renderMappingSVG(v);
+    return `<div class="vis">${v.title ? `<div class="vis-title">${escText(v.title)}</div>` : ''}${body}</div>`;
+  }).join('')}</div>`;
+}
+
+function normalizeSA(parsed) {
+  const steps = arrOf(parsed.steps).map(strOf).filter(Boolean);
+  const type = parsed.answer_type === 'steps' && steps.length >= 2 ? 'steps' : 'plain';
+  return { tag: strOf(parsed.tag), type, answer: strOf(parsed.answer), steps: type === 'steps' ? steps : [],
+    final: strOf(parsed.final), visuals: validateVisuals(parsed.visuals) };
+}
+
+// Plain-text version for printing, the coach's grounding, and older code paths
+function saToMarkdown(sa) {
+  if (!sa) return '';
+  let md = sa.tag ? sa.tag + '\n\n' : '';
+  if (sa.answer) md += sa.answer + '\n\n';
+  if (sa.type === 'steps') md += sa.steps.map((st, i) => `${i + 1}. ${st}`).join('\n') + '\n\n';
+  if (sa.final) md += `**Answer: ${sa.final}**`;
+  return md.trim();
+}
+
+const sgStepState = JSON.parse(localStorage.getItem('ss_sg_steps') || '{}'); // qid -> step number or 'all'
+function saveStepState() { localStorage.setItem('ss_sg_steps', JSON.stringify(sgStepState)); }
+
+function renderSACard(sa, qidKey, opts = {}) {
+  if (sa.type !== 'steps') {
+    return `${sa.tag ? `<div style="font-size:13px;color:var(--mut)">${escText(sa.tag)}</div>` : ''}${applyBionic(mdToHtml(sa.answer))}${sa.final ? `<p><b>${escText(sa.final)}</b></p>` : ''}${renderVisuals(sa.visuals)}`;
+  }
+  const total = sa.steps.length;
+  const mode = opts.forceAll ? 'all' : (sgStepState[qidKey] || 1);
+  const upto = mode === 'all' ? total : Math.min(Number(mode) || 1, total);
+  const showFinal = upto >= total;
+  return `${sa.tag ? `<div style="font-size:13px;color:var(--mut)">${escText(sa.tag)}</div>` : ''}${sa.answer ? applyBionic(mdToHtml(sa.answer)) : ''}
+    <ol class="step-list">${sa.steps.slice(0, upto).map(st => `<li>${applyBionic(mdToHtml(st))}</li>`).join('')}</ol>
+    ${showFinal && sa.final ? `<p><b>Answer: ${escText(sa.final)}</b></p>` : ''}
+    ${renderVisuals(sa.visuals, upto)}
+    ${opts.forceAll ? '' : `<div class="step-nav">
+      ${mode === 'all' ? `<button class="say sm" data-step-mode="${escText(qidKey)}" data-step="1">Step by step</button>`
+        : `<span style="font-size:12.5px;color:var(--mut);align-self:center">Step ${upto} of ${total}</span>
+           ${upto > 1 ? `<button class="say sm" data-step-mode="${escText(qidKey)}" data-step="${upto - 1}">← Previous</button>` : ''}
+           ${upto < total ? `<button class="say sm" data-step-mode="${escText(qidKey)}" data-step="${upto + 1}">Next step →</button>` : ''}
+           <button class="say sm" data-step-mode="${escText(qidKey)}" data-step="all">Show full answer</button>`}
+    </div>`}`;
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-step-mode]');
+  if (!b) return;
+  sgStepState[b.dataset.stepMode] = b.dataset.step === 'all' ? 'all' : Number(b.dataset.step);
+  saveStepState();
+  if (document.getElementById('s-sg').classList.contains('on')) renderStudyGuideScreen();
+});
+
+async function generateSA(l, questionText) {
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+  const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: `Question: ${questionText}` }] }], key, model, {
+    system: buildCoachSystem([l]) + '\n\n' + SA_RULES, temperature: 0.2, maxOutputTokens: 8192,
+    responseMimeType: 'application/json', responseSchema: SA_SCHEMA
+  });
+  return normalizeSA(parseModelJson(res.text));
+}
+
+// Coach chat: a graphing-type question also gets its drawing (one extra small call)
+const VISUAL_Q = /\b(graph|plot|intercepts?|coordinate plane|table of values|mapping( diagram)?|slope)\b/i;
+const VIS_ONLY_SCHEMA = { type: 'OBJECT', properties: { visuals: { type: 'ARRAY', items: VIS_ITEM } }, required: ['visuals'] };
+
+async function visualsForChat(question, answerText) {
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+  const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
+    `Question: ${question}\n\nAnswer already given:\n${answerText}\n\nReturn the drawing(s) that go with this answer as JSON { "visuals": [...] }: coordinate planes on the -10 to 10 grid, tables of values, or mapping diagrams. A "through" line needs x1,y1,x2,y2; "vertical" needs x; "horizontal" needs y. Label intercepts like "(0, 7)". Return { "visuals": [] } if nothing should be drawn.` }] }],
+    key, model, { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: VIS_ONLY_SCHEMA });
+  return validateVisuals(parseModelJson(res.text).visuals);
+}
+
+const SG_ANSWER_RULES_LEGACY = 'Write the answer a teacher would accept for this study guide question. Start with the one-line source tag. Then a short, plain first sentence that answers it, then up to 3 bullets with key details. Follow the learner profile and reading level.';
 
 async function sgEnsureSuggested(l, g, q) {
   const key = localStorage.getItem('ss_gemini_key') || '';
   if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
   try {
-    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
-    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: `Study guide question: ${q.text}` }] }], key, model, {
-      system: buildCoachSystem([l]) + '\n\n' + SG_ANSWER_RULES, temperature: 0.2
-    });
-    q.suggested = res.text.trim();
+    q.sa = await generateSA(l, q.text);
+    q.suggested = saToMarkdown(q.sa);
     q.suggestedBy = 'coach';
     q.updatedAt = new Date().toISOString();
     await persistLectureObj(l);
@@ -2968,17 +3251,26 @@ async function sgParentFill() {
   btn.disabled = true; btn.textContent = `⏳ Filling ${todo.length}…`;
   try {
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
-    const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
-      `Answer each study guide question.\n${todo.map(q => `${q.n}. ${q.text}`).join('\n')}\n\nReturn only JSON: { "answers":[{"n":integer,"answer":string}] }. Each answer follows these rules: ${SG_ANSWER_RULES}` }] }],
-      key, model, { system: buildCoachSystem([l]), temperature: 0.2, maxOutputTokens: 16384,
-        responseMimeType: 'application/json', responseSchema: SG_FILL_SCHEMA });
-    const parsed = parseModelJson(res.text);
+    const FILL_SCHEMA = { type: 'OBJECT', properties: { answers: { type: 'ARRAY', items: {
+      type: 'OBJECT', properties: { n: { type: 'INTEGER' }, ...SA_SCHEMA.properties }, required: ['n', ...SA_SCHEMA.required] } } }, required: ['answers'] };
     const now = new Date().toISOString();
     let filled = 0;
-    arrOf(parsed.answers).forEach(a => {
-      const q = todo.find(x => x.n === Number(a.n));
-      if (q && strOf(a.answer)) { q.suggested = strOf(a.answer); q.suggestedBy = 'parent'; q.updatedAt = now; filled++; }
-    });
+    // Batches of 6 keep each request well inside the output limit
+    for (let i = 0; i < todo.length; i += 6) {
+      const batch = todo.slice(i, i + 6);
+      btn.textContent = `⏳ Filling ${Math.min(i + 6, todo.length)} of ${todo.length}…`;
+      const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
+        `Answer each study guide question.\n${batch.map(q => `${q.n}. ${q.text}`).join('\n')}\n\nReturn JSON { "answers":[ ... ] } with one object per question: its "n" plus the fields below.\n${SA_RULES}` }] }],
+        key, model, { system: buildCoachSystem([l]), temperature: 0.2, maxOutputTokens: 16384,
+          responseMimeType: 'application/json', responseSchema: FILL_SCHEMA });
+      arrOf(parseModelJson(res.text).answers).forEach(a => {
+        const q = batch.find(x => x.n === Number(a.n));
+        if (!q) return;
+        const sa = normalizeSA(a);
+        if (!sa.answer && !sa.steps.length) return;
+        q.sa = sa; q.suggested = saToMarkdown(sa); q.suggestedBy = 'parent'; q.updatedAt = now; filled++;
+      });
+    }
     g.parentFilledAt = now;
     await persistLectureObj(l);
     showToast(`Filled ${filled} suggested answer(s). They show on each ⓘ card and in print.`);
@@ -2986,6 +3278,32 @@ async function sgParentFill() {
     alert('Fill error: ' + err.message);
   }
   renderStudyGuideScreen();
+}
+
+async function sgWriteMissing() {
+  const { l, g } = sgFind();
+  const todo = g.questions.filter(q => !q.sa && !(q.suggested || '').trim());
+  if (!todo.length) { showToast('Every question has a suggested answer'); return; }
+  const b = document.getElementById('sgReviewWriteBtn');
+  for (let i = 0; i < todo.length; i++) {
+    if (b) b.textContent = `⏳ Writing ${i + 1} of ${todo.length}…`;
+    try { const sa = await generateSA(l, todo[i].text); todo[i].sa = sa; todo[i].suggested = saToMarkdown(sa);
+      todo[i].suggestedBy = 'coach'; todo[i].updatedAt = new Date().toISOString(); } catch (e) {}
+  }
+  await persistLectureObj(l);
+  renderStudyGuideScreen();
+}
+
+async function sgOpenOriginal() {
+  const { l, g } = sgFind();
+  const files = await idbGetByIndex('lectureFiles', 'byLecture', l.clientId).catch(() => []);
+  const f = files.find(x => x.name === g.name) || files.find(x => x.kind === 'guide');
+  if (!f) { showToast('The original file is only on the device it was added from (typed guides have no file).'); return; }
+  const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: f.mime }));
+  const w = window.open(url, '_blank');
+  if (!w) showToast('Allow pop-ups to open the worksheet');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function sgPrint(kind) {
@@ -2999,8 +3317,15 @@ function sgPrint(kind) {
     if (kind === 'questions') ans = lines(3);
     if (kind === 'mine') ans = (q.myAnswer || '').trim() ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(q.myAnswer)}</div>` : lines(3);
     if (kind === 'suggested') {
-      const text = (q.suggested || '').replace(/^\s*(📒|📘|🌐)[^\n]*\n+/, '');
-      ans = text ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(text.replace(/\*\*/g, ''))}</div>` : lines(3);
+      if (q.sa) {
+        const sa = q.sa;
+        ans = `<div style="margin-top:4px">${escText(sa.answer.replace(/\*\*/g, ''))}</div>` +
+          (sa.type === 'steps' ? `<ol style="margin:4px 0 0 20px">${sa.steps.map(st => `<li>${escText(st.replace(/\*\*/g, ''))}</li>`).join('')}</ol>` : '') +
+          (sa.final ? `<div><b>Answer: ${escText(sa.final)}</b></div>` : '') + renderVisuals(sa.visuals);
+      } else {
+        const text = (q.suggested || '').replace(/^\s*(📒|📘|🌐)[^\n]*\n+/, '');
+        ans = text ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(text.replace(/\*\*/g, ''))}</div>` : lines(3);
+      }
       if ((q.myAnswer || '').trim()) ans = `<div class="tag" style="margin-top:4px">My answer: ${escText(q.myAnswer)}</div>` + ans;
     }
     if (q.teacher === 'revised' && q.teacherNote) ans += `<div class="tag">Teacher's answer: ${escText(q.teacherNote)}</div>`;
@@ -3020,6 +3345,12 @@ document.addEventListener('click', (e) => {
   if (t.closest('#sgHintBtn')) { sgAsk('hint'); return; }
   if (t.closest('#sgAskBtn')) { sgAsk('ask'); return; }
   if (t.closest('#sgParentFillBtn')) { sgParentFill(); return; }
+  if (t.closest('#sgReviewBtn')) { sgFlush(); sgState.review = true; renderStudyGuideScreen(); return; }
+  if (t.closest('#sgReviewBackBtn')) { sgState.review = false; renderStudyGuideScreen(); return; }
+  const op = t.closest('[data-sg-open]');
+  if (op) { sgState.review = false; sgState.idx = Number(op.dataset.sgOpen); renderStudyGuideScreen(); return; }
+  if (t.closest('#sgReviewWriteBtn')) { sgWriteMissing(); return; }
+  if (t.closest('#sgOriginalBtn')) { sgOpenOriginal(); return; }
   const pr = t.closest('[data-sg-print]');
   if (pr) { sgFlush(); sgPrint(pr.dataset.sgPrint); return; }
   if (t.closest('#sgInfoBtn')) {
@@ -3577,6 +3908,7 @@ The sources above are labeled [S1 · kind: name], [S2 · kind: name], and so on.
 6. DEADLINES: only assignments, quizzes, or tests whose date is stated in the sources. due_iso is YYYY-MM-DD resolved against the reference date, or null when no date is stated.
 7. VOCABULARY: at least 6 key terms a student would need to define on a test (more when the material has them), each with a short definition. Include names of people, places, and technical terms that matter.
 8. Write all explanations at a Grade ${readingLevel} reading level, in plain, mature language.
+10. A source labeled "Teacher correction" overrides anything in the other sources that it contradicts.
 9. Sources of kind "guide" are the teacher's study guide: a list of questions, not answers. Treat each question's topic as something to cover, explaining it from the other sources (or general knowledge when they are silent). Never treat a question as a fact.
 
 Return only JSON with this shape:
@@ -3790,13 +4122,14 @@ async function mergeIntoLecture(l, study, ctx) {
   const kinds = [...new Set(ctx.sourceList.map(x => x.kind))];
   const typeNames = { audio: 'Audio', pdf: 'Handout', photo: 'Photo', notes: 'Notes' };
   const firstCue = study.cues[0] || null;
+  ctx.notesText = [...(ctx.keptEntries || notesEntriesOf(l)).map(e => e.text), ctx.newNotes].filter(Boolean).join('\n\n');
   Object.assign(l, {
     i: study.topic_icon || l.i,
     t: study.topic_label || l.t,
     src: kinds.length > 1 ? 'Mixed' : (typeNames[kinds[0]] || l.src),
     c: study.big_idea,
     bigIdeas: study.big_ideas,
-    notesEntries: [...notesEntriesOf(l), ...(ctx.newNotes ? [{ id: 'n' + Date.now(), ts: new Date().toISOString(), text: ctx.newNotes, device: getDeviceName() }] : [])],
+    notesEntries: [...(ctx.keptEntries || notesEntriesOf(l)), ...(ctx.newNotes ? [{ id: 'n' + Date.now(), ts: new Date().toISOString(), text: ctx.newNotes, device: getDeviceName() }] : [])],
     notesText: ctx.notesText,
     bold_stem: study.concepts[0].bold_stem,
     concepts: study.concepts,
@@ -3810,7 +4143,7 @@ async function mergeIntoLecture(l, study, ctx) {
     sourcesUsed: study.coverage.tagged,
     transcript: ctx.transcriptAll,
     durationSeconds: ((l.durationSeconds || 0) + (ctx.addedSeconds || 0)) || null,
-    studyGuides: [...(l.studyGuides || []), ...(ctx.newGuides || [])]
+    studyGuides: [...(l.studyGuides || []).filter(g => !(ctx.removeGuides && ctx.removeGuides.has(g.name))), ...(ctx.newGuides || [])]
   });
   const sets = getLectureSets(l).slice();
   if (study.quiz.length) sets.push({ id: `s${sets.length + 1}`, batchId: 'b' + Date.now(), createdAt: new Date().toISOString(), items: study.quiz });
@@ -3848,7 +4181,9 @@ const GUIDE_SCHEMA = {
 
 async function extractStudyGuide(input, key, model, idx) {
   const res = await queryGeminiWaterfall([{ role: 'user', parts: [...input.parts, { text:
-    'This is a teacher\'s study guide. List every question or prompt on it, in order, exactly as written (fix only obvious scanning errors). Include fill-in-the-blank and "define" items as questions. Number them as they are numbered on the page. Return only JSON: { "questions":[{"n":integer,"text":string}] }' }] }],
+    'This is a teacher\'s study guide. List every question or prompt on it, in order, exactly as written (fix only obvious scanning errors). Include fill-in-the-blank and "define" items as questions. Number them as they are numbered on the page.\n' +
+    'IMPORTANT: when a question refers to something shown on the page (a graph, table, mapping diagram, set of ordered pairs, picture, or equation image), describe it inside the question text in square brackets so the question can be answered without the page. Examples: [Table: Domain 4, -5, 6, -5 -> Range 6, 3, -3, 5] or [Mapping: 4->5, -6->5, 3->3, -2->4] or [Graph: a straight line falling from upper left to lower right, crossing the y-axis near 3].\n' +
+    'Write math in plain characters: x^2, 4/(3x), f(-3). Return only JSON: { "questions":[{"n":integer,"text":string}] }' }] }],
     key, model, { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json', responseSchema: GUIDE_SCHEMA });
   const parsed = parseModelJson(res.text);
   const now = new Date().toISOString();
@@ -3912,15 +4247,19 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const btn = document.getElementById('generateIntakeBtn');
   if (btn.disabled) return;
 
-  const pastedNotes = document.getElementById('mainPastedNotes').value.trim();
+  // Rebuild mode (Remove source / Add correction): no new inputs, rebuild one lecture from what it keeps
+  const rb = pendingRebuild;
+  pendingRebuild = null;
+
+  const pastedNotes = rb ? '' : document.getElementById('mainPastedNotes').value.trim();
   const pending = await getPendingSessions();
-  const sessionsToUse = pending.filter(sx => includedSessionIds.has(sx.id));
-  const audioFiles = stagedFiles.filter(f => f.type === 'audio');
-  const docFiles = stagedFiles.filter(f => f.type === 'pdf' || f.type === 'image');
+  const sessionsToUse = rb ? [] : pending.filter(sx => includedSessionIds.has(sx.id));
+  const audioFiles = rb ? [] : stagedFiles.filter(f => f.type === 'audio');
+  const docFiles = rb ? [] : stagedFiles.filter(f => f.type === 'pdf' || f.type === 'image');
   const hasAudio = sessionsToUse.length > 0 || audioFiles.length > 0;
   const hasNotes = !!pastedNotes;
 
-  if (!hasAudio && !docFiles.length && !hasNotes) {
+  if (!rb && !hasAudio && !docFiles.length && !hasNotes) {
     alert(pending.length
       ? 'Tick a recording under "Recordings waiting", attach a file, or paste notes first.'
       : 'Please record classroom audio, attach a file, or paste notes first.');
@@ -3956,8 +4295,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const pickedDateVal = document.getElementById('intakeClassDate').value;
   const classDateObj = pickedDateVal ? new Date(pickedDateVal + 'T12:00:00') : new Date();
   const dateIsoString = localDateInputValue(classDateObj);
-  const addTarget = (sameDayChoice && sameDayChoice !== 'new')
-    ? sameDayLectures().find(l => l.clientId === sameDayChoice) || null : null;
+  const addTarget = rb ? findLectureByClientId(rb.clientId)
+    : (sameDayChoice && sameDayChoice !== 'new')
+      ? sameDayLectures().find(l => l.clientId === sameDayChoice) || null : null;
+  const excluded = rb ? rb.exclude : new Set();
 
   try {
     const parts = [];
@@ -3970,6 +4311,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     let totalAudioSec = 0;
     const rawMode = localStorage.getItem('ss_audio_raw_test') === 'true';
     let carriedNotes = '';
+    let keptEntries = null;
 
     // 0. ADDING TO THIS DAY'S LECTURE: bring back what it already has, so the guide is rebuilt from everything
     if (addTarget) {
@@ -3978,12 +4320,15 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
         const nl = b.indexOf('\n');
         const label = (nl > 0 ? b.slice(0, nl) : 'Earlier recording').trim();
         const text = nl > 0 ? b.slice(nl + 1) : b;
+        if (excluded.has(label)) return;
         const id = addSource('audio', label);
         sourceTexts[id] = text;
         parts.push({ text: `[${id} · audio: transcript of ${label}]\n${text}` });
         transcriptAll += (transcriptAll ? '\n\n' : '') + `### ${label}\n${text}`;
       });
-      const saved = await idbGetByIndex('lectureFiles', 'byLecture', addTarget.clientId).catch(() => []);
+      let saved = await idbGetByIndex('lectureFiles', 'byLecture', addTarget.clientId).catch(() => []);
+      for (const f of saved.filter(x => excluded.has(x.name))) await idbDelete('lectureFiles', f.id);
+      saved = saved.filter(x => !excluded.has(x.name));
       saved.forEach(f => {
         parts.push({ text: `[${addSource(f.kind, f.name)} · ${f.kind}: ${f.name}]` });
         parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
@@ -3992,7 +4337,8 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       const savedNames = new Set(saved.map(f => f.name));
       const priorFiles = (addTarget.coverage && addTarget.coverage.files) || [];
       const lost = priorFiles.filter(f => (f.kind === 'pdf' || f.kind === 'photo') && !savedNames.has(f.label));
-      if (lost.length || (!saved.length && !priorFiles.length && !addTarget.transcript && !addTarget.notesText)) {
+      if (!excluded.has('Earlier study guide') && (lost.length || priorFiles.some(f => f.label === 'Earlier study guide') ||
+          (!saved.length && !priorFiles.length && !addTarget.transcript && !addTarget.notesText))) {
         const guideText = (lost.length ? `Notes previously extracted from: ${lost.map(f => f.label).join(', ')}\n` : '') +
           (addTarget.bigIdeas || [addTarget.c]).filter(Boolean).map(b => `- ${b}`).join('\n') + '\n' +
           (addTarget.concepts || []).map(c => `- [${c.section || ''}] ${c.bold_stem}: ${c.text}`).join('\n') + '\n' +
@@ -4001,13 +4347,35 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
         sourceTexts[id] = guideText;
         parts.push({ text: `[${id} · notes: Earlier study guide]\n${guideText}` });
       }
-      if (addTarget.notesText) {
-        carriedNotes = addTarget.notesText;
+      // Typed notes (minus any removed) and teacher corrections, which outrank everything
+      const allEntries = notesEntriesOf(addTarget);
+      const corrections = allEntries.filter(e => e.kind === 'correction');
+      const dropNotes = excluded.has('Earlier typed notes') || excluded.has('Typed notes');
+      const plainNotes = dropNotes ? [] : allEntries.filter(e => e.kind !== 'correction');
+      keptEntries = [...plainNotes, ...corrections];
+      if (plainNotes.length) {
+        carriedNotes = plainNotes.map(e => e.text).join('\n\n');
         const id = addSource('notes', 'Earlier typed notes');
         sourceTexts[id] = carriedNotes;
         parts.push({ text: `[${id} · notes: Earlier typed notes]\n${carriedNotes}` });
       }
+      if (corrections.length) {
+        const text = corrections.map(e => e.text).join('\n\n');
+        const id = addSource('notes', 'Teacher correction');
+        sourceTexts[id] = text;
+        parts.push({ text: `[${id} · notes: Teacher correction]\n${text}` });
+      }
+      // Study guides typed in (no saved file): carry their questions so the guide still covers them
+      const savedNames2 = new Set(saved.map(f => f.name));
+      (addTarget.studyGuides || []).filter(g => !savedNames2.has(g.name) && !excluded.has(g.name)).forEach(g => {
+        const id = addSource('guide', g.name);
+        const text = g.questions.map(q => `${q.n}. ${q.text}`).join('\n');
+        sourceTexts[id] = text;
+        parts.push({ text: `[${id} · guide: ${g.name}]\n${text}` });
+      });
     }
+
+    if (rb && !sourceList.length) throw new Error('Nothing is left in this lecture to rebuild from.');
 
     // 1. AUDIO: in-app recordings and attached audio files
     const audioSources = [
@@ -4113,7 +4481,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     if (addTarget) {
       targetLecture = await mergeIntoLecture(addTarget, study, {
         transcriptAll, notesText: [carriedNotes, notesAreGuide ? '' : pastedNotes].filter(Boolean).join('\n\n'),
-        newNotes: notesAreGuide ? '' : pastedNotes, newGuides,
+        newNotes: notesAreGuide ? '' : pastedNotes, newGuides, keptEntries, removeGuides: excluded,
         sourceList, addedSeconds: totalAudioSec
       });
       if (activeClassCode === classCodeAtStart) pickedLectures = { [targetLecture.id]: true };
@@ -4205,7 +4573,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     // Keep this run's PDFs and photos on the device with their lecture
     for (const f of docFiles) {
       await idbPut('lectureFiles', { id: 'lf_' + Date.now() + Math.random().toString(36).slice(2, 6),
-        lectureClientId: targetLecture.clientId, name: f.name, kind: f.type === 'pdf' ? 'pdf' : 'photo',
+        lectureClientId: targetLecture.clientId, name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
         mime: f.mime, base64: f.base64, size: f.size || 0, addedAt: new Date().toISOString() });
     }
 
@@ -4246,7 +4614,8 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     const unverified = study.quiz.filter(q => q.evidenceStatus === 'unverified').length;
     if (unverified) notes.push(`${unverified} quote(s) not found in the material, hidden`);
     if (newDeadlines) notes.push(`${newDeadlines} deadline(s) added`);
-    if (addTarget) notes.unshift('added to this day\'s lecture');
+    if (rb) notes.unshift(rb.correction ? 'rebuilt with your correction' : 'rebuilt without the removed source');
+    else if (addTarget) notes.unshift('added to this day\'s lecture');
     if (newGuides.length) notes.unshift(`study guide: ${newGuides.reduce((n, g) => n + g.questions.length, 0)} question(s)`);
     showToast(notes.length ? `Study guide ready · ${notes.join(' · ')}` : '🎉 Study guide and practice drill ready!');
     sameDayChoice = null;
@@ -4295,6 +4664,46 @@ function recordExchange(targetKey, qText, aText, isMiss = false, lectureIds = nu
   saveExchangesForTarget(targetKey, list);
   return list[list.length - 1].ts;
 }
+
+/* ---------- Remove source / Add correction: both rebuild the lecture ---------- */
+let pendingRebuild = null; // { clientId, exclude: Set of source labels, correction }
+let correctionTarget = null;
+
+function startRebuild(opts) {
+  pendingRebuild = opts;
+  navigateTo('rec');
+  showToast('Rebuilding the study guide…');
+  document.getElementById('generateIntakeBtn').click();
+}
+
+document.addEventListener('click', async (e) => {
+  const rm = e.target.closest('[data-remove-src]');
+  if (rm) {
+    const label = rm.dataset.srcLabel;
+    if (!confirm(`Remove "${label}" from this lecture and rebuild its study guide from the rest?\n\nChats, misses and earlier question sets are kept.`)) return;
+    startRebuild({ clientId: rm.dataset.removeSrc, exclude: new Set([label]) });
+    return;
+  }
+  const ac = e.target.closest('[data-add-correction]');
+  if (ac) {
+    correctionTarget = ac.dataset.addCorrection;
+    document.getElementById('correctionText').value = '';
+    document.getElementById('correctionDlg').showModal();
+  }
+});
+document.getElementById('closeCorrectionBtn').addEventListener('click', () => document.getElementById('correctionDlg').close());
+document.getElementById('saveCorrectionBtn').addEventListener('click', async () => {
+  const text = document.getElementById('correctionText').value.trim();
+  if (!text) return;
+  const l = findLectureByClientId(correctionTarget);
+  if (!l) return;
+  l.notesEntries = [...notesEntriesOf(l), { id: 'c' + Date.now(), ts: new Date().toISOString(), kind: 'correction',
+    device: getDeviceName(), text: `TEACHER CORRECTION: ${text}` }];
+  l.notesText = l.notesEntries.map(n => n.text).join('\n\n');
+  await persistLectureObj(l);
+  document.getElementById('correctionDlg').close();
+  startRebuild({ clientId: l.clientId, exclude: new Set(), correction: true });
+});
 
 // ⭐ Save this answer: the reply becomes a typed-notes entry on the lecture, so it counts as class material
 function saveAnswerButton(ts, saved) {
@@ -4408,7 +4817,7 @@ function loadSubjectChat() {
   exchanges.forEach(ex => {
     if (!ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide') {
       feed.innerHTML += `<div class="msg me">${escText(ex.q)}</div>`;
-      feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}${saveAnswerButton(ex.ts, ex.saved)}</div>`;
+      feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}${ex.visuals ? renderVisuals(ex.visuals) : ''}${saveAnswerButton(ex.ts, ex.saved)}</div>`;
     }
   });
  
@@ -4638,7 +5047,8 @@ Answer the question fully either way. Do not open with apologies or "this is not
 Choose the tag by where the EXPLANATION'S FACTS come from. If the class material only names or asks about the topic (for example a study guide question or a vocabulary list) without explaining it, do not use 📒.
 Teacher-checked study guide answers (listed below when present) outrank everything else.
 Never claim to quote the textbook, and never invent page numbers, chapter numbers, or quotes.
-If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.` +
+If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.
+For problems he works out (calculating, solving, evaluating, graphing, completing a table): use numbered steps, show the work in each step, put the final answer in bold, and use no analogy.` +
     (syllabus ? `\n\n[SYLLABUS / PACING GUIDE]\n${syllabus.slice(0, 8000)}` : '');
 }
 
@@ -4765,9 +5175,20 @@ async function sendChatMessage(query, isRetry = false) {
     aiMsgEl.className = 'msg ai';
     // Which model answered and how long it took, for diagnosing slow answers from SharePoint
     const exTs = recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
-    aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}${saveAnswerButton(exTs)}`;
+    aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}<div class="chat-vis"></div>${saveAnswerButton(exTs)}`;
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
+    // Graphing questions get their drawing too, added when ready and saved with the exchange
+    if (VISUAL_Q.test(text) || VISUAL_Q.test(result.text)) {
+      visualsForChat(text, result.text).then(vis => {
+        if (!vis.length) return;
+        aiMsgEl.querySelector('.chat-vis').innerHTML = renderVisuals(vis);
+        const list = loadExchangesForTarget(targetKey);
+        const ex = list.find(x => x.ts === exTs);
+        if (ex) { ex.visuals = vis; saveExchangesForTarget(targetKey, list); }
+        feed.scrollTop = feed.scrollHeight;
+      }).catch(() => {});
+    }
   } catch (err) {
     stopTimer();
     thinkingEl.remove();
@@ -6503,7 +6924,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V15';
+const APP_VERSION = 'V16';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
