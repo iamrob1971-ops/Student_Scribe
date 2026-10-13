@@ -203,6 +203,14 @@ textarea.grow { resize: none; overflow-y: auto; max-height: 8.5em; line-height: 
 @media(min-width:760px) { .intake-grid { grid-template-columns: 1fr 1.25fr; } }
 .intake-panel { background: var(--card); border: 1.5px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; }
 .intake-panel h4 { margin: 0 0 10px; font-size: 16px; color: var(--c); display: flex; align-items: center; gap: 6px; }
+.intake-grid { align-items: stretch; }
+.intake-grid .rec { width: 92px; height: 92px; font-size: 16px; margin: 4px auto; }
+.notes-panel { margin-top: 16px; display: block; }
+#mainPastedNotes { width: 100%; min-height: 120px; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); font-size: 14.5px; line-height: 1.5; resize: vertical; }
+#dictateInterim { font-size: 13.5px; color: var(--mut); font-style: italic; margin-top: 4px; min-height: 0; }
+.dictate-btn { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.dictate-btn.listening { background: var(--bad); color: #fff; border-color: var(--bad); animation: pulse 1.6s infinite; }
+.dictate-msg { margin-top: 8px; font-size: 13.5px; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
 .rec { width: 110px; height: 110px; border-radius: 50%; border: 0; background: var(--c); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.15); transition: transform .15s, background .15s; margin: 10px auto; display: block; }
 .rec:hover { transform: scale(1.04); }
 .rec.on { background: var(--bad); animation: pulse 1.6s infinite; }
@@ -366,14 +374,20 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
             <small style="color:var(--mut);font-size:11.5px">Select 1 or more files (PDF, Photo, Audio recording, TXT)</small>
           </div>
           <div id="stagedFilesContainer" class="staged-chips-box"></div>
-          <textarea id="mainPastedNotes" rows="2" placeholder="Or paste student notes, whiteboard transcripts, or homework details here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
-          <div id="dictateInterim" style="font-size:13px;color:var(--mut);font-style:italic;min-height:0"></div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
-            <button type="button" class="say sm" id="dictateBtn" title="Speak your notes; the words appear in the box as you talk">🎤 Dictate notes</button>
-            <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut)">
-              <input type="checkbox" id="notesIsGuide" style="width:auto;margin:0"> These notes are a teacher study guide (questions only)
-            </label>
-          </div>
+        </div>
+      </div>
+
+      <!-- NOTES: full width under both intake cards -->
+      <div class="intake-panel notes-panel">
+        <h4>✍️ Notes <small style="font-weight:normal;color:var(--mut)">(type, paste, or dictate)</small></h4>
+        <textarea id="mainPastedNotes" class="grow" data-max="420" rows="5" placeholder="Type or paste notes, whiteboard text, or homework details here. Or tap 🎤 Dictate notes and talk."></textarea>
+        <div id="dictateInterim"></div>
+        <div id="dictateMsg" class="dictate-msg" style="display:none"></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="dictate-btn" id="dictateBtn" title="Speak your notes; the words appear in the box as you talk">🎤 Dictate notes</button>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mut)">
+            <input type="checkbox" id="notesIsGuide" style="width:auto;margin:0"> These notes are a teacher study guide (questions only)
+          </label>
         </div>
       </div>
  
@@ -660,7 +674,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V17</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V18</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -3711,6 +3725,7 @@ function clearStagedFiles() {
   stagedFiles = [];
   mainFileInput.value = '';
   document.getElementById('mainPastedNotes').value = '';
+  document.getElementById('mainPastedNotes').style.height = '';
   const ng = document.getElementById('notesIsGuide');
   if (ng) ng.checked = false;
   renderStagedFiles();
@@ -4822,15 +4837,32 @@ let dictateWanted = false; // keep restarting after Chrome's pauses until he tap
 
 function setDictateUi(on) {
   const b = document.getElementById('dictateBtn');
-  b.textContent = on ? '⏹ Stop dictating' : '🎤 Dictate notes';
-  b.classList.toggle('speaking', on);
+  b.textContent = on ? '⏺ Listening… tap to stop' : '🎤 Dictate notes';
+  b.classList.toggle('listening', on);
   if (!on) document.getElementById('dictateInterim').textContent = '';
 }
 
+function dictateMessage(text) {
+  const m = document.getElementById('dictateMsg');
+  m.textContent = text || '';
+  m.style.display = text ? 'block' : 'none';
+}
+
+const DICTATE_ERRORS = {
+  'not-allowed': '🎤 The microphone is blocked for this page. Click the lock or mic icon in the address bar, allow the microphone, then try again.',
+  'service-not-allowed': '🎤 This browser\'s speech service is turned off (common on work-managed Chrome or in Edge). Typing still works, and the Record button can capture audio instead.',
+  'audio-capture': '🎤 No microphone was found. Check that one is connected and not in use by another app.',
+  'network': '🎤 The speech service could not be reached. Check the internet connection and try again.'
+};
+
+let dictateErrors = [];
+
 function startDictation() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('Dictation needs Chrome on a computer or Chromebook'); return; }
-  if (!navigator.onLine) { showToast('Dictation needs an internet connection'); return; }
+  dictateMessage('');
+  if (!SR) { dictateMessage('🎤 Dictation needs Chrome on a computer or Chromebook. Typing still works.'); return; }
+  if (!navigator.onLine) { dictateMessage('🎤 Dictation needs an internet connection. Typing still works.'); return; }
+  dictateErrors = [];
   const box = document.getElementById('mainPastedNotes');
   const rec = new SR();
   rec.lang = 'en-US';
@@ -4845,6 +4877,7 @@ function startDictation() {
         if (text) {
           const sep = box.value && !/\s$/.test(box.value) ? ' ' : '';
           box.value += sep + text.charAt(0).toUpperCase() + text.slice(1) + '.';
+          autoGrow(box);
         }
       } else {
         interim += r[0].transcript;
@@ -4854,9 +4887,18 @@ function startDictation() {
     box.scrollTop = box.scrollHeight;
   };
   rec.onerror = (ev) => {
-    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+    if (ev.error === 'no-speech' || ev.error === 'aborted') return; // a pause; it restarts on its own
+    if (DICTATE_ERRORS[ev.error] && ev.error !== 'network') {
       dictateWanted = false;
-      showToast('Microphone blocked. Allow it in the address bar, then try again.');
+      dictateMessage(DICTATE_ERRORS[ev.error]);
+      return;
+    }
+    // Repeated errors in a short time: stop instead of looping
+    const now = Date.now();
+    dictateErrors = dictateErrors.filter(t => now - t < 10000).concat(now);
+    if (dictateErrors.length >= 3) {
+      dictateWanted = false;
+      dictateMessage(DICTATE_ERRORS[ev.error] || `🎤 Dictation stopped (${ev.error}). Try again in a moment.`);
     }
   };
   rec.onend = () => {
@@ -4866,7 +4908,7 @@ function startDictation() {
   };
   dictation = rec;
   dictateWanted = true;
-  try { rec.start(); setDictateUi(true); } catch (e) { dictateWanted = false; showToast('Could not start dictation'); }
+  try { rec.start(); setDictateUi(true); } catch (e) { dictateWanted = false; dictateMessage('🎤 Could not start dictation. Try again.'); }
 }
 
 function stopDictation() {
@@ -5407,8 +5449,9 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
 // Text boxes marked .grow get taller as he types (up to about 5 lines), so nothing scrolls out of sight
 function autoGrow(el) {
   if (!el) return;
+  const cap = Number(el.dataset.max) || 150;
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+  el.style.height = Math.min(el.scrollHeight, cap) + 'px';
 }
 document.addEventListener('input', (e) => {
   if (e.target.classList && e.target.classList.contains('grow')) autoGrow(e.target);
@@ -7103,7 +7146,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V17';
+const APP_VERSION = 'V18';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
