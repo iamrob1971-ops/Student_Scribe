@@ -146,6 +146,16 @@ main { padding: 4px 18px 140px; flex: 1; }
 nav.dock button { position: relative; }
 textarea.grow { resize: none; overflow-y: auto; max-height: 8.5em; line-height: 1.4; font: inherit; }
 /* Drawn visuals */
+.md-table { border-collapse: collapse; margin: 6px 0; font-size: 14px; }
+.md-table th, .md-table td { border: 1px solid var(--line); padding: 3px 12px; text-align: center; }
+.md-table th { background: var(--sel); }
+.speaking { background: var(--c) !important; color: #fff !important; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+.fill-bar { height: 6px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 6px 0 0; }
+.fill-bar i { display: block; height: 100%; background: var(--c); transition: width .3s; }
+.sg-dot.has-sa { position: relative; }
+.sg-dot.has-sa::after { content: ''; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
 .vis-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .vis { background: #fff; color: #222; border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
 .vis-title { font-size: 12px; font-weight: 600; color: #444; margin: 0 0 4px; }
@@ -357,9 +367,13 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
           </div>
           <div id="stagedFilesContainer" class="staged-chips-box"></div>
           <textarea id="mainPastedNotes" rows="2" placeholder="Or paste student notes, whiteboard transcripts, or homework details here..." style="width:100%;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);font-size:13px"></textarea>
-          <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut);margin-top:4px">
-            <input type="checkbox" id="notesIsGuide" style="width:auto;margin:0"> These notes are a teacher study guide (questions only)
-          </label>
+          <div id="dictateInterim" style="font-size:13px;color:var(--mut);font-style:italic;min-height:0"></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">
+            <button type="button" class="say sm" id="dictateBtn" title="Speak your notes; the words appear in the box as you talk">🎤 Dictate notes</button>
+            <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mut)">
+              <input type="checkbox" id="notesIsGuide" style="width:auto;margin:0"> These notes are a teacher study guide (questions only)
+            </label>
+          </div>
         </div>
       </div>
  
@@ -646,7 +660,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V16</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V17</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -1440,9 +1454,27 @@ function mdToHtml(md) {
   const flushPara = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
   const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
  
+  let table = null; // rows of cells while inside a | table |
+  const flushTable = () => {
+    if (!table) return;
+    const rows = table.filter(r => !r.every(c => /^:?-{2,}:?$/.test(c.trim())));
+    if (rows.length) {
+      const [head, ...body] = rows;
+      out.push(`<table class="md-table"><tr>${head.map(c => `<th>${mdInline(c.trim())}</th>`).join('')}</tr>${body.map(r => `<tr>${r.map(c => `<td>${mdInline(c.trim())}</td>`).join('')}</tr>`).join('')}</table>`);
+    }
+    table = null;
+  };
+
   for (const raw of lines) {
     const line = raw.trimEnd();
     let m;
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      flushPara(); closeList();
+      table = table || [];
+      table.push(line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|'));
+      continue;
+    }
+    flushTable();
     if (!line.trim()) { flushPara(); closeList(); continue; }
     if ((m = line.match(/^\s*(#{1,4})\s+(.*)$/))) {
       flushPara(); closeList();
@@ -1461,7 +1493,7 @@ function mdToHtml(md) {
       para.push(mdInline(line.trim()));
     }
   }
-  flushPara(); closeList();
+  flushTable(); flushPara(); closeList();
   return '<div class="md">' + out.join('') + '</div>';
 }
  
@@ -1497,8 +1529,24 @@ function applyBionic(html) {
   return tpl.innerHTML;
 }
  
-function speakText(rawTextOrElement) {
+let speakingBtn = null;
+let speakRun = 0; // bumps on every start/stop so stale "done" events are ignored
+
+function resetSpeakBtn() {
+  if (speakingBtn && speakingBtn.dataset.label !== undefined) speakingBtn.innerHTML = speakingBtn.dataset.label;
+  if (speakingBtn) speakingBtn.classList.remove('speaking');
+  speakingBtn = null;
+}
+
+function stopSpeaking() {
+  speakRun++;
   window.speechSynthesis.cancel();
+  resetSpeakBtn();
+}
+
+function speakText(rawTextOrElement, onDone) {
+  window.speechSynthesis.cancel();
+  const run = ++speakRun;
   let cleanText = '';
  
   if (typeof rawTextOrElement === 'string') {
@@ -1513,11 +1561,15 @@ function speakText(rawTextOrElement) {
   if (!cleanText) return;
  
   const rate = parseFloat(localStorage.getItem('ss_tts_rate') || '0.92');
-  const sentences = cleanText.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [cleanText];
-  sentences.map(x => x.trim()).filter(Boolean).forEach(sentence => {
+  const sentences = (cleanText.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) || [cleanText]).map(x => x.trim()).filter(Boolean);
+  sentences.forEach((sentence, i) => {
     const utt = new SpeechSynthesisUtterance(sentence);
     utt.rate = rate;
     utt.pitch = 1.0;
+    if (i === sentences.length - 1) {
+      utt.onend = () => { if (run === speakRun && onDone) onDone(); };
+      utt.onerror = () => { if (run === speakRun && onDone) onDone(); };
+    }
     window.speechSynthesis.speak(utt);
   });
 }
@@ -2804,7 +2856,8 @@ function renderStudyGuideScreen() {
   const i = sgState.idx, total = g.questions.length;
   const open = sgInfoOpen.has(sgQid(g, q));
   const dots = g.questions.map((x, k) => {
-    const cls = [x.teacher === 'confirmed' ? 'ok' : x.teacher === 'revised' ? 'rev' : (x.myAnswer || '').trim() ? 'ans' : '', k === i ? 'cur' : ''].join(' ');
+    const cls = [x.teacher === 'confirmed' ? 'ok' : x.teacher === 'revised' ? 'rev' : (x.myAnswer || '').trim() ? 'ans' : '', k === i ? 'cur' : '',
+      (x.sa || (x.suggested || '').trim()) ? 'has-sa' : ''].join(' ');
     return `<button class="sg-dot ${cls}" data-sg-go="${k}" title="Question ${x.n}">${x.n}</button>`;
   }).join('');
 
@@ -2821,6 +2874,7 @@ function renderStudyGuideScreen() {
       </span>
     </div>
     ${g.parentFilledAt ? `<p style="margin:4px 0 0;font-size:12.5px;color:var(--mut)">Suggested answers filled by parent · ${new Date(g.parentFilledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>` : ''}
+    <div id="sgFillProgress"></div>
     <div class="sg-dots">${dots}</div>
     <div class="quiz-layout">
       <div class="card">
@@ -2840,7 +2894,8 @@ function renderStudyGuideScreen() {
         ${q.teacher === 'revised' ? `<label style="font-size:14px;margin-top:8px;display:block">Teacher's answer or correction
           <textarea id="sgTeacherNote" class="grow" rows="2" style="width:100%;margin-top:4px">${escText(q.teacherNote || '')}</textarea></label>` : ''}
         <div class="quiz-nav">
-          <span>${i > 0 ? '<button class="btn alt" id="sgPrevBtn">← Previous</button>' : ''}</span>
+          <span style="display:flex;gap:6px;align-items:center">${i > 0 ? '<button class="btn alt" id="sgPrevBtn">← Previous</button>' : ''}
+            <button class="say sm" id="sgPrintQBtn">🖨 Print this question</button></span>
           ${i < total - 1 ? '<button class="btn" id="sgNextBtn">Next →</button>' : '<button class="btn alt" data-go="guide">Done ✓</button>'}
         </div>
       </div>
@@ -2855,7 +2910,7 @@ function renderStudyGuideScreen() {
         ${open ? `<div class="sg-info" id="sgInfo">${q.suggested
           ? (q.sa ? renderSACard(q.sa, sgQid(g, q)) : applyBionic(mdToHtml(q.suggested))) +
             `<div style="font-size:12px;color:var(--mut);margin-top:6px">${q.suggestedBy === 'parent' ? 'Filled by parent' : 'Suggested by the coach'} · read-only, type it in your own words</div>`
-          : 'Writing a suggested answer…'}</div>` : ''}
+          : '<span class="spin"></span>Writing a suggested answer…'}</div>` : ''}
         <div class="followup-feed" id="sgFeed">${sgFeed(l, g, q)}</div>
         <div class="row" style="gap:8px">
           <textarea id="sgAskInput" class="grow" rows="1" placeholder="Ask anything about this question" style="flex:1"></textarea>
@@ -3023,6 +3078,7 @@ const SA_RULES = `Write the answer a teacher would accept for this question. Ret
 - "steps": for steps, 2 to 6 steps, each showing the work in plain text (no step numbers, they are added). For plain, [].
 - "final": the final answer in a few words (for steps), else "".
 - "visuals": draw only when the question asks for a graph, table of values, or mapping diagram, or plotting points; otherwise []. Coordinate planes use the -10 to 10 grid. Give each point and line a "step" (which step it first appears in, starting at 1); for plain answers use step 1. A "through" line needs x1,y1,x2,y2 (two points on it); "vertical" needs x; "horizontal" needs y. Label intercepts like "(0, 7)". "one on each coordinate plane" means separate plane visuals.
+- If you reorder values (sets written smallest to largest, repeats dropped), show the problem's order first and say what changed and why.
 Follow the learner profile and reading level.`;
 
 const SG_ANSWER_RULES = SA_RULES;
@@ -3051,13 +3107,16 @@ function validateVisuals(list) {
       return { kind: 'plane', title: strOf(v.title), step: v.step || 1, lines, points };
     }
     if (v.kind === 'table') {
-      const rows = arrOf(v.rows).map(r => arrOf(r).map(strOf)).filter(r => r.length);
+      const rows = arrOf(v.rows).map(r => arrOf(r).map(c => strOf(c).replace(/[\u2212\u2013]/g, '-'))).filter(r => r.length);
       return rows.length ? { kind: 'table', title: strOf(v.title), step: v.step || 1, headers: arrOf(v.headers).map(strOf), rows } : null;
     }
     if (v.kind === 'mapping') {
-      const domain = arrOf(v.domain).map(strOf), range = arrOf(v.range).map(strOf);
-      return domain.length && range.length ? { kind: 'mapping', title: strOf(v.title), step: v.step || 1, domain, range,
-        arrows: arrOf(v.arrows).filter(a => a && domain.includes(strOf(a.from)) && range.includes(strOf(a.to))) } : null;
+      // Unicode minus and dashes vs. "-": treat them as the same so arrows still connect
+      const norm = x => strOf(x).replace(/[\u2212\u2012\u2013\u2014]/g, '-').replace(/\s+/g, '');
+      const domain = arrOf(v.domain).map(norm), range = arrOf(v.range).map(norm);
+      const arrows = arrOf(v.arrows).map(a => a && { from: norm(a.from), to: norm(a.to) })
+        .filter(a => a && domain.includes(a.from) && range.includes(a.to));
+      return domain.length && range.length ? { kind: 'mapping', title: strOf(v.title), step: v.step || 1, domain, range, arrows } : null;
     }
     return null;
   }).filter(Boolean);
@@ -3201,14 +3260,15 @@ async function generateSA(l, questionText) {
 }
 
 // Coach chat: a graphing-type question also gets its drawing (one extra small call)
-const VISUAL_Q = /\b(graph|plot|intercepts?|coordinate plane|table of values|mapping( diagram)?|slope)\b/i;
+const VISUAL_Q = /\b(graph|plot|intercepts?|coordinate plane|table of values|mapping( diagram)?|slope|picture|draw|diagram|visual|show me)\b/i;
+const EXPLICIT_VIS_Q = /\b(picture|draw|diagram|visual|show me|graph|plot)\b/i;
 const VIS_ONLY_SCHEMA = { type: 'OBJECT', properties: { visuals: { type: 'ARRAY', items: VIS_ITEM } }, required: ['visuals'] };
 
 async function visualsForChat(question, answerText) {
   const key = localStorage.getItem('ss_gemini_key') || '';
   const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
   const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
-    `Question: ${question}\n\nAnswer already given:\n${answerText}\n\nReturn the drawing(s) that go with this answer as JSON { "visuals": [...] }: coordinate planes on the -10 to 10 grid, tables of values, or mapping diagrams. A "through" line needs x1,y1,x2,y2; "vertical" needs x; "horizontal" needs y. Label intercepts like "(0, 7)". Return { "visuals": [] } if nothing should be drawn.` }] }],
+    `Question: ${question}\n\nAnswer already given:\n${answerText}\n\nReturn the drawing(s) that go with this answer as JSON { "visuals": [...] }: coordinate planes on the -10 to 10 grid (plotted points need no line), tables of values, or mapping diagrams (domain values, range values, and an arrow for every ordered pair). Use the plain "-" for negative numbers. A "through" line needs x1,y1,x2,y2; "vertical" needs x; "horizontal" needs y. Label intercepts like "(0, 7)". Return { "visuals": [] } if nothing should be drawn.` }] }],
     key, model, { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: VIS_ONLY_SCHEMA });
   return validateVisuals(parseModelJson(res.text).visuals);
 }
@@ -3237,6 +3297,8 @@ const SG_FILL_SCHEMA = {
   required: ['answers']
 };
 
+let sgFilling = false;
+
 async function sgParentFill() {
   const { l, g } = sgFind();
   if (!g) return;
@@ -3248,7 +3310,15 @@ async function sgParentFill() {
   if (!todo.length) { showToast('Every question already has a suggested answer'); return; }
   const key = localStorage.getItem('ss_gemini_key') || '';
   const btn = document.getElementById('sgParentFillBtn');
-  btn.disabled = true; btn.textContent = `⏳ Filling ${todo.length}…`;
+  sgFilling = true;
+  document.querySelectorAll('#sgContent button').forEach(b => { b.disabled = true; });
+  const prog = document.getElementById('sgFillProgress');
+  const showProg = (done) => {
+    btn.innerHTML = `<span class="spin"></span>Filling ${done} of ${todo.length}…`;
+    prog.innerHTML = `<div class="fill-bar"><i style="width:${Math.round(done / todo.length * 100)}%"></i></div>`;
+  };
+  showProg(0);
+  showToast(`Filling ${todo.length} suggested answers. This takes about ${Math.max(1, Math.round(todo.length / 6 * 0.4))} minute(s).`);
   try {
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const FILL_SCHEMA = { type: 'OBJECT', properties: { answers: { type: 'ARRAY', items: {
@@ -3258,7 +3328,7 @@ async function sgParentFill() {
     // Batches of 6 keep each request well inside the output limit
     for (let i = 0; i < todo.length; i += 6) {
       const batch = todo.slice(i, i + 6);
-      btn.textContent = `⏳ Filling ${Math.min(i + 6, todo.length)} of ${todo.length}…`;
+      showProg(i);
       const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
         `Answer each study guide question.\n${batch.map(q => `${q.n}. ${q.text}`).join('\n')}\n\nReturn JSON { "answers":[ ... ] } with one object per question: its "n" plus the fields below.\n${SA_RULES}` }] }],
         key, model, { system: buildCoachSystem([l]), temperature: 0.2, maxOutputTokens: 16384,
@@ -3273,9 +3343,12 @@ async function sgParentFill() {
     }
     g.parentFilledAt = now;
     await persistLectureObj(l);
-    showToast(`Filled ${filled} suggested answer(s). They show on each ⓘ card and in print.`);
+    showToast(`Filled ${filled} suggested answer(s). Showing them all in Review all.`);
+    sgState.review = true; // see the result right away
   } catch (err) {
     alert('Fill error: ' + err.message);
+  } finally {
+    sgFilling = false;
   }
   renderStudyGuideScreen();
 }
@@ -3285,11 +3358,13 @@ async function sgWriteMissing() {
   const todo = g.questions.filter(q => !q.sa && !(q.suggested || '').trim());
   if (!todo.length) { showToast('Every question has a suggested answer'); return; }
   const b = document.getElementById('sgReviewWriteBtn');
+  sgFilling = true;
   for (let i = 0; i < todo.length; i++) {
-    if (b) b.textContent = `⏳ Writing ${i + 1} of ${todo.length}…`;
+    if (b) b.innerHTML = `<span class="spin"></span>Writing ${i + 1} of ${todo.length}…`;
     try { const sa = await generateSA(l, todo[i].text); todo[i].sa = sa; todo[i].suggested = saToMarkdown(sa);
       todo[i].suggestedBy = 'coach'; todo[i].updatedAt = new Date().toISOString(); } catch (e) {}
   }
+  sgFilling = false;
   await persistLectureObj(l);
   renderStudyGuideScreen();
 }
@@ -3304,6 +3379,33 @@ async function sgOpenOriginal() {
   const w = window.open(url, '_blank');
   if (!w) showToast('Allow pop-ups to open the worksheet');
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function sgSuggestedPrintHtml(q) {
+  if (q.sa) {
+    const sa = q.sa;
+    return `<div style="margin-top:4px">${escText(sa.answer.replace(/\*\*/g, ''))}</div>` +
+      (sa.type === 'steps' ? `<ol style="margin:4px 0 0 20px">${sa.steps.map(st => `<li>${escText(st.replace(/\*\*/g, ''))}</li>`).join('')}</ol>` : '') +
+      (sa.final ? `<div><b>Answer: ${escText(sa.final)}</b></div>` : '') + renderVisuals(sa.visuals);
+  }
+  const text = (q.suggested || '').replace(/^\s*(📒|📘|🌐)[^\n]*\n+/, '').replace(/\*\*/g, '');
+  return text ? `<div style="white-space:pre-wrap;margin-top:4px">${escText(text)}</div>` : '<div class="tag">No suggested answer yet.</div>';
+}
+
+function sgPrintQuestion() {
+  const { l, g, q } = sgFind();
+  if (!q) return;
+  const qid = sgQid(g, q);
+  const talk = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === qid);
+  printHtml(`<div class="page">${printHeader('Question to Talk About')}
+    <div class="meta">${escText(g.name)} · ${escText(l.t)}</div>
+    <div class="pq"><b>${q.n}. ${escText(q.text)}</b></div>
+    <div class="pq"><b>My answer:</b><div style="white-space:pre-wrap">${(q.myAnswer || '').trim() ? escText(q.myAnswer) : '<i>not answered yet</i>'}</div></div>
+    <div class="pq"><b>Suggested answer:</b>${sgSuggestedPrintHtml(q)}</div>
+    ${q.teacher === 'revised' && q.teacherNote ? `<div class="pq"><b>Teacher's answer:</b> ${escText(q.teacherNote)}</div>` : ''}
+    ${talk.length ? `<div class="pq"><b>What I asked the coach:</b>${talk.slice(-4).map(ex => `<div style="margin-top:6px"><i>${escText(ex.q)}</i><br>${escText(ex.a.replace(/\*\*/g, '')).slice(0, 700)}</div>`).join('')}</div>` : ''}
+    <div class="pq"><b>Teacher check:</b> ☐ Correct &nbsp; ☐ Revise</div>
+    <div class="pq"><b>My questions / notes:</b><div class="lines">${'<div></div>'.repeat(6)}</div></div></div>`);
 }
 
 function sgPrint(kind) {
@@ -3336,10 +3438,12 @@ function sgPrint(kind) {
 
 document.addEventListener('click', (e) => {
   if (!document.getElementById('s-sg').classList.contains('on')) return;
+  if (sgFilling) return; // buttons are locked while filling
   const t = e.target;
   const go = t.closest('[data-sg-go]');
   if (go) { sgFlush(); sgState.idx = Number(go.dataset.sgGo); renderStudyGuideScreen(); return; }
   if (t.closest('#sgPrevBtn')) { sgFlush(); sgState.idx--; renderStudyGuideScreen(); return; }
+  if (t.closest('#sgPrintQBtn')) { sgFlush(); sgPrintQuestion(); return; }
   if (t.closest('#sgNextBtn')) { sgFlush(); sgState.idx++; renderStudyGuideScreen(); return; }
   if (t.closest('#sgCheckBtn')) { sgAsk('check'); return; }
   if (t.closest('#sgHintBtn')) { sgAsk('hint'); return; }
@@ -3482,10 +3586,17 @@ document.addEventListener('click', (e) => {
   
   const speakBtn = e.target.closest('.btn-speak');
   if (speakBtn) {
+    // Same button while reading = stop. Any other Read button stops the current reading first.
+    if (speakingBtn === speakBtn) { stopSpeaking(); return; }
+    stopSpeaking();
     const tid = speakBtn.dataset.target;
-    const targetEl = document.getElementById(tid);
-    if (targetEl) speakText(targetEl);
-    else if (speakBtn.parentElement) speakText(speakBtn.parentElement);
+    const targetEl = document.getElementById(tid) || speakBtn.parentElement;
+    if (!targetEl) return;
+    speakingBtn = speakBtn;
+    speakBtn.dataset.label = speakBtn.innerHTML;
+    speakBtn.innerHTML = speakBtn.textContent.includes('Read') ? '⏹ Stop' : '⏹';
+    speakBtn.classList.add('speaking');
+    speakText(targetEl, () => { if (speakingBtn === speakBtn) resetSpeakBtn(); });
   }
 });
  
@@ -4705,6 +4816,70 @@ document.getElementById('saveCorrectionBtn').addEventListener('click', async () 
   startRebuild({ clientId: l.clientId, exclude: new Set(), correction: true });
 });
 
+/* ---------- 🎤 Dictate notes: live speech-to-text into the notes box (Chrome speech recognition) ---------- */
+let dictation = null;      // the running recognizer
+let dictateWanted = false; // keep restarting after Chrome's pauses until he taps Stop
+
+function setDictateUi(on) {
+  const b = document.getElementById('dictateBtn');
+  b.textContent = on ? '⏹ Stop dictating' : '🎤 Dictate notes';
+  b.classList.toggle('speaking', on);
+  if (!on) document.getElementById('dictateInterim').textContent = '';
+}
+
+function startDictation() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Dictation needs Chrome on a computer or Chromebook'); return; }
+  if (!navigator.onLine) { showToast('Dictation needs an internet connection'); return; }
+  const box = document.getElementById('mainPastedNotes');
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.onresult = (ev) => {
+    let interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      if (r.isFinal) {
+        const text = r[0].transcript.trim();
+        if (text) {
+          const sep = box.value && !/\s$/.test(box.value) ? ' ' : '';
+          box.value += sep + text.charAt(0).toUpperCase() + text.slice(1) + '.';
+        }
+      } else {
+        interim += r[0].transcript;
+      }
+    }
+    document.getElementById('dictateInterim').textContent = interim ? '… ' + interim : '';
+    box.scrollTop = box.scrollHeight;
+  };
+  rec.onerror = (ev) => {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+      dictateWanted = false;
+      showToast('Microphone blocked. Allow it in the address bar, then try again.');
+    }
+  };
+  rec.onend = () => {
+    if (dictateWanted) { try { rec.start(); return; } catch (e) {} }
+    dictation = null;
+    setDictateUi(false);
+  };
+  dictation = rec;
+  dictateWanted = true;
+  try { rec.start(); setDictateUi(true); } catch (e) { dictateWanted = false; showToast('Could not start dictation'); }
+}
+
+function stopDictation() {
+  dictateWanted = false;
+  if (dictation) { try { dictation.stop(); } catch (e) {} }
+  setDictateUi(false);
+}
+
+document.getElementById('dictateBtn').addEventListener('click', () => {
+  if (isRecording()) { showToast('Stop the class recording first'); return; }
+  if (dictateWanted) stopDictation(); else startDictation();
+});
+
 // ⭐ Save this answer: the reply becomes a typed-notes entry on the lecture, so it counts as class material
 function saveAnswerButton(ts, saved) {
   if (!ts) return '';
@@ -5048,7 +5223,8 @@ Choose the tag by where the EXPLANATION'S FACTS come from. If the class material
 Teacher-checked study guide answers (listed below when present) outrank everything else.
 Never claim to quote the textbook, and never invent page numbers, chapter numbers, or quotes.
 If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.
-For problems he works out (calculating, solving, evaluating, graphing, completing a table): use numbered steps, show the work in each step, put the final answer in bold, and use no analogy.` +
+For problems he works out (calculating, solving, evaluating, graphing, completing a table): use numbered steps, show the work in each step, put the final answer in bold, and use no analogy.
+If you reorder values (for example writing a set smallest to largest, or dropping repeats), show them in the problem's order first, then say what you changed and why, e.g. "From the problem: 5, 5, 3, 0 -> drop repeats -> written smallest to largest: {0, 3, 5}".` +
     (syllabus ? `\n\n[SYLLABUS / PACING GUIDE]\n${syllabus.slice(0, 8000)}` : '');
 }
 
@@ -5180,14 +5356,17 @@ async function sendChatMessage(query, isRetry = false) {
     feed.scrollTop = feed.scrollHeight;
     // Graphing questions get their drawing too, added when ready and saved with the exchange
     if (VISUAL_Q.test(text) || VISUAL_Q.test(result.text)) {
+      const slot = aiMsgEl.querySelector('.chat-vis');
+      slot.innerHTML = '<small style="color:var(--mut)"><span class="spin"></span>Drawing…</small>';
+      const failNote = '<small style="color:var(--mut)">⚠️ Could not draw this one. Ask again, or try "draw it on a coordinate plane".</small>';
       visualsForChat(text, result.text).then(vis => {
-        if (!vis.length) return;
-        aiMsgEl.querySelector('.chat-vis').innerHTML = renderVisuals(vis);
+        if (!vis.length) { slot.innerHTML = EXPLICIT_VIS_Q.test(text) ? failNote : ''; return; }
+        slot.innerHTML = renderVisuals(vis);
         const list = loadExchangesForTarget(targetKey);
         const ex = list.find(x => x.ts === exTs);
         if (ex) { ex.visuals = vis; saveExchangesForTarget(targetKey, list); }
         feed.scrollTop = feed.scrollHeight;
-      }).catch(() => {});
+      }).catch(() => { slot.innerHTML = EXPLICIT_VIS_Q.test(text) ? failNote : ''; });
     }
   } catch (err) {
     stopTimer();
@@ -6924,7 +7103,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V16';
+const APP_VERSION = 'V17';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
