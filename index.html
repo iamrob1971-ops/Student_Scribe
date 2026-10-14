@@ -107,7 +107,11 @@ main { padding: 4px 18px 140px; flex: 1; }
 .answer-panel blockquote { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--c); color: var(--mut); font-size: 14px; }
 .quiz-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .followup { display: flex; flex-direction: column; gap: 8px; }
-.followup-feed { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.followup-feed { position: relative; display: flex; flex-direction: column; gap: 8px; height: min(52vh, 480px); min-height: 140px; overflow-y: auto; resize: vertical; padding-right: 2px; }
+@media (min-width: 1020px) {
+  /* the chat stays beside the question while the page scrolls */
+  .quiz-layout > .followup { position: sticky; top: 10px; }
+}
 .followup .hint { color: var(--mut); font-size: 14px; }
 #printArea { display: none; }
 @media print {
@@ -515,8 +519,8 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <label>Teacher Name
       <input type="text" id="studentSchedTeacher" placeholder="e.g. Erhart">
     </label>
-    <label>Textbook (include the edition)
-      <input type="text" id="studentSchedTextbook" placeholder="e.g. Biology, Miller & Levine, Pearson, 2019">
+    <label>Textbook and reading books (one per line; include the edition)
+      <textarea id="studentSchedTextbook" rows="3" placeholder="One book per line, e.g.&#10;Textbook: Biology, Miller & Levine, Pearson, 2019&#10;Reading: Of Mice and Men, John Steinbeck"></textarea>
     </label>
     <label>Syllabus / pacing guide
       <textarea id="studentSchedSyllabus" rows="5" placeholder="Units, topics, and textbook chapters. Paste it, or upload the teacher's syllabus below."></textarea>
@@ -572,6 +576,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <button class="say" id="closeTodoBtn">✕</button>
   </div>
   <div class="dlg-body">
+    <label>Type
+      <select id="todoType"><option value="To-do">To-do</option><option value="Homework">Homework</option></select>
+    </label>
     <label>What to do
       <input type="text" id="todoTitle" maxlength="200" placeholder="e.g. Finish study guide questions 1-10">
     </label>
@@ -674,7 +681,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V19</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V20</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -1917,6 +1924,7 @@ function renderTodoItem(d) {
         <button class="say sm" data-todo-keep="${id}">✔ Keep</button>
         <button class="say sm" data-todo-dismiss="${id}">✕ Dismiss</button></div>` : ''}
     </div>
+    ${String(d.deadlineId).startsWith('todo_guide_') && lec ? `<button class="say sm" data-open-sg="${escText(lec.clientId)}|${escText(String(d.deadlineId).slice(11))}" title="Open the worksheet">Open →</button>` : ''}
     <button class="say sm" data-todo-edit="${id}" title="Edit">✎</button>
   </div>`;
 }
@@ -1991,6 +1999,7 @@ function openTodoDialog(opts = {}) {
   const classCode = existing ? existing.classCode : (opts.classCode || activeClassCode);
   document.getElementById('todoDlgTitle').textContent = existing ? '📋 Edit To-Do' : '📋 New To-Do';
   document.getElementById('todoTitle').value = existing ? existing.title || '' : '';
+  document.getElementById('todoType').value = existing && existing.typeDesc === 'Homework' ? 'Homework' : 'To-do';
   const clsSel = document.getElementById('todoClass');
   clsSel.innerHTML = CLASSES.map(c => `<option value="${c.code}" ${c.code === classCode ? 'selected' : ''}>${c.icon || ''} ${escText(c.name)}</option>`).join('');
   fillTodoLectureSelect(classCode, existing ? existing.sourceClientId : (opts.lectureClientId || ''));
@@ -2014,7 +2023,7 @@ document.getElementById('saveTodoBtn').addEventListener('click', async () => {
     typeDesc: 'To-do', status: DL_STATUS_OPEN, studentId: getStudentId(), unitsCovered: ''
   };
   Object.assign(d, {
-    title, classCode, class: cls.name,
+    title, classCode, class: cls.name, typeDesc: document.getElementById('todoType').value,
     sourceClientId: document.getElementById('todoLecture').value || '',
     dueDate: document.getElementById('todoDue').value || null,
     notes: document.getElementById('todoNotes').value.trim()
@@ -2524,9 +2533,9 @@ function renderQuiz() {
     `;
     document.getElementById('newSetBtn').onclick = generateNewQuestionSet;
     document.getElementById('reviewQsBtn').onclick = () => { quizIndex = set.length - 1; renderQuiz(); };
-    document.getElementById('retryQuizBtn').onclick = () => { resetQuiz(); renderQuiz(); };
+    document.getElementById('retryQuizBtn').onclick = () => { drillFreshSince = new Date().toISOString(); resetQuiz(); renderQuiz(); };
     const rm = document.getElementById('retryMissedBtn');
-    if (rm) rm.onclick = () => { resetQuiz(missed); renderQuiz(); };
+    if (rm) rm.onclick = () => { drillFreshSince = new Date().toISOString(); resetQuiz(missed); renderQuiz(); };
     document.getElementById('testWeakSpotsBtn').onclick = generateWeakSpotDrill;
     return;
   }
@@ -2741,9 +2750,12 @@ Return only JSON: { "quiz_questions":[{"lecture":string,"q":string,"options":[st
 /* ---------- Follow-up questions about a drill question ----------
    Saved in the lecture's own chat row, tagged with the question id,
    so a question, its miss, and his follow-ups stay together. */
+// Retake / Retry start the question panels fresh; earlier follow-ups stay in History
+let drillFreshSince = '';
 function drillFollowups(cur) {
   const pl = cur.parentLecture || {};
-  return loadExchangesForTarget(pl.clientId || '').filter(ex => ex.context === 'drill' && ex.qid === cur.id);
+  return loadExchangesForTarget(pl.clientId || '').filter(ex => ex.context === 'drill' && ex.qid === cur.id &&
+    (!drillFreshSince || (ex.ts || '') > drillFreshSince));
 }
 
 function renderFollowupFeed(cur) {
@@ -2798,6 +2810,7 @@ Otherwise, answer his follow-up about this question. If he got it wrong, help hi
     });
     stopTimer();
     waitEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(res.text))}`;
+    feed.scrollTop = Math.max(0, waitEl.offsetTop - 6); // read the new reply from its first line
     const pl = cur.parentLecture || {};
     recordExchange(pl.clientId, text, res.text, false, [cur.lectureId],
       { context: 'drill', qid: cur.id, model: res.modelUsed, ms: Date.now() - t0 });
@@ -2810,7 +2823,6 @@ Otherwise, answer his follow-up about this question. If he got it wrong, help hi
     clearTimeout(timeout);
     followupBusy = false;
     sendBtn.disabled = false;
-    feed.scrollTop = feed.scrollHeight;
   }
 }
 
@@ -2856,7 +2868,9 @@ document.addEventListener('click', (e) => {
 
 function sgFeed(l, g, q) {
   const qid = sgQid(g, q);
-  const list = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === qid);
+  // After Start over the panel opens fresh; older exchanges stay in History
+  const since = g.resetAt || '';
+  const list = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === qid && (!since || (ex.ts || '') > since));
   if (!list.length) return `<p class="hint">Write your answer, then tap ✓ Check my answer. Stuck? Try 💡 Hint.</p>`;
   return list.map(ex => `<div class="msg me">${escText(ex.q)}</div>
     <div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}</div>`).join('');
@@ -2889,6 +2903,7 @@ function renderStudyGuideScreen() {
       </span>
     </div>
     ${g.parentFilledAt ? `<p style="margin:4px 0 0;font-size:12.5px;color:var(--mut)">Suggested answers filled by parent · ${new Date(g.parentFilledAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>` : ''}
+    ${g.instructions ? `<div class="banner" style="margin:6px 0 0;font-size:14px">📋 <b>Directions:</b> ${escText(g.instructions)}</div>` : ''}
     <div id="sgFillProgress"></div>
     <div class="sg-dots">${dots}</div>
     <div class="quiz-layout">
@@ -2968,6 +2983,7 @@ function renderReviewAll(l, g) {
   box.innerHTML = `
     <div class="row" style="flex-wrap:wrap;gap:8px">
       <b>👀 Review all · ${escText(g.name)} · ${escText(l.t)}</b>
+      ${g.instructions ? `<div style="flex-basis:100%;font-size:13.5px;color:var(--mut)">📋 Directions: ${escText(g.instructions)}</div>` : ''}
       <span style="display:flex;gap:6px"><button class="say sm" id="sgReviewWriteBtn">✍️ Write missing suggested answers</button>
       <button class="btn alt" id="sgReviewBackBtn">← Back to questions</button></span>
     </div>
@@ -2989,12 +3005,13 @@ async function sgFlush() {
 }
 
 function sgContextBlock(q, mode) {
+  const g = sgFind().g || {};
   return `[STUDY GUIDE QUESTION]
-Question: ${q.text}
+${g.instructions ? `Worksheet directions from the teacher: ${g.instructions}\n` : ''}Question: ${q.text}
 His answer so far: ${(q.myAnswer || '').trim() || '(blank)'}
 ${q.teacher === 'revised' && q.teacherNote ? `Teacher's answer: ${q.teacherNote}` : ''}
 ${q.suggested ? `Reference answer (do not reveal it word for word): ${q.suggested}` : ''}
-${mode === 'check' ? 'TASK: Grade his answer. Say clearly whether it is right, partly right, or not right yet. Then up to 3 bullets on what is missing or wrong. Do NOT write the full answer for him.' : ''}
+${mode === 'check' ? 'TASK: Grade his answer. Say clearly whether it is right, partly right, or not right yet. Then up to 3 bullets on what is missing or wrong, including anything the worksheet directions require that he skipped (for example showing work). Do NOT write the full answer for him.' : ''}
 ${mode === 'hint' ? 'TASK: Give ONE short hint that points him toward the answer without stating it.' : ''}`;
 }
 
@@ -3035,6 +3052,7 @@ async function sgAsk(mode) {
     });
     stop();
     wait.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(res.text))}`;
+    feed.scrollTop = Math.max(0, wait.offsetTop - 6); // read the new reply from its first line
     recordExchange(l.clientId, userText, res.text, false, [l.id], { context: 'guide', qid: sgQid(g, q), kind: mode, model: res.modelUsed });
   } catch (err) {
     stop();
@@ -3043,7 +3061,6 @@ async function sgAsk(mode) {
   } finally {
     clearTimeout(tmo);
     sgBusy = false;
-    feed.scrollTop = feed.scrollHeight;
   }
 }
 
@@ -3294,7 +3311,7 @@ async function sgEnsureSuggested(l, g, q) {
   const key = localStorage.getItem('ss_gemini_key') || '';
   if (!key) { showToast('Ask a parent to add the Gemini key in Settings (⚙️)'); return; }
   try {
-    q.sa = await generateSA(l, q.text);
+    q.sa = await generateSA(l, g.instructions ? `${q.text}\n(Worksheet directions: ${g.instructions})` : q.text);
     q.suggested = saToMarkdown(q.sa);
     q.suggestedBy = 'coach';
     q.updatedAt = new Date().toISOString();
@@ -3481,7 +3498,7 @@ function sgPrint(kind) {
     if (q.teacher === 'revised' && q.teacherNote) ans += `<div class="tag">Teacher's answer: ${escText(q.teacherNote)}</div>`;
     return `<div class="pq"><b>${q.n}. ${escText(q.text)}</b>${ans}${teacherBox}</div>`;
   }).join('');
-  printHtml(`<div class="page">${printHeader(title)}<div class="meta">${escText(g.name)} · ${escText(l.t)}${kind === 'suggested' && g.parentFilledAt ? ' · suggested answers filled by parent' : ''}</div>${body}</div>`);
+  printHtml(`<div class="page">${printHeader(title)}<div class="meta">${escText(g.name)} · ${escText(l.t)}${kind === 'suggested' && g.parentFilledAt ? ' · suggested answers filled by parent' : ''}</div>${g.instructions ? `<div class="pq"><b>Directions:</b> ${escText(g.instructions)}</div>` : ''}${body}</div>`);
 }
 
 document.addEventListener('click', (e) => {
@@ -4335,16 +4352,21 @@ async function mergeIntoLecture(l, study, ctx) {
 
 const GUIDE_SCHEMA = {
   type: 'OBJECT',
-  properties: { questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-    n: { type: 'INTEGER' }, text: { type: 'STRING' } }, required: ['n', 'text'] } } },
-  required: ['questions']
+  properties: {
+    instructions: { type: 'STRING' },
+    questions: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      n: { type: 'INTEGER' }, text: { type: 'STRING' } }, required: ['n', 'text'] } } },
+  required: ['instructions', 'questions'],
+  propertyOrdering: ['instructions', 'questions']
 };
 
 async function extractStudyGuide(input, key, model, idx) {
   const res = await queryGeminiWaterfall([{ role: 'user', parts: [...input.parts, { text:
     'This is a teacher\'s study guide. List every question or prompt on it, in order, exactly as written (fix only obvious scanning errors). Include fill-in-the-blank and "define" items as questions. Number them as they are numbered on the page.\n' +
     'IMPORTANT: when a question refers to something shown on the page (a graph, table, mapping diagram, set of ordered pairs, picture, or equation image), describe it inside the question text in square brackets so the question can be answered without the page. Examples: [Table: Domain 4, -5, 6, -5 -> Range 6, 3, -3, 5] or [Mapping: 4->5, -6->5, 3->3, -2->4] or [Graph: a straight line falling from upper left to lower right, crossing the y-axis near 3].\n' +
-    'Write math in plain characters: x^2, 4/(3x), f(-3). Return only JSON: { "questions":[{"n":integer,"text":string}] }' }] }],
+    'Write math in plain characters: x^2, 4/(3x), f(-3).\n' +
+    'Also copy the directions for the whole worksheet (for example "Show all your work. Circle your final answer.") into "instructions", word for word; use "" if there are none.\n' +
+    'Return only JSON: { "instructions":string, "questions":[{"n":integer,"text":string}] }' }] }],
     key, model, { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: 'application/json', responseSchema: GUIDE_SCHEMA });
   const parsed = parseModelJson(res.text);
   const now = new Date().toISOString();
@@ -4352,7 +4374,7 @@ async function extractStudyGuide(input, key, model, idx) {
     id: 'q' + (i + 1), n: Number(q.n) || i + 1, text: strOf(q.text),
     myAnswer: '', suggested: '', suggestedBy: '', teacher: 'none', teacherNote: '', updatedAt: now
   }));
-  return { id: 'g' + Date.now() + idx, name: input.name, createdAt: now, questions };
+  return { id: 'g' + Date.now() + idx, name: input.name, createdAt: now, instructions: strOf(parsed.instructions), questions };
 }
 
 function normTitle(t) {
@@ -4745,6 +4767,18 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
         unitKey: ds.unitKey, sourceClientId: targetLecture.clientId
       });
       if (added) newDeadlines++;
+    }
+
+    // Each new study guide gets a linked to-do (Homework) he can open, date, check off, or delete
+    for (const g of newGuides) {
+      const dl = {
+        deadlineId: `todo_guide_${g.id}`, typeDesc: 'Homework', status: DL_STATUS_OPEN,
+        title: `Complete ${g.name.replace(/\.(pdf|png|jpe?g|webp)$/i, '')}`,
+        classCode: classCodeAtStart, class: currentClass.name, sourceClientId: targetLecture.clientId,
+        dueDate: null, notes: g.instructions || '', studentId: sid, unitsCovered: '', isDirty: true
+      };
+      await idbPut('deadlines', dl);
+      cachedDeadlines.push(dl);
     }
 
     // Recordings used here are done; their audio is kept 7 days, then pruned
@@ -5151,6 +5185,7 @@ document.addEventListener('click', (e) => {
   }
   if (idx < 0) { showToast('That question is not in the current selection'); return; }
   resetQuiz();
+  drillFreshSince = ''; // opening from History shows that question's earlier follow-ups
   quizIndex = idx;
   // Show it as answered so the follow-up panel opens; the recorded miss (if any) decides the highlight
   const q = getQuizSet()[idx];
@@ -5282,18 +5317,20 @@ function recentMissCount(lectures) {
 
 function courseRefsFor(code) {
   const c = CLASSES.find(x => x.code === code) || {};
-  return { textbook: String(c.textbook || '').trim(), syllabus: String(c.syllabus || '').trim() };
+  // Several books are stored one per line (SharePoint keeps them joined with " | ")
+  const books = String(c.textbook || '').split(/\n| \| /).map(x => x.trim()).filter(Boolean);
+  return { textbook: books.join('; '), books, syllabus: String(c.syllabus || '').trim() };
 }
 
 // Source order for every coach answer: class material, then the course textbook, then general knowledge
 function buildSourceTierRules(code) {
-  const { textbook, syllabus } = courseRefsFor(code);
-  const tags = textbook
-    ? `"📒 From your class notes" | "📘 Matches your textbook (${textbook})" (add " · see Ch. N" ONLY when the syllabus below maps this topic to a chapter) | "🌐 General knowledge"`
+  const { textbook, books, syllabus } = courseRefsFor(code);
+  const tags = books.length
+    ? `"📒 From your class notes" | "📘 Matches your course book (name the book)" (add " · see Ch. N" ONLY when the syllabus below maps this topic to a chapter) | "🌐 General knowledge"`
     : `"📒 From your class notes" | "🌐 General knowledge"`;
   return `[SOURCE ORDER]
 1. The class material below (lectures, handouts, transcripts, typed notes). This always wins.
-2. ${textbook ? `The course textbook: ${textbook}. Use its vocabulary and the way it usually explains the topic.` : 'No course textbook is set for this class.'}
+2. ${books.length ? `The course books for this class:\n${books.map(b => '   - ' + b).join('\n')}\n   Draw on what you know about these books (plot, characters, themes, vocabulary, how the textbook explains topics) whenever a question touches them, including drill and study guide questions.` : 'No course books are set for this class.'}
 3. General knowledge.
 Answer the question fully either way. Do not open with apologies or "this is not in your notes" disclaimers. Start the reply with exactly one short tag line: ${tags}.
 Choose the tag by where the EXPLANATION'S FACTS come from. If the class material only names or asks about the topic (for example a study guide question or a vocabulary list) without explaining it, do not use 📒.
@@ -5713,7 +5750,7 @@ function todoSnapshot() {
 function buildTodoEmail(changes) {
   const name = getStudentName() || getStudentId();
   const clsName = code => (CLASSES.find(c => c.code === code) || { name: code }).name;
-  const row = d => `<li><b>${escText(d.title || '')}</b> <span style="color:#666">· ${escText(clsName(d.classCode))} · ${escText(dueLabel(d))}</span>${d.notes ? `<br><span style="color:#444">${escText(d.notes)}</span>` : ''}</li>`;
+  const row = d => `<li><b>${escText(d.title || '')}</b> <span style="color:#666">· ${d.typeDesc === 'Homework' ? 'Homework · ' : ''}${escText(clsName(d.classCode))} · ${escText(dueLabel(d))}</span>${d.notes ? `<br><span style="color:#444">${escText(d.notes)}</span>` : ''}</li>`;
   const section = (title, list) => list.length ? `<h3 style="margin:16px 0 6px;font-family:sans-serif">${title} (${list.length})</h3><ul style="font-family:sans-serif;margin:0">${list.map(row).join('')}</ul>` : '';
   const open = (cachedDeadlines || []).filter(d => isTodo(d) && !isDeadlineDone(d));
   const bucket = k => open.filter(d => todoBucket(d) === k);
@@ -6409,7 +6446,7 @@ async function pushClassesToSharePoint(siteId, token) {
       Term: cls.term || 'Fall 26/27',
       IsActive: cls.isActive !== false,
       StudentId: getStudentId(),
-      Textbook: cls.textbook || '',
+      Textbook: (cls.textbook || '').split('\n').map(x => x.trim()).filter(Boolean).join(' | ').slice(0, 255),
       Syllabus: cls.syllabus || ''
     };
  
@@ -6587,6 +6624,9 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
     cls.time = document.getElementById('studentSchedTime').value.trim();
     cls.teacher = document.getElementById('studentSchedTeacher').value.trim();
     cls.textbook = document.getElementById('studentSchedTextbook').value.trim();
+    if (cls.textbook.split('\n').join(' | ').length > 255) {
+      showToast('That book list is longer than SharePoint\'s Textbook column holds (255 characters). It works here; to sync all of it, change the column to "Multiple lines of text".');
+    }
     cls.syllabus = document.getElementById('studentSchedSyllabus').value.trim();
  
     localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
@@ -6889,7 +6929,7 @@ document.getElementById('pullClassesBtn').addEventListener('click', async () => 
           icon: f.IconEmoji || '📚',
           needsScribe: f.NeedsScribe !== false,
           term: f.Term || 'Fall 26/27',
-          textbook: f.Textbook || '',
+          textbook: String(f.Textbook || '').split(' | ').join('\n'),
           syllabus: f.Syllabus || '',
           isActive: true
         }));
@@ -7181,7 +7221,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V19';
+const APP_VERSION = 'V20';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
