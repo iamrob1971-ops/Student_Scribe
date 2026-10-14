@@ -139,7 +139,13 @@ main { padding: 4px 18px 140px; flex: 1; }
 .todo-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .todo-group h4 { margin: 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
 .todo-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); }
-.todo-item input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.todo-open { cursor: pointer; border-radius: 8px; }
+.todo-open:hover b { text-decoration: underline; }
+.todo-go { font-size: 12px; color: var(--c); font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.todo-actions { display: flex; flex-direction: row; gap: 6px; align-items: center; flex: none; }
+.todo-done-btn { border: 1.5px solid var(--ok); color: var(--ok); background: var(--card); border-radius: 999px; padding: 5px 12px; font-weight: 700; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.todo-done-btn:hover { background: var(--ok-bg); }
+.todo-done-btn.reopen { border-color: var(--line); color: var(--mut); }
 .todo-item .main { flex: 1; min-width: 0; }
 .todo-item .meta { font-size: 12px; color: var(--mut); }
 .todo-item .ctx { font-size: 13px; margin-top: 4px; white-space: pre-wrap; }
@@ -681,7 +687,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V20</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V21</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -1809,6 +1815,10 @@ function updateGenerateLabel() {
 }
 
 function doSwitchClass(code) {
+  // Leaving a test, worksheet, guide or chat for another class lands on that class's Unit Map
+  const onScreen = (document.querySelector('.screen.on') || {}).id || '';
+  if (onScreen === 's-sg' && typeof sgFlush === 'function') sgFlush();
+  const goToMap = ['s-sg', 's-quiz', 's-guide', 's-chat'].includes(onScreen) && code !== activeClassCode;
   activeClassCode = code;
   localStorage.setItem('ss_last_class', code);
  
@@ -1833,6 +1843,7 @@ function doSwitchClass(code) {
   updateRadarPills();
   sameDayChoice = null;
   renderSameDayBanner();
+  if (goToMap) { sgState = null; navigateTo('cls'); }
   showToast(`Switched to ${c.name}`);
 }
  
@@ -1914,18 +1925,23 @@ function renderTodoItem(d) {
   const lec = findLectureByClientId(d.sourceClientId);
   const bucket = todoBucket(d);
   const id = escText(d.deadlineId);
+  const guideId = String(d.deadlineId).startsWith('todo_guide_') ? String(d.deadlineId).slice(11) : '';
+  const opens = guideId && lec ? 'the worksheet' : lec ? 'the lecture' : 'this class';
   return `<div class="todo-item ${bucket === 'done' ? 'done' : ''} ${bucket === 'overdue' ? 'overdue' : ''}">
-    <input type="checkbox" data-todo-done="${id}" ${bucket === 'done' ? 'checked' : ''} title="Mark done">
-    <div class="main">
-      <b>${escText(d.title || 'Untitled')}</b>${d.typeDesc === 'Homework' ? '<span class="todo-tag">Homework</span>' : ''}${d.suggested ? '<span class="todo-tag">Suggested</span>' : ''}
+    <div class="main todo-open" data-todo-open="${id}" title="Open ${opens}" role="button" tabindex="0">
+      <b>${escText(d.title || 'Untitled')}</b>${d.typeDesc === 'Homework' ? '<span class="todo-tag">Homework</span>' : ''}${d.suggested ? '<span class="todo-tag">Suggested</span>' : ''} <span class="todo-go">Open ${opens} →</span>
       <div class="meta">${cls.icon || ''} ${escText(cls.name)}${lec ? ` · ${escText(lec.t)}` : ''} · ${escText(dueLabel(d))}</div>
       ${d.notes ? `<div class="ctx">${escText(d.notes)}</div>` : ''}
       ${d.suggested ? `<div style="display:flex;gap:6px;margin-top:6px">
         <button class="say sm" data-todo-keep="${id}">✔ Keep</button>
         <button class="say sm" data-todo-dismiss="${id}">✕ Dismiss</button></div>` : ''}
     </div>
-    ${String(d.deadlineId).startsWith('todo_guide_') && lec ? `<button class="say sm" data-open-sg="${escText(lec.clientId)}|${escText(String(d.deadlineId).slice(11))}" title="Open the worksheet">Open →</button>` : ''}
-    <button class="say sm" data-todo-edit="${id}" title="Edit">✎</button>
+    <div class="todo-actions">
+      ${bucket === 'done'
+        ? `<button class="todo-done-btn reopen" data-todo-toggle="${id}">↺ Reopen</button>`
+        : `<button class="todo-done-btn" data-todo-toggle="${id}">✓ Mark complete</button>`}
+      <button class="say sm" data-todo-edit="${id}" title="Edit">✎</button>
+    </div>
   </div>`;
 }
 
@@ -1955,7 +1971,7 @@ function renderTodos() {
     ${classesWithTodos.map(c => `<button class="say sm ${todoFilter === c.code ? 'on' : ''}" data-todo-filter="${c.code}">${c.icon || ''} ${escText(c.name)} (${open.filter(d => d.classCode === c.code).length})</button>`).join('')}
   </div>`;
 
-  const groups = [['overdue', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['later', 'Later'], ['nodate', 'No due date']];
+  const groups = [['overdue', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['later', 'Future (after this week)'], ['nodate', 'No due date']];
   const sorted = list => list.slice().sort((a, b) => {
     const da = calendarDaysUntil(a.dueDate), db = calendarDaysUntil(b.dueDate);
     return (da === null ? 9999 : da) - (db === null ? 9999 : db);
@@ -2065,17 +2081,42 @@ document.addEventListener('click', async (e) => {
     await saveTodo(d);
   }
 });
-document.addEventListener('change', async (e) => {
-  const cb = e.target.closest && e.target.closest('[data-todo-done]');
-  if (!cb) return;
-  const d = cachedDeadlines.find(x => x.deadlineId === cb.dataset.todoDone);
-  if (!d) return;
-  d.status = cb.checked ? DL_STATUS_DONE : DL_STATUS_OPEN;
-  d.completedAt = cb.checked ? new Date().toISOString() : null;
-  d.suggested = false;
-  await saveTodo(d);
-  if (cb.checked) showToast('Nice. Marked done.');
+document.addEventListener('click', async (e) => {
+  const tg = e.target.closest('[data-todo-toggle]');
+  if (tg) {
+    const d = cachedDeadlines.find(x => x.deadlineId === tg.dataset.todoToggle);
+    if (!d) return;
+    const done = !isDeadlineDone(d);
+    d.status = done ? DL_STATUS_DONE : DL_STATUS_OPEN;
+    d.completedAt = done ? new Date().toISOString() : null;
+    d.suggested = false;
+    await saveTodo(d);
+    showToast(done ? 'Nice. Marked complete.' : 'Reopened');
+    return;
+  }
+  // The middle of a to-do opens the work: the worksheet, else the lecture, else the class's Unit Map
+  const op = e.target.closest('[data-todo-open]');
+  if (op && !e.target.closest('button')) openTodoWork(op.dataset.todoOpen);
 });
+
+async function openTodoWork(id) {
+  const d = cachedDeadlines.find(x => x.deadlineId === id);
+  if (!d) return;
+  if (d.classCode && d.classCode !== activeClassCode) {
+    if (!(await switchClass(d.classCode))) return;
+  }
+  const lec = findLectureByClientId(d.sourceClientId);
+  const guideId = String(d.deadlineId).startsWith('todo_guide_') ? String(d.deadlineId).slice(11) : '';
+  if (lec && guideId && (lec.studyGuides || []).some(g => g.id === guideId)) { openStudyGuide(lec.clientId, guideId, 0); return; }
+  if (lec) {
+    pickedLectures = { [lec.id]: true };
+    resetQuiz();
+    renderAll();
+    navigateTo('guide');
+    return;
+  }
+  navigateTo('cls');
+}
 
 function updateRadarPills() {
   renderTodos();
@@ -6446,7 +6487,7 @@ async function pushClassesToSharePoint(siteId, token) {
       Term: cls.term || 'Fall 26/27',
       IsActive: cls.isActive !== false,
       StudentId: getStudentId(),
-      Textbook: (cls.textbook || '').split('\n').map(x => x.trim()).filter(Boolean).join(' | ').slice(0, 255),
+      Textbook: cls.textbook || '',
       Syllabus: cls.syllabus || ''
     };
  
@@ -6624,9 +6665,7 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
     cls.time = document.getElementById('studentSchedTime').value.trim();
     cls.teacher = document.getElementById('studentSchedTeacher').value.trim();
     cls.textbook = document.getElementById('studentSchedTextbook').value.trim();
-    if (cls.textbook.split('\n').join(' | ').length > 255) {
-      showToast('That book list is longer than SharePoint\'s Textbook column holds (255 characters). It works here; to sync all of it, change the column to "Multiple lines of text".');
-    }
+
     cls.syllabus = document.getElementById('studentSchedSyllabus').value.trim();
  
     localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
@@ -7221,7 +7260,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V20';
+const APP_VERSION = 'V21';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
