@@ -687,7 +687,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V21</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V22</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -1642,7 +1642,12 @@ function shuffleOptions(questionObj) {
    SECTION 5 - OPTION A: 2-TIER CLASS CARDS & UI RENDER ENGINE
    ===================================================================== */
 function getActiveDataset() {
-  return CURRICULUM[activeClassCode] || { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] };
+  // A class added since the page loaded has no entry yet: create it, so new lectures are kept in memory
+  if (!CURRICULUM[activeClassCode]) {
+    const u = getSavedUnit(activeClassCode);
+    CURRICULUM[activeClassCode] = { unitKey: u.key, unitTitle: u.title, lectures: [] };
+  }
+  return CURRICULUM[activeClassCode];
 }
  
 function getSelectedLectures() {
@@ -4812,6 +4817,9 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
     // Each new study guide gets a linked to-do (Homework) he can open, date, check off, or delete
     for (const g of newGuides) {
+      // Same worksheet added again: keep one to-do
+      const title = `Complete ${g.name.replace(/\.(pdf|png|jpe?g|webp)$/i, '')}`;
+      if (cachedDeadlines.some(x => isTodo(x) && !isDeadlineDone(x) && x.classCode === classCodeAtStart && normTitle(x.title) === normTitle(title))) continue;
       const dl = {
         deadlineId: `todo_guide_${g.id}`, typeDesc: 'Homework', status: DL_STATUS_OPEN,
         title: `Complete ${g.name.replace(/\.(pdf|png|jpe?g|webp)$/i, '')}`,
@@ -7260,7 +7268,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V21';
+const APP_VERSION = 'V22';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
