@@ -328,6 +328,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button style="background:#E3E9EF" data-t="blue" title="Blue"></button>
         <button style="background:#1E1E1E" data-t="dark" title="Dark"></button>
       </div>
+      <button class="say" id="studentPill" title="Switch student" style="font-weight:700">👤 Mac ▾</button>
       <button class="btn-icon" id="openCfgBtn" title="Parent & Settings Vault">⚙️</button>
     </div>
   </header>
@@ -408,6 +409,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <div id="sameDayBanner" class="same-day" style="display:none"></div>
         <div class="chips" style="justify-content:center">
           <button class="btn" id="generateIntakeBtn">🚀 Generate Study Guide &amp; Practice Drill</button>
+          <button class="say sm" id="genCancelBtn" style="display:none" title="Stop waiting for this run">✕ Cancel</button>
           <button class="btn alt" id="spSyncBtn">☁️ Sync to SharePoint</button>
         </div>
       </div>
@@ -564,6 +566,28 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent PIN Access Modal -->
 <div id="printArea"></div>
 
+<dialog class="cfg-dlg" id="emailQDlg" style="max-width:460px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">✉️ Email this question to me</h3>
+    <button class="say" onclick="document.getElementById('emailQDlg').close()">✕</button>
+  </div>
+  <div class="dlg-body">
+    <p id="emailQTo" style="margin:0;font-size:13px;color:var(--mut)"></p>
+    <label>What's confusing you? (optional, the teacher will see this first)
+      <textarea id="emailQNote" rows="3" placeholder="e.g. I don't get why -5 shows up twice."></textarea>
+    </label>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="emailQSendBtn">Send</button></div>
+</dialog>
+
+<dialog class="cfg-dlg" id="studentMenuDlg" style="max-width:340px">
+  <div class="dlg-head">
+    <h3 style="margin:0;color:var(--c)">👤 Who's studying?</h3>
+    <button class="say" onclick="document.getElementById('studentMenuDlg').close()">✕</button>
+  </div>
+  <div class="dlg-body" id="studentMenuBody"></div>
+</dialog>
+
 <dialog class="cfg-dlg" id="correctionDlg" style="max-width:480px">
   <div class="dlg-head">
     <h3 style="margin:0;color:var(--c)">✎ Add a correction</h3>
@@ -687,7 +711,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V22</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V24</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -696,12 +720,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <label>Google Gemini API Key
         <input type="password" id="geminiApiKey" placeholder="Paste Google AI Studio Key">
       </label>
-      <label>Primary Model
+      <label>Chat Model (coach chat, hints, checks: speed matters)
         <select id="geminiModelSelect">
           <option value="gemini-3.8-flash">gemini-3.8-flash (Recommended Flagship)</option>
           <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Fastest / Lowest Latency)</option>
           <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (High-Efficiency Fallback)</option>
         </select>
+      </label>
+      <label>Study Guide Model (building guides, quizzes, suggested answers: quality matters)
+        <select id="studyModelSelect"></select>
       </label>
       <label>Transcription Model (audio slices)
         <select id="transcribeModelSelect">
@@ -730,6 +757,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <input type="text" id="cfgNotifyEmails" placeholder="you@example.com, other@example.com">
     </label>
     <button class="btn alt sm" id="sendTodoEmailNowBtn" type="button">✉️ Send a to-do summary now</button>
+
+    <h4>"✉️ Email this to me" (questions the kids are stuck on)</h4>
+    <p style="font-size:12px;color:var(--mut);margin:0">Sent from your Microsoft account to the student's own email (set under Students). They can forward it to their teacher.</p>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+      <input type="checkbox" id="cfgCcParents" style="width:auto"> CC parents
+    </label>
+    <label>Parents to CC (comma-separated; blank uses the to-do email addresses)
+      <input type="text" id="cfgCcEmails" placeholder="parent1@example.com, parent2@example.com">
+    </label>
 
     <h4>SharePoint Sync (rmr1971.sharepoint.com:/sites/Bible_App)</h4>
     <p style="font-size:13px;color:var(--mut);margin:0">Syncs <code>Student_Lectures</code>, <code>Student_Deadlines</code>, <code>Student_Chats</code>, and <code>Student_Classes</code>.</p>
@@ -762,15 +798,16 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     </div>
 
     <h4>Student &amp; Coach</h4>
-    <label>Student ID on this device (part of every saved key; keep it short and stable)
-      <input type="text" id="cfgStudentId" maxlength="12" style="width:160px;text-transform:uppercase">
-    </label>
+    <div><b style="font-size:14px">Students</b>
+      <p style="font-size:12px;color:var(--mut);margin:2px 0 6px">ID is short and permanent (it tags every saved item). The email is where "✉️ Email this to me" sends. Switch students with the 👤 button at the top.</p>
+      <div id="cfgStudentsList"></div>
+      <button type="button" class="say sm" id="cfgAddStudentBtn">+ Add student</button>
+    </div>
+    <p style="font-size:13px;font-weight:600;margin:12px 0 0">Settings below are for <span id="cfgCurrentStudent"></span>:</p>
     <label>This device's name (shown when the same item was changed on two devices)
       <input type="text" id="cfgDeviceName" maxlength="40" placeholder="e.g. Mac's Chromebook or Rob's laptop" style="width:260px">
     </label>
-    <label>Student first name (optional, used sparingly by the coach)
-      <input type="text" id="cfgStudentName" maxlength="30" style="width:220px">
-    </label>
+    <input type="hidden" id="cfgStudentName">
     <label>Interests the coach may draw analogies from
       <input type="text" id="cfgInterests" placeholder="e.g. aviation, WWII history, engines, soccer">
     </label>
@@ -1007,7 +1044,8 @@ async function hashPin(pin) {
 }
 
 function getStudentName() {
-  return (getConfig('student_name') || '').trim();
+  const st = (typeof getStudents === 'function') ? getStudents().find(x => x.id === getStudentId()) : null;
+  return ((st && st.name) || getConfig('student_name') || '').trim();
 }
 
 function getToneKey(classCode) {
@@ -1050,7 +1088,7 @@ function migrateLegacySettings() {
 
 async function migrateLegacyPin() {
   const plain = localStorage.getItem('ss_parent_pin');
-  if (plain && !getConfig('pin_hash')) setConfigOverride('pin_hash', await hashPin(plain));
+  if (plain && !getParentConfig('pin_hash')) setParentConfig('pin_hash', await hashPin(plain));
   if (plain) localStorage.removeItem('ss_parent_pin');
 }
 
@@ -1133,6 +1171,153 @@ function getDB() {
   return dbPromise;
 }
  
+// Study guide model: building guides, quizzes, question sets and suggested answers. Chat model: everything conversational.
+function getChatModel() { return localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash'; }
+function getStudyModel() { return localStorage.getItem('ss_study_model') || getChatModel(); }
+
+/* =====================================================================
+   STUDENTS: one parent, several kids. Each kid has their own classes, lectures,
+   to-dos and settings (all tagged with StudentId). Switching needs no PIN.
+   ===================================================================== */
+const DEFAULT_CLASSES = CLASSES.slice();
+function classesKey() { return `ss_classes_custom_${getStudentId()}`; }
+function dirtyClassesKey() { return `ss_dirty_classes_${getStudentId()}`; }
+function lastClassKey() { return `ss_last_class_${getStudentId()}`; }
+
+// V23 and earlier kept one class list per device: it belongs to the student this device was set to
+function migrateToPerStudentKeys() {
+  const sid = getStudentId();
+  [['ss_classes_custom', classesKey()], ['ss_dirty_classes', dirtyClassesKey()], ['ss_last_class', lastClassKey()]].forEach(([oldK, newK]) => {
+    const v = localStorage.getItem(oldK);
+    if (v !== null && localStorage.getItem(newK) === null) localStorage.setItem(newK, v);
+    if (v !== null) localStorage.removeItem(oldK);
+  });
+}
+
+function loadClassesForStudent() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(classesKey()) || 'null');
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch (e) {}
+  // The built-in schedule is Mac's; any other student starts with one class to rename (or gets theirs on Sync)
+  if (getStudentId() === 'MAC') return DEFAULT_CLASSES.slice();
+  return [{ code: `CLS_${getStudentId()}_1`, name: 'My First Class', period: 1, teacher: '', days: 'Mon, Wed, Fri',
+    time: '08:00 - 08:50', color: '#2F6FDE', icon: '📚', needsScribe: true, term: 'Fall 26/27', isActive: true }];
+}
+
+// Parent-level settings (one PIN, email recipients, the student list) are stored under StudentId "PARENT"
+function findParentRow(key) {
+  return loadConfigRows().find(r => r.configKey === key && r.scope === 'Override' && r.isActive !== false &&
+    String(r.studentId || '').toUpperCase() === 'PARENT');
+}
+function getParentConfig(key, fallback) {
+  const r = findParentRow(key);
+  if (r) return r.value;
+  return fallback !== undefined ? fallback : getConfig(key);
+}
+function setParentConfig(key, value) {
+  const rows = loadConfigRows();
+  let row = rows.find(r => r.configKey === key && r.scope === 'Override' && String(r.studentId || '').toUpperCase() === 'PARENT');
+  if (row) { if (row.value === value && row.isActive !== false) return; row.value = value; row.isActive = true; row.isDirty = true; }
+  else rows.push({ localId: 'cfg_' + Date.now() + Math.random().toString(36).slice(2, 6), configKey: key, scope: 'Override',
+    studentId: 'PARENT', classCode: '', title: `${CONFIG_TITLES[key] || key} · Parent`, value, isActive: true, isDirty: true });
+  saveConfigRows(rows);
+}
+
+// Student list: [{ id, name, email }]
+function getStudents() {
+  let list = [];
+  try { list = JSON.parse(getParentConfig('students', '[]') || '[]'); } catch (e) {}
+  if (!Array.isArray(list)) list = [];
+  const sid = getStudentId();
+  if (!list.some(x => x.id === sid)) list.unshift({ id: sid, name: (getConfig('student_name') || '').trim() || (sid === 'MAC' ? 'Mac' : sid), email: '' });
+  return list;
+}
+function saveStudents(list) { setParentConfig('students', JSON.stringify(list)); }
+function currentStudent() { return getStudents().find(x => x.id === getStudentId()) || { id: getStudentId(), name: getStudentId(), email: '' }; }
+
+// One-time moves of parent-level settings that used to be saved per student
+function migrateParentSettings() {
+  const rows = loadConfigRows();
+  ['pin_hash', 'notify.todos', 'notify.emails'].forEach(key => {
+    if (findParentRow(key)) return;
+    const old = rows.find(r => r.configKey === key && r.scope === 'Override' && r.isActive !== false && r.studentId && r.studentId !== 'PARENT');
+    if (old) setParentConfig(key, old.value);
+  });
+}
+
+async function switchStudent(sid) {
+  sid = String(sid || '').toUpperCase();
+  if (!sid || sid === getStudentId()) return;
+  if (isRecording()) { showToast('Stop the recording before switching students'); return; }
+  if (typeof stopDictation === 'function' && dictateWanted) stopDictation();
+  if (typeof sgFlush === 'function' && sgState) await sgFlush();
+  localStorage.setItem('ss_student_id', sid);
+  CLASSES = loadClassesForStudent();
+  await loadLecturesFromDB();
+  pickedLectures = {};
+  sgState = null;
+  chatFocus = null;
+  todoFilter = 'all';
+  renderClassRibbon();
+  const last = localStorage.getItem(lastClassKey());
+  activeClassCode = '';
+  doSwitchClass(CLASSES.some(c => c.code === last) ? last : CLASSES[0].code);
+  navigateTo('rec');
+  renderStudentPill();
+  updateToneButton();
+  showToast(`Switched to ${currentStudent().name}`);
+  backgroundCloudRefresh(); // bring this student's classes, lectures and to-dos down
+}
+
+function renderStudentsEditor(list) {
+  const box = document.getElementById('cfgStudentsList');
+  box.innerHTML = list.map((st, i) => `<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+      <input type="text" data-st-id="${i}" value="${escText(st.id)}" ${st.saved !== false ? 'readonly' : ''} placeholder="ID e.g. WES" maxlength="12" style="width:90px;text-transform:uppercase">
+      <input type="text" data-st-name="${i}" value="${escText(st.name || '')}" placeholder="First name" maxlength="30" style="width:130px">
+      <input type="email" data-st-email="${i}" value="${escText(st.email || '')}" placeholder="their email" style="flex:1;min-width:180px">
+    </div>`).join('');
+}
+
+function readStudentsEditor() {
+  const rows = [...document.querySelectorAll('#cfgStudentsList [data-st-id]')].map(el => {
+    const i = el.dataset.stId;
+    return {
+      id: el.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''),
+      name: document.querySelector(`[data-st-name="${i}"]`).value.trim(),
+      email: document.querySelector(`[data-st-email="${i}"]`).value.trim()
+    };
+  }).filter(x => x.id);
+  if (new Set(rows.map(r => r.id)).size !== rows.length) { alert('Each student needs a different ID.'); return null; }
+  if (rows.some(r => r.id === 'PARENT')) { alert('"PARENT" is reserved. Pick another ID.'); return null; }
+  return rows.map(r => ({ ...r, name: r.name || r.id }));
+}
+
+document.getElementById('cfgAddStudentBtn').addEventListener('click', () => {
+  const current = readStudentsEditor() || getStudents();
+  renderStudentsEditor([...current.map(x => ({ ...x })), { id: '', name: '', email: '', saved: false }]);
+});
+
+function renderStudentPill() {
+  const b = document.getElementById('studentPill');
+  if (b) b.textContent = `👤 ${currentStudent().name} ▾`;
+}
+
+function openStudentMenu() {
+  const list = getStudents();
+  const box = document.getElementById('studentMenuBody');
+  box.innerHTML = list.map(st => `<button class="btn ${st.id === getStudentId() ? '' : 'alt'}" data-switch-student="${escText(st.id)}" style="width:100%;margin-bottom:8px">
+      👤 ${escText(st.name)} <small style="opacity:.8">(${escText(st.id)})</small>${st.id === getStudentId() ? ' ✓' : ''}</button>`).join('') +
+    `<p style="font-size:12.5px;color:var(--mut);margin:4px 0 0">Add or rename students in ⚙️ → Students.</p>`;
+  document.getElementById('studentMenuDlg').showModal();
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#studentPill')) { openStudentMenu(); return; }
+  const sw = e.target.closest('[data-switch-student]');
+  if (sw) { document.getElementById('studentMenuDlg').close(); switchStudent(sw.dataset.switchStudent); }
+});
+
 function getDeviceName() {
   return (localStorage.getItem('ss_device_name') || '').trim() || 'This device';
 }
@@ -1209,7 +1394,7 @@ async function idbClear(storeName) {
  
 function getSavedUnit(classCode) {
   try {
-    const u = JSON.parse(localStorage.getItem(`ss_unit_${classCode}`) || 'null');
+    const u = JSON.parse(localStorage.getItem(`ss_unit_${getStudentId()}_${classCode}`) || localStorage.getItem(`ss_unit_${classCode}`) || 'null');
     if (u && u.key) return u;
   } catch(e) {}
   return { key: 'U1', title: 'Unit 1 · Current Topics' };
@@ -1825,7 +2010,7 @@ function doSwitchClass(code) {
   if (onScreen === 's-sg' && typeof sgFlush === 'function') sgFlush();
   const goToMap = ['s-sg', 's-quiz', 's-guide', 's-chat'].includes(onScreen) && code !== activeClassCode;
   activeClassCode = code;
-  localStorage.setItem('ss_last_class', code);
+  localStorage.setItem(lastClassKey(), code);
  
   const c = CLASSES.find(x => x.code === code);
   document.documentElement.style.setProperty('--c', c.color);
@@ -2615,7 +2800,8 @@ function renderQuiz() {
           <div class="quiz-nav">
             <span style="display:flex;gap:6px;align-items:center">
               ${quizIndex > 0 ? '<button class="btn alt" id="quizPrevBtn">← Previous</button>' : ''}
-              ${answered ? `<button class="say sm" data-print-q="${cur.id}">🖨 Print this question</button>` : ''}
+              ${answered ? `<button class="say sm" data-print-q="${cur.id}">🖨 Print this question</button>
+                <button class="say sm" data-email-q="drill">✉️ Email this to me</button>` : ''}
             </span>
             ${answered ? `<button class="btn" id="quizNextBtn">${isLast ? 'See results →' : 'Next →'}</button>` : ''}
           </div>
@@ -2742,7 +2928,7 @@ ${misses.map(q => '- ' + q).join('\n') || '- (no misses yet)'}
 6. Plain wording at a Grade ${level} reading level.
 Return only JSON: { "quiz_questions":[{"lecture":string,"q":string,"options":[string,string,string,string],"correct":integer,"feedback":string,"section":string,"kind":"recall"|"understanding","evidence":string}] }`;
 
-    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const model = getStudyModel();
     const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: prompt }] }], key, model, {
       system: 'You write fair, accurate practice questions for high school students. Questions test the material, not trivia about the student.',
       temperature: 0.5, maxOutputTokens: 12288, responseMimeType: 'application/json', responseSchema: SET_SCHEMA
@@ -2971,7 +3157,8 @@ function renderStudyGuideScreen() {
           <textarea id="sgTeacherNote" class="grow" rows="2" style="width:100%;margin-top:4px">${escText(q.teacherNote || '')}</textarea></label>` : ''}
         <div class="quiz-nav">
           <span style="display:flex;gap:6px;align-items:center">${i > 0 ? '<button class="btn alt" id="sgPrevBtn">← Previous</button>' : ''}
-            <button class="say sm" id="sgPrintQBtn">🖨 Print this question</button></span>
+            <button class="say sm" id="sgPrintQBtn">🖨 Print this question</button>
+            <button class="say sm" data-email-q="guide">✉️ Email this to me</button></span>
           ${i < total - 1 ? '<button class="btn" id="sgNextBtn">Next →</button>' : '<button class="btn alt" data-go="guide">Done ✓</button>'}
         </div>
       </div>
@@ -3329,7 +3516,7 @@ document.addEventListener('click', (e) => {
 
 async function generateSA(l, questionText) {
   const key = localStorage.getItem('ss_gemini_key') || '';
-  const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+  const model = getStudyModel();
   const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: `Question: ${questionText}` }] }], key, model, {
     system: buildCoachSystem([l]) + '\n\n' + SA_RULES, temperature: 0.2, maxOutputTokens: 8192,
     responseMimeType: 'application/json', responseSchema: SA_SCHEMA
@@ -3431,7 +3618,7 @@ async function sgParentFill() {
   showProg(0);
   showToast(`Filling ${todo.length} suggested answers. This takes about ${Math.max(1, Math.round(todo.length / 6 * 0.4))} minute(s).`);
   try {
-    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const model = getStudyModel();
     const FILL_SCHEMA = { type: 'OBJECT', properties: { answers: { type: 'ARRAY', items: {
       type: 'OBJECT', properties: { n: { type: 'INTEGER' }, ...SA_SCHEMA.properties }, required: ['n', ...SA_SCHEMA.required] } } }, required: ['answers'] };
     const now = new Date().toISOString();
@@ -3760,6 +3947,24 @@ function handleStagedFile(file) {
     return;
   }
 
+  if (isPdf) {
+    // Rough page count from the file itself, for a heads-up on long documents
+    file.slice(0, Math.min(file.size, 40 * 1024 * 1024)).arrayBuffer().then(buf => {
+      const txt = new TextDecoder('latin1').decode(new Uint8Array(buf));
+      const pages = (txt.match(/\/Type\s*\/Page(?!s)/g) || []).length;
+      if (!pages) return;
+      // the file finishes staging separately; attach the count once its chip exists
+      let tries = 0;
+      const attach = () => {
+        const f = stagedFiles.find(x => x.name === file.name);
+        if (f) { f.pages = pages; renderStagedFiles(); }
+        else if (tries++ < 20) return setTimeout(attach, 250);
+        if (pages > 30) setTimeout(() => showToast(`${file.name} has about ${pages} pages. It may take a few minutes, and splitting it by chapter gives a more detailed guide.`), 1200);
+      };
+      attach();
+    }).catch(() => {});
+  }
+
   if (isPdf || isImg) {
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -3793,7 +3998,7 @@ function renderStagedFiles() {
     const chip = document.createElement('div');
     chip.className = 'staged-chip';
     chip.innerHTML = `
-      <span>${f.role === 'guide' ? '📝' : f.type === 'pdf' ? '📄' : f.type === 'audio' ? '🎧' : '📷'} ${escText(f.name)}${f.size ? ` <small style="color:var(--mut)">${(f.size / 1048576).toFixed(1)} MB</small>` : ''}</span>
+      <span>${f.role === 'guide' ? '📝' : f.type === 'pdf' ? '📄' : f.type === 'audio' ? '🎧' : '📷'} ${escText(f.name)}${f.size ? ` <small style="color:var(--mut)">${(f.size / 1048576).toFixed(1)} MB</small>` : ''}${f.pages ? ` <small style="color:${f.pages > 30 ? 'var(--bad)' : 'var(--mut)'}">${f.pages} pages</small>` : ''}</span>
       ${f.type === 'pdf' || f.type === 'image' ? `<select data-file-role="${f.id}" title="What is this file?" style="width:auto;padding:1px 4px;font-size:11.5px">
         <option value="handout" ${f.role !== 'guide' ? 'selected' : ''}>Handout</option>
         <option value="guide" ${f.role === 'guide' ? 'selected' : ''}>Study guide (questions)</option>
@@ -3979,7 +4184,7 @@ Mark long silences or music as [no speech]. If the whole clip has no speech, rep
       );
       raw = res.text.trim();
     } catch (err) {
-      if (/API key/i.test(err.message)) throw err;
+      if (/API key/i.test(err.message) || (genCtrl && genCtrl.signal.aborted)) throw err;
       await sleep(2000 * (attempt + 1) * (attempt + 1)); // 2s, 8s, 18s
     }
   }
@@ -4502,7 +4707,18 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   }
 
   btn.disabled = true;
-  const setStatus = t => { btn.textContent = t; };
+  // Stage + elapsed time on the button; Cancel appears after 4 minutes (the app never gives up on its own)
+  genCtrl = new AbortController();
+  const genStart = Date.now();
+  let stageText = '⏳ Preparing materials…';
+  const paint = () => {
+    const sec = Math.floor((Date.now() - genStart) / 1000);
+    btn.textContent = `${stageText.replace(/…$/, '')}… ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    document.getElementById('genCancelBtn').style.display = sec >= 240 ? 'inline-block' : 'none';
+  };
+  const genTimer = setInterval(paint, 1000);
+  const setStatus = t => { stageText = t; paint(); };
+  const checkCancel = () => { if (genCtrl.signal.aborted) throw new Error('Cancelled'); };
   setStatus('⏳ Preparing materials…');
 
   const expectedKinds = [];
@@ -4605,6 +4821,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     }
 
     if (rb && !sourceList.length) throw new Error('Nothing is left in this lecture to rebuild from.');
+    checkCancel();
 
     // 1. AUDIO: in-app recordings and attached audio files
     const audioSources = [
@@ -4656,6 +4873,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       if (notesAreGuide) guideInputs.push({ name: label, parts: [part] });
     }
 
+    checkCancel();
     // Size guard: base64 and text both count toward the request limit
     const approxBytes = parts.reduce((sum, p) => sum + (p.inlineData ? p.inlineData.data.length : (p.text || '').length), 0);
     if (approxBytes > INLINE_LIMIT_BYTES) {
@@ -4663,7 +4881,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     }
 
     setStatus('⏳ Building the study guide…');
-    const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
+    const model = getStudyModel();
     const res = await queryGeminiWaterfall(
       [{ role: 'user', parts: [...parts, { text: buildStudyPrompt(currentClass.name, dateIsoString, readingLevel, sourceList, getAnalogyRule(classCodeAtStart)) }] }],
       key, model, {
@@ -4693,6 +4911,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     quizResult.extraVocab.forEach(v => { if (!haveTerms.has(v.term.toLowerCase())) { study.vocab.push(v); haveTerms.add(v.term.toLowerCase()); } });
 
     study.coverage = computeCoverage(study, sourceList, { failedSlices, gaps: gapCount });
+    checkCancel();
 
     // Teacher study guides: pull out each question
     const newGuides = [];
@@ -4705,6 +4924,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       }
     }
 
+    checkCancel(); // last point before anything is saved
     const ds = CURRICULUM[classCodeAtStart] || getActiveDataset();
     let targetLecture;
     if (addTarget) {
@@ -4865,11 +5085,20 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     sameDayChoice = null;
     renderSameDayBanner();
   } catch (err) {
-    alert('Processing error: ' + err.message);
+    if (genCtrl && genCtrl.signal.aborted) showToast('Cancelled. Nothing from this run was saved; your files and notes are still here.');
+    else alert('Processing error: ' + err.message);
   } finally {
+    clearInterval(genTimer);
+    document.getElementById('genCancelBtn').style.display = 'none';
+    genCtrl = null;
     btn.disabled = false;
     updateGenerateLabel();
   }
+});
+
+let genCtrl = null;
+document.getElementById('genCancelBtn').addEventListener('click', () => {
+  if (genCtrl && confirm('Stop waiting for this run? Nothing from it will be saved.')) genCtrl.abort();
 });
  
 /* =====================================================================
@@ -5304,6 +5533,7 @@ async function queryGeminiWaterfall(contentsPayload, key, chosenModel, opts = {}
     return body;
   };
   let withSchema = !!opts.responseSchema;
+  if (!opts.signal && genCtrl) opts = { ...opts, signal: genCtrl.signal };
  
   let lastError = null;
   for (const curModel of chain) {
@@ -5787,9 +6017,164 @@ async function getMailToken() {
   }
 }
 
+/* ---------- Mail helper (Graph /me/sendMail) with inline images ---------- */
+async function sendGraphMail({ to, cc, subject, html, inline }) {
+  const token = await getMailToken();
+  const message = {
+    subject, body: { contentType: 'HTML', content: html },
+    toRecipients: to.map(a => ({ emailAddress: { address: a } })),
+    ccRecipients: (cc || []).map(a => ({ emailAddress: { address: a } }))
+  };
+  if (inline && inline.length) {
+    message.attachments = inline.map(img => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: img.name,
+      contentType: 'image/png', contentBytes: img.base64, contentId: img.cid, isInline: true }));
+  }
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, saveToSentItems: true })
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { msg = (await res.json()).error.message || msg; } catch (e) {}
+    if (res.status === 403) msg += ' (add the Mail.Send delegated permission to the Student Study app registration)';
+    throw new Error(msg);
+  }
+}
+
+// Drawn graphs are SVG, which many mail apps strip: turn each into a PNG
+function svgToPngBase64(svgEl) {
+  return new Promise((resolve) => {
+    const xml = new XMLSerializer().serializeToString(svgEl);
+    const w = Number(svgEl.getAttribute('width')) || 300, h = Number(svgEl.getAttribute('height')) || 300;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = w * 2; c.height = h * 2;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/png').split(',')[1]);
+    };
+    img.onerror = () => resolve(null);
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml.includes('xmlns=') ? xml : xml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"'));
+  });
+}
+
+async function visualsToEmail(visuals) {
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-9999px;top:0';
+  holder.innerHTML = renderVisuals(visuals);
+  document.body.appendChild(holder);
+  const inline = [];
+  const parts = [];
+  for (const node of holder.querySelectorAll('.vis')) {
+    const svg = node.querySelector('svg');
+    const title = (node.querySelector('.vis-title') || {}).textContent || '';
+    if (svg) {
+      const b64 = await svgToPngBase64(svg);
+      if (b64) {
+        const cid = 'vis' + inline.length + '_' + Date.now();
+        inline.push({ name: `graph${inline.length + 1}.png`, base64: b64, cid });
+        parts.push(`${title ? `<div style="font-size:12px;color:#555">${escText(title)}</div>` : ''}<img src="cid:${cid}" width="${Math.round(Number(svg.getAttribute('width')) || 300)}" style="border:1px solid #ddd;border-radius:6px">`);
+      }
+    } else {
+      // tables stay HTML, with inline styles for mail apps
+      parts.push(node.innerHTML.replace(/<table>/g, '<table style="border-collapse:collapse">').replace(/<(td|th)>/g, '<$1 style="border:1px solid #999;padding:3px 12px;text-align:center">'));
+    }
+  }
+  holder.remove();
+  return { html: parts.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${parts.map(p => `<div>${p}</div>`).join('')}</div>` : '', inline };
+}
+
+let emailQContext = null; // what the open dialog will send
+
+function openEmailQuestion(kind) {
+  const st = currentStudent();
+  if (!st.email) { showToast(`Ask a parent to add ${st.name}'s email in ⚙️ → Students`); return; }
+  emailQContext = kind;
+  const ccOn = getParentConfig('cc.on', 'on') === 'on';
+  document.getElementById('emailQTo').textContent = `To: ${st.email}${ccOn ? ' · parents copied' : ''}`;
+  document.getElementById('emailQNote').value = '';
+  document.getElementById('emailQDlg').showModal();
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-email-q]');
+  if (b) openEmailQuestion(b.dataset.emailQ);
+});
+
+function mdForEmail(md) {
+  return mdToHtml(md || '').replace(/class="md"/g, 'style="line-height:1.5"');
+}
+
+async function buildQuestionEmail(kind, note) {
+  const st = currentStudent();
+  const esc = escText;
+  let title, lectureLine, qText, mine, answerHtml = '', talk = [], visuals = [];
+  if (kind === 'guide') {
+    await sgFlush();
+    const { l, g, q } = sgFind();
+    title = `${q.n}. ${q.text}`;
+    lectureLine = `${(CLASSES.find(c => c.code === activeClassCode) || {}).name || ''} · ${l.t} · ${g.name}`;
+    qText = q.text;
+    mine = (q.myAnswer || '').trim();
+    if (q.sa) {
+      answerHtml = `${q.sa.answer ? mdForEmail(q.sa.answer) : ''}${q.sa.type === 'steps' ? `<ol>${q.sa.steps.map(x => `<li>${mdForEmail(x)}</li>`).join('')}</ol>` : ''}${q.sa.final ? `<p><b>Answer: ${esc(q.sa.final)}</b></p>` : ''}`;
+      visuals = q.sa.visuals || [];
+    } else if (q.suggested) answerHtml = mdForEmail(q.suggested);
+    if (q.teacher === 'revised' && q.teacherNote) answerHtml += `<p><b>Teacher's answer:</b> ${esc(q.teacherNote)}</p>`;
+    talk = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === sgQid(g, q)).slice(-4);
+  } else {
+    const cur = getQuizSet()[quizIndex];
+    const l = cur.parentLecture || {};
+    const chosen = quizAnswers[cur.id];
+    title = cur.q;
+    lectureLine = `${(CLASSES.find(c => c.code === activeClassCode) || {}).name || ''} · ${l.t || ''}`;
+    qText = cur.q;
+    mine = chosen !== undefined ? `${quizLetter(chosen)}) ${cur.options[chosen]}${chosen === cur.correct ? ' ✔' : ' ✘'}` : '(not answered)';
+    answerHtml = `<ol type="A">${cur.options.map((o, i) => `<li${i === cur.correct ? ' style="font-weight:bold;color:#1a7f37"' : ''}>${esc(o)}${i === cur.correct ? ' ✔ correct' : ''}</li>`).join('')}</ol>` +
+      (cur.feedback ? `<p><b>Why:</b> ${esc(cur.feedback)}</p>` : '') +
+      (cur.evidence && cur.evidenceStatus !== 'unverified' ? `<p style="color:#555"><i>From the material: "${esc(cur.evidence)}"</i></p>` : '');
+    talk = drillFollowups(cur).slice(-4);
+  }
+  const vis = visuals.length ? await visualsToEmail(visuals) : { html: '', inline: [] };
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:680px;color:#222">
+    ${note ? `<div style="background:#fff7e0;border:1px solid #f0d58a;border-radius:8px;padding:10px 12px;margin-bottom:12px"><b>${esc(st.name)}'s question:</b><br>${esc(note)}</div>` : ''}
+    <div style="color:#666;font-size:13px">${esc(lectureLine)} · ${date}</div>
+    <h2 style="margin:6px 0 10px;font-size:18px">${esc(title)}</h2>
+    <p><b>${esc(st.name)}'s answer:</b> ${mine ? esc(mine) : '<i>not answered yet</i>'}</p>
+    <div style="border-left:3px solid #5b8def;padding:4px 12px;margin:10px 0"><b>${kind === 'guide' ? 'Suggested answer' : 'Answer choices'}:</b>${answerHtml || ' <i>none yet</i>'}${vis.html}</div>
+    ${talk.length ? `<div style="margin-top:12px"><b>What ${esc(st.name)} asked the study coach:</b>${talk.map(ex => `<div style="margin-top:8px"><i>${esc(ex.q)}</i><div style="color:#333">${mdForEmail(ex.a)}</div></div>`).join('')}</div>` : ''}
+    <p style="color:#888;font-size:12px;margin-top:18px">Sent from Student Study. Forward this to your teacher with your question.</p></div>`;
+  const subject = `Question: ${String(qText).slice(0, 70)}${String(qText).length > 70 ? '…' : ''}`;
+  return { subject, html, inline: vis.inline };
+}
+
+document.getElementById('emailQSendBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('emailQSendBtn');
+  const st = currentStudent();
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending…';
+  try {
+    const { subject, html, inline } = await buildQuestionEmail(emailQContext, document.getElementById('emailQNote').value.trim());
+    const split = v => String(v || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /@/.test(x));
+    const cc = getParentConfig('cc.on', 'on') === 'on'
+      ? (split(getParentConfig('cc.emails', '')).length ? split(getParentConfig('cc.emails', '')) : split(getParentConfig('notify.emails', '')))
+      : [];
+    await sendGraphMail({ to: [st.email], cc: cc.filter(a => a.toLowerCase() !== st.email.toLowerCase()), subject, html, inline });
+    document.getElementById('emailQDlg').close();
+    showToast(`✉️ Sent to ${st.email}${cc.length ? ' (parents copied)' : ''}`);
+  } catch (err) {
+    alert('Email error: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Send';
+  }
+});
+
 function todoSnapshot() {
   const snap = {};
-  (cachedDeadlines || []).filter(d => d && isMyRecord(d) && TODO_TYPES.includes(d.typeDesc)).forEach(d => {
+  (cachedDeadlines || []).filter(d => d && TODO_TYPES.includes(d.typeDesc)).forEach(d => {
     snap[d.deadlineId] = { s: isDeadlineDone(d) ? 'done' : /^archived$/i.test(d.status || '') ? 'gone' : 'open',
       t: d.title || '', due: d.dueDate ? String(d.dueDate).slice(0, 10) : '' };
   });
@@ -5797,6 +6182,37 @@ function todoSnapshot() {
 }
 
 function buildTodoEmail(changes) {
+  // One email for all students, a section per student
+  const students = getStudents();
+  const nameOf = sid => ((students.find(x => x.id === String(sid || 'MAC').toUpperCase()) || {}).name || sid || 'Student');
+  const clsName = code => (CLASSES.find(c => c.code === code) || {}).name || code;
+  const isTodoAll = d => d && TODO_TYPES.includes(d.typeDesc) && !/^archived$/i.test(String(d.status || ''));
+  const allOpen = (cachedDeadlines || []).filter(d => isTodoAll(d) && !isDeadlineDone(d));
+  const sids = [...new Set([...students.map(x => x.id), ...allOpen.map(d => String(d.studentId || 'MAC').toUpperCase())])];
+  const blocks = sids.map(sid => {
+    const mine = d => String(d.studentId || 'MAC').toUpperCase() === sid;
+    const open = allOpen.filter(mine);
+    const done = changes.completed.filter(mine), added = changes.added.filter(mine);
+    if (!open.length && !done.length) return '';
+    const bucket = k => open.filter(d => todoBucket(d) === k);
+    const row = d => `<li><b>${escText(d.title || '')}</b> <span style="color:#666">· ${d.typeDesc === 'Homework' ? 'Homework · ' : ''}${escText(d.class || clsName(d.classCode))} · ${escText(dueLabel(d))}</span>${d.notes ? `<br><span style="color:#444">${escText(d.notes)}</span>` : ''}</li>`;
+    const section = (title, list) => list.length ? `<h4 style="margin:12px 0 4px">${title} (${list.length})</h4><ul style="margin:0">${list.map(row).join('')}</ul>` : '';
+    return `<div style="border-top:2px solid #ddd;margin-top:16px;padding-top:8px">
+      <h3 style="margin:0">👤 ${escText(nameOf(sid))} · ${open.length} open</h3>
+      ${section('✅ Completed since last update', done)}${section('🆕 New', added)}${section('⚠️ Overdue', bucket('overdue'))}
+      ${section('📅 Due today', bucket('today'))}${section('🗓️ This week', bucket('week'))}${section('Future (after this week)', bucket('later'))}${section('No due date', bucket('nodate'))}</div>`;
+  }).join('');
+  const overdue = allOpen.filter(d => todoBucket(d) === 'overdue').length;
+  const html = `<div style="font-family:sans-serif">
+    <h2 style="margin:0 0 4px">To-dos</h2>
+    <div style="color:#666">${new Date().toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${allOpen.length} open</div>
+    ${blocks || '<p>Nothing open.</p>'}
+    <p style="color:#888;font-size:12px;margin-top:18px">Sent by Student Study.</p></div>`;
+  const subject = `To-dos: ${allOpen.length} open${overdue ? `, ${overdue} overdue` : ''}${changes.completed.length ? `, ${changes.completed.length} done` : ''}`;
+  return { subject, html };
+}
+
+function buildTodoEmailOld(changes) {
   const name = getStudentName() || getStudentId();
   const clsName = code => (CLASSES.find(c => c.code === code) || { name: code }).name;
   const row = d => `<li><b>${escText(d.title || '')}</b> <span style="color:#666">· ${d.typeDesc === 'Homework' ? 'Homework · ' : ''}${escText(clsName(d.classCode))} · ${escText(dueLabel(d))}</span>${d.notes ? `<br><span style="color:#444">${escText(d.notes)}</span>` : ''}</li>`;
@@ -5820,8 +6236,8 @@ function buildTodoEmail(changes) {
 
 // Sends only when something changed since the last email (or when forced from Settings)
 async function maybeSendTodoEmail(force) {
-  if (!force && getConfig('notify.todos') !== 'on') return 'off';
-  const emails = String(getConfig('notify.emails') || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /@/.test(x));
+  if (!force && getParentConfig('notify.todos') !== 'on') return 'off';
+  const emails = String(getParentConfig('notify.emails') || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /@/.test(x));
   if (!emails.length) return 'noemails';
   const prev = JSON.parse(localStorage.getItem('ss_todo_snapshot') || '{}');
   const now = todoSnapshot();
@@ -5965,7 +6381,8 @@ async function pullConfigFromSharePoint(siteId, token) {
     (data.value || []).forEach(x => {
       const f = x.fields || {};
       if (!f.ConfigKey) return;
-      if (f.StudentId && String(f.StudentId).toUpperCase() !== sid) return;
+      const rowSid = String(f.StudentId || '').toUpperCase();
+      if (rowSid && rowSid !== sid && rowSid !== 'PARENT') return; // keep parent-level rows on every device
       remote.push({
         spItemId: x.id, configKey: f.ConfigKey, scope: f.Scope || 'Default',
         studentId: f.StudentId || '', classCode: f.ClassCode || '',
@@ -5999,6 +6416,7 @@ async function backgroundCloudRefresh() {
     await pushConfigToSharePoint(siteId, token);
     await pullConfigFromSharePoint(siteId, token);
     await pullDeadlinesFromSharePoint(siteId, token);
+    await pullClassesFromSharePoint(siteId, token);
     const pulled = await pullLecturesFromSharePoint(siteId, token);
     const pulledChats = await pullChatsFromSharePoint(siteId, token);
     if (pulled.added || pulled.updated || pulled.merged || pulledChats) {
@@ -6248,7 +6666,7 @@ async function pullDeadlinesFromSharePoint(siteId, token) {
 
   for (const x of remote) {
     const f = x.fields || {};
-    if (f.StudentId && String(f.StudentId).toUpperCase() !== getStudentId()) continue; // another student
+    // all students' rows are kept; the app shows only the current student's, the email covers everyone
     // Rows typed straight into SharePoint may have no DeadlineId: give them one and write it back
     const id = f.DeadlineId || `sp_${x.id}`;
     const existing = byId.get(id) || {};
@@ -6288,8 +6706,10 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
  
     // 0. SETTINGS FIRST: push local edits, then pull the merged set
     const syncedConfig = await pushConfigToSharePoint(siteId, token);
-    // Class edits (schedule, textbook, syllabus) go with every sync now
-    if (localStorage.getItem('ss_dirty_classes')) await pushClassesToSharePoint(siteId, token);
+    // Class edits (schedule, textbook, syllabus) go with every sync now, then classes come down
+    if (localStorage.getItem(dirtyClassesKey())) await pushClassesToSharePoint(siteId, token);
+    const classesChanged = await pullClassesFromSharePoint(siteId, token);
+    if (classesChanged) showToast(`Classes updated: ${CLASSES.length} classes`);
     await pullConfigFromSharePoint(siteId, token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
@@ -6451,7 +6871,7 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     }
  
     // 4. SYNC SCHEDULE IF MODIFIED
-    if (localStorage.getItem('ss_dirty_classes') === 'true') {
+    if (localStorage.getItem(dirtyClassesKey()) === 'true') {
       await pushClassesToSharePoint(siteId, token);
     }
  
@@ -6518,7 +6938,7 @@ async function pushClassesToSharePoint(siteId, token) {
       }, token);
     }
   }
-  localStorage.removeItem('ss_dirty_classes');
+  localStorage.removeItem(dirtyClassesKey());
 }
  
 /* =====================================================================
@@ -6676,8 +7096,8 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
 
     cls.syllabus = document.getElementById('studentSchedSyllabus').value.trim();
  
-    localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-    localStorage.setItem('ss_dirty_classes', 'true');
+    localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+    localStorage.setItem(dirtyClassesKey(), 'true');
     renderClassRibbon();
     updateRecScheduleHint();
     document.getElementById('studentScheduleDlg').close();
@@ -6687,10 +7107,10 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
  
 // Parent PIN is stored only as a hash in Student_Config. With none set, the first PIN entered becomes the PIN.
 async function checkParentPin(entered) {
-  const stored = getConfig('pin_hash');
+  const stored = getParentConfig('pin_hash');
   if (!stored) {
     if (!/^\d{4}$/.test(entered)) return 'invalid';
-    setConfigOverride('pin_hash', await hashPin(entered));
+    setParentConfig('pin_hash', await hashPin(entered));
     return 'created';
   }
   return (await hashPin(entered)) === stored ? 'ok' : 'bad';
@@ -6699,7 +7119,7 @@ async function checkParentPin(entered) {
 document.getElementById('openCfgBtn').addEventListener('click', () => {
   document.getElementById('pinInput').value = '';
   document.getElementById('pinError').style.display = 'none';
-  document.getElementById('pinPrompt').textContent = getConfig('pin_hash')
+  document.getElementById('pinPrompt').textContent = getParentConfig('pin_hash')
     ? 'Enter 4-digit PIN to access cloud & learner settings:'
     : 'No parent PIN yet. Choose a 4-digit PIN to create it:';
   document.getElementById('pinDlg').showModal();
@@ -6729,12 +7149,15 @@ function openParentVault() {
   document.getElementById('masterSystemPrompt').value = getConfig('prompt.master') || DEFAULT_SYSTEM_PROMPT;
   document.getElementById('cfgNewPin').value = '';
   document.getElementById('cfgReadingLevel').value = getConfig('reading_level') || '5';
-  document.getElementById('cfgStudentId').value = getStudentId();
+  renderStudentsEditor(getStudents());
+  document.getElementById('cfgCurrentStudent').textContent = currentStudent().name;
   document.getElementById('cfgStudentName').value = getStudentName();
   document.getElementById('cfgDeviceName').value = localStorage.getItem('ss_device_name') || '';
   document.getElementById('cfgInterests').value = getConfig('interests') || '';
-  document.getElementById('cfgNotifyTodos').checked = getConfig('notify.todos') === 'on';
-  document.getElementById('cfgNotifyEmails').value = getConfig('notify.emails') || '';
+  document.getElementById('cfgNotifyTodos').checked = getParentConfig('notify.todos') === 'on';
+  document.getElementById('cfgNotifyEmails').value = getParentConfig('notify.emails') || '';
+  document.getElementById('cfgCcParents').checked = getParentConfig('cc.on', 'on') === 'on';
+  document.getElementById('cfgCcEmails').value = getParentConfig('cc.emails', '') || '';
   const clsNow = CLASSES.find(c => c.code === activeClassCode);
   document.getElementById('cfgClassName').textContent = clsNow ? clsNow.name : activeClassCode;
   const rowsNow = loadConfigRows();
@@ -6753,6 +7176,19 @@ function openParentVault() {
   }
   tSel.value = tModel;
   document.getElementById('cfgAudioRawTest').checked = localStorage.getItem('ss_audio_raw_test') === 'true';
+
+  // Study model list mirrors the chat model list, plus "same as chat"
+  const fillStudySelect = () => {
+    const src = document.getElementById('geminiModelSelect');
+    const st = document.getElementById('studyModelSelect');
+    const cur = localStorage.getItem('ss_study_model') || '';
+    st.innerHTML = '<option value="">Same as Chat Model</option>' +
+      Array.from(src.options).map(o => `<option value="${o.value}">${o.textContent}</option>`).join('');
+    if (cur && !Array.from(st.options).some(o => o.value === cur)) st.insertAdjacentHTML('beforeend', `<option value="${cur}">${cur}</option>`);
+    st.value = cur;
+  };
+  fillStudySelect();
+  setTimeout(fillStudySelect, 1500); // after "Verify Key & List Models" refreshes the list
 
   const savedModel = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
   const sel = document.getElementById('geminiModelSelect');
@@ -6794,7 +7230,7 @@ document.getElementById('saveNewUnitBtn').addEventListener('click', () => {
     CURRICULUM[activeClassCode].unitTitle = title;
   }
   // Persist so the unit survives a refresh
-  localStorage.setItem(`ss_unit_${activeClassCode}`, JSON.stringify({ key, title }));
+  localStorage.setItem(`ss_unit_${getStudentId()}_${activeClassCode}`, JSON.stringify({ key, title }));
   
   document.getElementById('newUnitDlg').close();
   renderAll();
@@ -6861,8 +7297,8 @@ document.addEventListener('click', (e) => {
     const cls = CLASSES.find(c => c.code === code);
     if (cls && confirm(`Archive ${cls.name}? It will be removed from the active ribbon, but past notes and SharePoint records will remain safe.`)) {
       cls.isActive = false;
-      localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-      localStorage.setItem('ss_dirty_classes', 'true');
+      localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+      localStorage.setItem(dirtyClassesKey(), 'true');
       renderParentScheduleEditor();
       renderClassRibbon();
       showToast(`${cls.name} archived.`);
@@ -6875,8 +7311,8 @@ document.addEventListener('click', (e) => {
     const cls = CLASSES.find(c => c.code === code);
     if (cls) {
       cls.isActive = true;
-      localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-      localStorage.setItem('ss_dirty_classes', 'true');
+      localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+      localStorage.setItem(dirtyClassesKey(), 'true');
       renderParentScheduleEditor();
       renderClassRibbon();
       showToast(`${cls.name} restored to active ribbon!`);
@@ -6915,8 +7351,8 @@ document.getElementById('saveScheduleBtn').addEventListener('click', () => {
       c.term = activeTerm;
     }
   });
-  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-  localStorage.setItem('ss_dirty_classes', 'true');
+  localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+  localStorage.setItem(dirtyClassesKey(), 'true');
   renderClassRibbon();
   updateRecScheduleHint();
   document.getElementById('scheduleDlg').close();
@@ -6930,8 +7366,8 @@ document.getElementById('archiveTermBtn').addEventListener('click', () => {
   const nextTerm = termName.includes('Fall') ? termName.replace('Fall', 'Spring') : 'New Semester';
   document.getElementById('activeTermInput').value = nextTerm;
   CLASSES.forEach(c => c.term = nextTerm);
-  localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-  localStorage.setItem('ss_dirty_classes', 'true');
+  localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+  localStorage.setItem(dirtyClassesKey(), 'true');
   CURRICULUM = {};
   CLASSES.forEach(c => { CURRICULUM[c.code] = { unitKey: 'U1', unitTitle: 'Unit 1 · Current Topics', lectures: [] }; });
   renderAll();
@@ -6950,45 +7386,46 @@ document.getElementById('pushClassesBtn').addEventListener('click', async () => 
   }
 });
  
+// Brings this student's classes down from SharePoint. Returns true when the class list changed.
+async function pullClassesFromSharePoint(siteId, token, opts = {}) {
+  if (localStorage.getItem(dirtyClassesKey())) return false; // local class edits not pushed yet win
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$expand=fields&$top=200`;
+  const rows = [];
+  while (url) {
+    const r = await fetchGraphWithRetry(url, { method: 'GET' }, token);
+    const d = await r.json();
+    rows.push(...(d.value || []));
+    url = d['@odata.nextLink'] || null;
+  }
+  const loaded = rows.map(x => x.fields)
+    .filter(f => f && f.ClassCode)
+    .filter(f => !f.StudentId || String(f.StudentId).toUpperCase() === getStudentId())
+    .filter(f => f.IsActive !== false)
+    .sort((a, b) => (a.PeriodNumber || 1) - (b.PeriodNumber || 1))
+    .map(f => ({
+      code: f.ClassCode, name: f.Title, period: f.PeriodNumber || 1, teacher: f.TeacherName || '',
+      days: f.MeetingDays || '', time: f.MeetingTime || '', color: f.ColorHex || '#2F6FDE', icon: f.IconEmoji || '📚',
+      needsScribe: f.NeedsScribe !== false, term: f.Term || 'Fall 26/27',
+      textbook: String(f.Textbook || '').split(' | ').join('\n'), syllabus: f.Syllabus || '', isActive: true
+    }));
+  if (!loaded.length) return false;
+  const before = JSON.stringify(CLASSES);
+  CLASSES = loaded;
+  if (JSON.stringify(CLASSES) === before && !opts.force) return false;
+  localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
+  renderClassRibbon();
+  if (!CLASSES.some(c => c.code === activeClassCode)) doSwitchClass(CLASSES[0].code);
+  else { updateRecScheduleHint(); renderAll(); }
+  return true;
+}
+
 document.getElementById('pullClassesBtn').addEventListener('click', async () => {
   try {
     showToast('Pulling classes from SharePoint…');
     const token = await getMsalToken();
     const siteId = await resolveSiteId(token);
- 
-    const res = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Classes/items?$expand=fields`, { method: 'GET' }, token);
-    const data = await res.json();
- 
-    if (data.value && data.value.length > 0) {
-      const loaded = data.value
-        .map(x => x.fields)
-        .filter(f => !f.StudentId || String(f.StudentId).toUpperCase() === getStudentId())
-        .filter(f => f.IsActive !== false)
-        .sort((a,b) => (a.PeriodNumber || 1) - (b.PeriodNumber || 1))
-        .map(f => ({
-          code: f.ClassCode,
-          name: f.Title,
-          period: f.PeriodNumber || 1,
-          teacher: f.TeacherName || '',
-          days: f.MeetingDays || '',
-          time: f.MeetingTime || '',
-          color: f.ColorHex || '#2F6FDE',
-          icon: f.IconEmoji || '📚',
-          needsScribe: f.NeedsScribe !== false,
-          term: f.Term || 'Fall 26/27',
-          textbook: String(f.Textbook || '').split(' | ').join('\n'),
-          syllabus: f.Syllabus || '',
-          isActive: true
-        }));
- 
-      if (loaded.length) {
-        CLASSES = loaded;
-        localStorage.setItem('ss_classes_custom', JSON.stringify(CLASSES));
-        renderClassRibbon();
-        doSwitchClass(CLASSES[0].code);
-        showToast(`Loaded ${CLASSES.length} classes from SharePoint!`);
-      }
-    }
+    await pullClassesFromSharePoint(siteId, token, { force: true });
+    showToast(`Loaded ${CLASSES.length} classes from SharePoint!`);
   } catch (err) {
     alert('Pull classes error: ' + err.message);
   }
@@ -7102,7 +7539,7 @@ document.getElementById('testGeminiBtn').addEventListener('click', async () => {
 document.getElementById('sendTodoEmailNowBtn').addEventListener('click', async () => {
   // Use what is typed in the box, even before Save
   const typed = document.getElementById('cfgNotifyEmails').value.trim();
-  if (typed) saveConfigValue('notify.emails', typed);
+  if (typed) setParentConfig('notify.emails', typed);
   try {
     const r = await maybeSendTodoEmail(true);
     showToast(r === 'sent' ? '✉️ To-do summary sent' : r === 'noemails' ? 'Add at least one email address first' : 'Nothing sent');
@@ -7139,25 +7576,25 @@ document.getElementById('pullConfigBtn').addEventListener('click', async () => {
 document.getElementById('saveCfgBtn').addEventListener('click', async () => {
   localStorage.setItem('ss_gemini_key', document.getElementById('geminiApiKey').value.trim());
   localStorage.setItem('ss_gemini_model', document.getElementById('geminiModelSelect').value);
+  localStorage.setItem('ss_study_model', document.getElementById('studyModelSelect').value);
   localStorage.setItem('ss_transcribe_model', document.getElementById('transcribeModelSelect').value);
   localStorage.setItem('ss_audio_raw_test', document.getElementById('cfgAudioRawTest').checked ? 'true' : 'false');
-  // Student ID first, so the settings below are saved for the student shown
-  const newSid = document.getElementById('cfgStudentId').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (newSid && newSid !== getStudentId()) {
-    if (!confirm(`Switch this device to student ${newSid}? Lectures, chats and settings will show for ${newSid} only.`)) return;
-    localStorage.setItem('ss_student_id', newSid);
-    await loadLecturesFromDB();
-    pickedLectures = {};
-  }
+  // Students list (IDs are permanent once saved)
+  const edited = readStudentsEditor();
+  if (edited === null) return;
+  saveStudents(edited);
+  renderStudentPill();
 
   saveConfigValue('reading_level', document.getElementById('cfgReadingLevel').value);
   saveConfigValue('prompt.profile', document.getElementById('hiddenProfileText').value);
   saveConfigValue('prompt.master', document.getElementById('masterSystemPrompt').value);
-  saveConfigValue('student_name', document.getElementById('cfgStudentName').value.trim());
+  saveConfigValue('student_name', (currentStudent().name || '').trim());
   localStorage.setItem('ss_device_name', document.getElementById('cfgDeviceName').value.trim());
   saveConfigValue('interests', document.getElementById('cfgInterests').value.trim() || BUILTIN_CONFIG.interests);
-  saveConfigValue('notify.todos', document.getElementById('cfgNotifyTodos').checked ? 'on' : 'off');
-  saveConfigValue('notify.emails', document.getElementById('cfgNotifyEmails').value.trim());
+  setParentConfig('notify.todos', document.getElementById('cfgNotifyTodos').checked ? 'on' : 'off');
+  setParentConfig('notify.emails', document.getElementById('cfgNotifyEmails').value.trim());
+  setParentConfig('cc.on', document.getElementById('cfgCcParents').checked ? 'on' : 'off');
+  setParentConfig('cc.emails', document.getElementById('cfgCcEmails').value.trim());
 
   const toneCls = document.getElementById('cfgToneClass').value;
   if (toneCls) setConfigOverride('tone', toneCls, activeClassCode); else clearConfigOverride('tone', activeClassCode);
@@ -7172,7 +7609,7 @@ document.getElementById('saveCfgBtn').addEventListener('click', async () => {
  
   const newPin = document.getElementById('cfgNewPin').value.trim();
   if (newPin && !/^\d{4}$/.test(newPin)) { alert('PIN must be exactly 4 digits.'); return; }
-  if (newPin) setConfigOverride('pin_hash', await hashPin(newPin));
+  if (newPin) setParentConfig('pin_hash', await hashPin(newPin));
   renderAll();
   loadSubjectChat();
   updateRadarPills();
@@ -7268,7 +7705,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V22';
+const APP_VERSION = 'V24';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
@@ -7278,14 +7715,13 @@ console.info('Student Study', APP_VERSION);
   // Local calendar date (toISOString is UTC and shows tomorrow in the evening)
   document.getElementById('intakeClassDate').value = localDateInputValue();
  
-  const customClasses = localStorage.getItem('ss_classes_custom');
-  if (customClasses) {
-    try { CLASSES = JSON.parse(customClasses); } catch(e){}
-  }
+  migrateToPerStudentKeys();
+  CLASSES = loadClassesForStudent();
  
   await loadLecturesFromDB();
  
-  activeClassCode = localStorage.getItem('ss_last_class') || CLASSES[0].code;
+  activeClassCode = localStorage.getItem(lastClassKey());
+  if (!CLASSES.some(c => c.code === activeClassCode)) activeClassCode = CLASSES[0].code;
   const initialCls = CLASSES.find(c => c.code === activeClassCode) || CLASSES[0];
   document.documentElement.style.setProperty('--c', initialCls.color);
   document.documentElement.style.setProperty('--sel', initialCls.color + '22');
@@ -7297,11 +7733,13 @@ console.info('Student Study', APP_VERSION);
  
   migrateLegacySettings();
   await migrateLegacyPin();
+  migrateParentSettings();
   migrateLegacyMissKeys();
   await recoverStrandedSessions();
   pruneProcessedAudio().catch(() => {});
 
   renderClassRibbon();
+  renderStudentPill();
   updateRecScheduleHint();
   renderAll();
   loadSubjectChat();
