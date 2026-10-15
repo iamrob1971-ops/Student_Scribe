@@ -377,6 +377,10 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
             <span>📅 Class Date:</span>
             <input type="date" id="intakeClassDate" title="Date when this class actually took place">
           </div>
+          <div class="date-row" id="chapterRow" style="display:none">
+            <span>📖 Chapter:</span>
+            <select id="intakeChapter" style="max-width:100%"></select>
+          </div>
  
           <input type="file" id="mainIntakeFileInput" multiple accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp,.webm,.mp3,.m4a,.wav,.ogg,.aac,.mp4,text/plain,application/pdf,image/*,audio/*" style="display:none">
           <div class="dropzone" id="mainDropzone">
@@ -430,6 +434,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
           <button class="say sm" id="startNewUnitBtn" title="Start a new Unit chapter">➕ Start Unit</button>
         </div>
         <button class="wk-arrow" id="nextUnitBtn" aria-label="Next unit">▶</button>
+      </div>
+      <div id="unitChapterRow" class="center" style="display:none;margin:-4px 0 10px;font-size:14px">
+        📖 Current chapter: <select id="unitChapterSelect" style="width:auto;max-width:70%"></select>
       </div>
       <div class="track" id="unitTrack"></div>
       <p class="center" style="font-size:14px;color:var(--mut)">Tap any lecture card to view notes. Pick multiple cards to enter Exam Prep.</p>
@@ -510,7 +517,11 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <button class="say" id="closeStudentSchedBtn">✕</button>
   </div>
   <div class="dlg-body">
-    <b id="studentSchedClassName" style="font-size:16px;color:var(--ink)"></b>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px">
+      <label>Class name <input type="text" id="studentSchedName"></label>
+      <label>Period <input type="number" min="0" max="12" id="studentSchedPeriod"></label>
+      <label>Icon <input type="text" id="studentSchedIcon" maxlength="4"></label>
+    </div>
     <label>Meeting Days
       <input type="text" id="studentSchedDays" placeholder="e.g. Tue, Thu, Fri">
     </label>
@@ -538,6 +549,22 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <input type="file" id="syllabusFileInput" accept=".pdf,application/pdf,image/*" style="display:none">
       <small id="syllabusStatus" style="color:var(--mut)"></small>
     </div>
+    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+      <b style="font-size:14px">📚 Course books (PDF or text)</b>
+      <p style="font-size:12px;color:var(--mut);margin:2px 0 6px">Read once into chapters and saved to Student_Library, so every device has them. The coach pulls the chapter that matches each question.</p>
+      <div id="classBooksList"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
+        <input type="text" id="bookNameInput" placeholder="Book name (e.g. Biology, Miller & Levine)" style="flex:1;min-width:200px">
+        <button type="button" class="say sm" id="addBookPdfBtn">📄 Add PDF</button>
+        <button type="button" class="say sm" id="addBookTextBtn">📝 Add text file</button>
+        <button type="button" class="say sm" id="pasteBookTextBtn">📋 Paste text</button>
+        <input type="file" id="bookPdfInput" accept=".pdf,application/pdf" style="display:none">
+        <input type="file" id="bookTextInput" accept=".txt,.md,text/plain" style="display:none">
+      </div>
+      <textarea id="bookPasteBox" rows="5" placeholder="Paste the book or chapter text here, then tap Save pasted text" style="display:none;width:100%;margin-top:6px"></textarea>
+      <button type="button" class="say sm" id="savePastedBookBtn" style="display:none;margin-top:4px">💾 Save pasted text</button>
+      <div id="bookProgress" style="font-size:13px;color:var(--mut);margin-top:6px"></div>
+    </div>
   </div>
   <div class="dlg-foot">
     <button class="btn" id="saveStudentSchedBtn">Save Class</button>
@@ -556,6 +583,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     </label>
     <label>Class Date (When class happened)
       <input type="date" id="editLectDateInput">
+    </label>
+    <label id="editLectChapterLbl">📖 Chapter (from the course book)
+      <select id="editLectChapter"></select>
     </label>
   </div>
   <div class="dlg-foot">
@@ -711,7 +741,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
 <!-- Parent & Cloud Configuration Dialog Modal -->
 <dialog class="cfg-dlg" id="cfgDlg">
   <div class="dlg-head">
-    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V24</small></h3>
+    <h3 style="margin:0;color:var(--c)">⚙️ Settings &amp; Learning Profile <small style="font-size:12px;color:var(--mut);font-weight:500">V26</small></h3>
     <button class="say" id="closeCfgBtn">✕ Close</button>
   </div>
   <div class="dlg-body">
@@ -1124,7 +1154,7 @@ let stagedFiles = [];
    SECTION 2 - INDEXEDDB STORAGE (SEPARATED SESSIONS & LECTURES)
    ===================================================================== */
 const DB_NAME = 'StudentStudy_v4';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 let dbPromise = null;
  
 function getDB() {
@@ -1145,6 +1175,8 @@ function getDB() {
           const lf = db.createObjectStore('lectureFiles', { keyPath: 'id' });
           lf.createIndex('byLecture', 'lectureClientId');
         }
+        // Course books: chapter text per class, so the coach can pull the chapter that matters
+        if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains('deadlines')) db.createObjectStore('deadlines', { keyPath: 'deadlineId' });
       };
@@ -1255,6 +1287,7 @@ async function switchStudent(sid) {
   localStorage.setItem('ss_student_id', sid);
   CLASSES = loadClassesForStudent();
   await loadLecturesFromDB();
+  await loadBooksFromDB();
   pickedLectures = {};
   sgState = null;
   chatFocus = null;
@@ -2033,6 +2066,7 @@ function doSwitchClass(code) {
   updateRadarPills();
   sameDayChoice = null;
   renderSameDayBanner();
+  if (typeof renderChapterPicker === 'function' && typeof BOOKS !== 'undefined') renderChapterPicker();
   if (goToMap) { sgState = null; navigateTo('cls'); }
   showToast(`Switched to ${c.name}`);
 }
@@ -3037,7 +3071,7 @@ Otherwise, answer his follow-up about this question. If he got it wrong, help hi
   try {
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const res = await queryGeminiWaterfall([...history, { role: 'user', parts: [{ text }] }], key, model, {
-      system: buildCoachSystem([cur.parentLecture].filter(Boolean), { includeTranscript: false }) + '\n\n' + context,
+      system: buildCoachSystem([cur.parentLecture].filter(Boolean), { includeTranscript: false, question: `${cur.q} ${text}` }) + '\n\n' + context,
       signal: ctrl.signal
     });
     stopTimer();
@@ -3281,7 +3315,7 @@ async function sgAsk(mode) {
   try {
     const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
     const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: userText }] }], key, model, {
-      system: buildCoachSystem([l]) + '\n\n' + sgContextBlock(q, mode), signal: ctrl.signal, temperature: 0.2
+      system: buildCoachSystem([l], { question: `${q.text} ${userText}` }) + '\n\n' + sgContextBlock(q, mode), signal: ctrl.signal, temperature: 0.2
     });
     stop();
     wait.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(res.text))}`;
@@ -3518,7 +3552,7 @@ async function generateSA(l, questionText) {
   const key = localStorage.getItem('ss_gemini_key') || '';
   const model = getStudyModel();
   const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text: `Question: ${questionText}` }] }], key, model, {
-    system: buildCoachSystem([l]) + '\n\n' + SA_RULES, temperature: 0.2, maxOutputTokens: 8192,
+    system: buildCoachSystem([l], { question: questionText }) + '\n\n' + SA_RULES, temperature: 0.2, maxOutputTokens: 8192,
     responseMimeType: 'application/json', responseSchema: SA_SCHEMA
   });
   return normalizeSA(parseModelJson(res.text));
@@ -3629,7 +3663,7 @@ async function sgParentFill() {
       showProg(i);
       const res = await queryGeminiWaterfall([{ role: 'user', parts: [{ text:
         `Answer each study guide question.\n${batch.map(q => `${q.n}. ${q.text}`).join('\n')}\n\nReturn JSON { "answers":[ ... ] } with one object per question: its "n" plus the fields below.\n${SA_RULES}` }] }],
-        key, model, { system: buildCoachSystem([l]), temperature: 0.2, maxOutputTokens: 16384,
+        key, model, { system: buildCoachSystem([l], { question: batch.map(q => q.text).join(' ') }), temperature: 0.2, maxOutputTokens: 16384,
           responseMimeType: 'application/json', responseSchema: FILL_SCHEMA });
       arrOf(parseModelJson(res.text).answers).forEach(a => {
         const q = batch.find(x => x.n === Number(a.n));
@@ -3667,13 +3701,40 @@ async function sgWriteMissing() {
   renderStudyGuideScreen();
 }
 
+async function uploadLectureFiles(l, docFiles, classCode) {
+  try {
+    const token = await getMsalToken();
+    const added = [];
+    for (const f of docFiles) {
+      const path = `${getStudentId()}/${classCode}/lectures/${l.id}/${f.name}`;
+      const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+      await uploadToLibrary(path, new Blob([bytes], { type: f.mime }), token);
+      added.push({ name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'), mime: f.mime, path });
+    }
+    l.libFiles = [...(l.libFiles || []).filter(x => !added.some(a => a.name === x.name)), ...added];
+    await persistLectureObj(l);
+  } catch (e) {
+    console.warn('Library upload skipped:', e.message);
+  }
+}
+
 async function sgOpenOriginal() {
   const { l, g } = sgFind();
   const files = await idbGetByIndex('lectureFiles', 'byLecture', l.clientId).catch(() => []);
-  const f = files.find(x => x.name === g.name) || files.find(x => x.kind === 'guide');
-  if (!f) { showToast('The original file is only on the device it was added from (typed guides have no file).'); return; }
-  const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: f.mime }));
+  let f = files.find(x => x.name === g.name) || files.find(x => x.kind === 'guide');
+  let blob = null;
+  if (f) {
+    const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+    blob = new Blob([bytes], { type: f.mime });
+  } else {
+    // not on this device: fetch it from Student_Library
+    const lf = (l.libFiles || []).find(x => x.name === g.name) || (l.libFiles || []).find(x => x.kind === 'guide');
+    if (!lf) { showToast('This worksheet was added before files were kept in Student_Library, or was typed in.'); return; }
+    showToast('Opening from Student_Library…');
+    try { const b = await downloadFromLibrary(lf.path, await getMsalToken()); if (b) blob = new Blob([b], { type: lf.mime || b.type }); } catch (e) {}
+    if (!blob) { showToast('Could not open it from Student_Library. Try Sync, then again.'); return; }
+  }
+  const url = URL.createObjectURL(blob);
   const w = window.open(url, '_blank');
   if (!w) showToast('Allow pop-ups to open the worksheet');
   setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -4744,6 +4805,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     : (sameDayChoice && sameDayChoice !== 'new')
       ? sameDayLectures().find(l => l.clientId === sameDayChoice) || null : null;
   const excluded = rb ? rb.exclude : new Set();
+  const chapterRef = rb ? null : parseChapterValue((document.getElementById('intakeChapter') || {}).value || '', activeClassCode);
 
   try {
     const parts = [];
@@ -4956,6 +5018,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       notesText: notesAreGuide ? '' : (pastedNotes || ''),
       notesEntries: pastedNotes && !notesAreGuide ? [{ id: 'n' + Date.now(), ts: new Date().toISOString(), text: pastedNotes, device: getDeviceName() }] : [],
       studyGuides: newGuides,
+      chapterRef: chapterRef || null,
       bold_stem: study.concepts[0].bold_stem,
       concepts: study.concepts,
       sectionsFound: study.sections,
@@ -5018,6 +5081,13 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
 
       targetLecture = newLecture;
     }
+
+    if (chapterRef) {
+      if (addTarget) { targetLecture.chapterRef = chapterRef; await persistLectureObj(targetLecture); }
+      if (JSON.stringify(getCurrentChapter(classCodeAtStart)) !== JSON.stringify(chapterRef)) setCurrentChapter(classCodeAtStart, chapterRef);
+    }
+    // Copies to Student_Library in the background, so 🖨 Original worksheet works on every device
+    if (docFiles.length) uploadLectureFiles(targetLecture, docFiles, classCodeAtStart);
 
     // Keep this run's PDFs and photos on the device with their lecture
     for (const f of docFiles) {
@@ -5616,12 +5686,14 @@ Choose the tag by where the EXPLANATION'S FACTS come from. If the class material
 Teacher-checked study guide answers (listed below when present) outrank everything else.
 Never claim to quote the textbook, and never invent page numbers, chapter numbers, or quotes.
 If the class material disagrees with the textbook or general knowledge, say so in one sentence and tell him to go with his teacher's version on the test.
+When a COURSE BOOK EXCERPT is included below, it is the actual textbook text: use it before general knowledge, and tag the answer "📘 From your textbook · <book> · Ch. N" with that excerpt's real chapter. Page markers like [p.212] may be cited as "p. 212".
 For problems he works out (calculating, solving, evaluating, graphing, completing a table): use numbered steps, show the work in each step, put the final answer in bold, and use no analogy.
 If you reorder values (for example writing a set smallest to largest, or dropping repeats), show them in the problem's order first, then say what you changed and why, e.g. "From the problem: 5, 5, 3, 0 -> drop repeats -> written smallest to largest: {0, 3, 5}".` +
     (syllabus ? `\n\n[SYLLABUS / PACING GUIDE]\n${syllabus.slice(0, 8000)}` : '');
 }
 
 function buildCoachSystem(lectures, opts = {}) {
+  const bookBlock = bookExcerptFor(lectures, opts.question || '');
   const name = getStudentName();
   const parts = [
     getConfig('prompt.master', activeClassCode) || DEFAULT_SYSTEM_PROMPT,
@@ -5633,6 +5705,7 @@ function buildCoachSystem(lectures, opts = {}) {
     parts.push('He has missed several questions on this material recently. Slow down, explain step by step, and check understanding before moving on.');
   }
   parts.push(buildSourceTierRules(activeClassCode));
+  if (bookBlock) parts.push(bookBlock);
   parts.push(buildChatGrounding(lectures, opts));
   return parts.join('\n\n');
 }
@@ -5712,7 +5785,7 @@ async function sendChatMessage(query, isRetry = false) {
  
   const model = localStorage.getItem('ss_gemini_model') || 'gemini-3.8-flash';
   const broad = isBroadQuestion(text);
-  const systemContext = buildCoachSystem(getSelectedLectures(), { includeTranscript: !broad });
+  const systemContext = buildCoachSystem(getSelectedLectures(), { includeTranscript: !broad, question: text });
  
   const targetKey = getActiveChatTargetKey();
   const exchanges = getVisibleExchanges(targetKey).filter(ex => !ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide');
@@ -6417,6 +6490,7 @@ async function backgroundCloudRefresh() {
     await pullConfigFromSharePoint(siteId, token);
     await pullDeadlinesFromSharePoint(siteId, token);
     await pullClassesFromSharePoint(siteId, token);
+    try { if (await syncBooks(token)) renderChapterPicker(); } catch (e) {}
     const pulled = await pullLecturesFromSharePoint(siteId, token);
     const pulledChats = await pullChatsFromSharePoint(siteId, token);
     if (pulled.added || pulled.updated || pulled.merged || pulledChats) {
@@ -6710,6 +6784,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     if (localStorage.getItem(dirtyClassesKey())) await pushClassesToSharePoint(siteId, token);
     const classesChanged = await pullClassesFromSharePoint(siteId, token);
     if (classesChanged) showToast(`Classes updated: ${CLASSES.length} classes`);
+    try { const nb = await syncBooks(token); if (nb) showToast(`📚 ${nb} course book(s) from other devices`); renderChapterPicker(); }
+    catch (bookErr) { console.warn('Book sync skipped:', bookErr.message); }
     await pullConfigFromSharePoint(siteId, token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
@@ -6963,7 +7039,10 @@ function openEditLectureModal(id) {
   document.getElementById('editLectTitleInput').value = lect.t;
   
   const dObj = lect.recordedDate ? new Date(lect.recordedDate) : new Date();
-  document.getElementById('editLectDateInput').value = dObj.toISOString().slice(0, 10);
+  document.getElementById('editLectDateInput').value = localDateInputValue(dObj);
+  const hasBooks = (BOOKS[activeClassCode] || []).length > 0;
+  document.getElementById('editLectChapterLbl').style.display = hasBooks ? 'block' : 'none';
+  if (hasBooks) document.getElementById('editLectChapter').innerHTML = chapterOptionsHtml(activeClassCode, lect.chapterRef);
   
   document.getElementById('editLectureDlg').showModal();
 }
@@ -6988,27 +7067,18 @@ document.getElementById('saveEditLectBtn').addEventListener('click', async () =>
   lect.d = newDateObj.toLocaleDateString('en-US', { weekday: 'short' });
   lect.n = newDateObj.getDate();
   lect.recordedDate = newDateObj.toISOString();
- 
-  const currentClass = CLASSES.find(c => c.code === activeClassCode);
-  const clientId = lect.clientId || `lect_${activeClassCode}_${lect.id}`;
-  
-  await idbPut('lectures', {
-    clientId: clientId,
-    classCode: activeClassCode,
-    className: currentClass.name,
-    periodNumber: currentClass.period,
-    recordedDate: lect.recordedDate,
-    durationSeconds: lect.durationSeconds || null,
-    unitKey: ds.unitKey,
-    unitTitle: ds.unitTitle,
-    partNumber: ds.lectures.indexOf(lect) + 1,
-    topicLabel: lect.t,
-    topicIcon: lect.i,
-    processingStatus: 'Completed',
-    isDemo: false,
-    isDirty: true,
-    studyPayload: JSON.stringify(lect)
-  });
+  if ((BOOKS[activeClassCode] || []).length) lect.chapterRef = parseChapterValue(document.getElementById('editLectChapter').value, activeClassCode);
+
+  // Update the saved record in place (keeps its quiz sets, SharePoint link and student)
+  const all = await idbGetAll('lectures');
+  const rec = all.find(r => r.clientId === lect.clientId);
+  if (rec) {
+    rec.recordedDate = lect.recordedDate;
+    rec.topicLabel = lect.t;
+    rec.studyPayload = JSON.stringify(lect);
+    rec.isDirty = true;
+    await idbPut('lectures', rec);
+  }
  
   document.getElementById('editLectureDlg').close();
   renderAll();
@@ -7022,13 +7092,18 @@ function openStudentScheduleModal(code) {
   const cls = CLASSES.find(c => c.code === code);
   if (!cls) return;
  
-  document.getElementById('studentSchedClassName').textContent = `${cls.icon} ${cls.name} (Period ${cls.period})`;
+  document.getElementById('studentSchedName').value = cls.name || '';
+  document.getElementById('studentSchedPeriod').value = cls.period || 1;
+  document.getElementById('studentSchedIcon').value = cls.icon || '📚';
   document.getElementById('studentSchedDays').value = cls.days || '';
   document.getElementById('studentSchedTime').value = cls.time || '';
   document.getElementById('studentSchedTeacher').value = cls.teacher || '';
   document.getElementById('studentSchedTextbook').value = cls.textbook || '';
   document.getElementById('studentSchedSyllabus').value = cls.syllabus || '';
   document.getElementById('syllabusStatus').textContent = '';
+  document.getElementById('bookProgress').textContent = '';
+  document.getElementById('bookNameInput').value = '';
+  renderClassBooks(code);
  
   const currentDays = (cls.days || '').toLowerCase();
   document.querySelectorAll('.day-toggle-btn').forEach(btn => {
@@ -7089,6 +7164,10 @@ document.getElementById('saveStudentSchedBtn').addEventListener('click', () => {
   if (!editingClassCode) return;
   const cls = CLASSES.find(c => c.code === editingClassCode);
   if (cls) {
+    cls.name = document.getElementById('studentSchedName').value.trim() || cls.name;
+    const per = parseInt(document.getElementById('studentSchedPeriod').value, 10);
+    if (!isNaN(per)) cls.period = per;
+    cls.icon = document.getElementById('studentSchedIcon').value.trim() || cls.icon;
     cls.days = document.getElementById('studentSchedDays').value.trim();
     cls.time = document.getElementById('studentSchedTime').value.trim();
     cls.teacher = document.getElementById('studentSchedTeacher').value.trim();
@@ -7259,7 +7338,7 @@ function renderParentScheduleEditor() {
     body.innerHTML += `
       <div style="border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <b>${c.icon} ${c.name} (P${c.period})</b>
+          <b>${escText(c.icon || '')} ${escText(c.name)} (P${c.period})</b>
           <div style="display:flex;gap:8px;align-items:center">
             <label style="font-size:12px;display:flex;align-items:center;gap:4px">
               <input type="checkbox" id="parentSchedScribe_${idx}" ${c.needsScribe !== false ? 'checked' : ''}> Scribe Active
@@ -7267,11 +7346,15 @@ function renderParentScheduleEditor() {
             <button class="say sm" data-archive-cls="${c.code}" style="color:var(--bad)">📦 Archive</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
-          <label style="font-size:11px">Class Name: <input type="text" id="parentSchedName_${idx}" value="${c.name}"></label>
-          <label style="font-size:11px">Teacher: <input type="text" id="parentSchedTeacher_${idx}" value="${c.teacher || ''}"></label>
-          <label style="font-size:11px">Days: <input type="text" id="parentSchedDays_${idx}" value="${c.days || ''}"></label>
-          <label style="font-size:11px">Time: <input type="text" id="parentSchedTime_${idx}" value="${c.time || ''}"></label>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:6px">
+          <label style="font-size:11px">Class Name: <input type="text" id="parentSchedName_${idx}" value="${escText(c.name || '')}"></label>
+          <label style="font-size:11px">Period: <input type="number" min="0" max="12" id="parentSchedPeriod_${idx}" value="${c.period || 1}"></label>
+          <label style="font-size:11px">Icon: <input type="text" id="parentSchedIcon_${idx}" value="${escText(c.icon || '📚')}" maxlength="4"></label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">
+          <label style="font-size:11px">Teacher: <input type="text" id="parentSchedTeacher_${idx}" value="${escText(c.teacher || '')}"></label>
+          <label style="font-size:11px">Days: <input type="text" id="parentSchedDays_${idx}" value="${escText(c.days || '')}"></label>
+          <label style="font-size:11px">Time: <input type="text" id="parentSchedTime_${idx}" value="${escText(c.time || '')}"></label>
         </div>
       </div>
     `;
@@ -7295,6 +7378,7 @@ document.addEventListener('click', (e) => {
   if (archBtn) {
     const code = archBtn.dataset.archiveCls;
     const cls = CLASSES.find(c => c.code === code);
+    captureScheduleEdits();
     if (cls && confirm(`Archive ${cls.name}? It will be removed from the active ribbon, but past notes and SharePoint records will remain safe.`)) {
       cls.isActive = false;
       localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
@@ -7309,6 +7393,7 @@ document.addEventListener('click', (e) => {
   if (resBtn) {
     const code = resBtn.dataset.restoreCls;
     const cls = CLASSES.find(c => c.code === code);
+    captureScheduleEdits();
     if (cls) {
       cls.isActive = true;
       localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
@@ -7320,11 +7405,30 @@ document.addEventListener('click', (e) => {
   }
 });
  
+// Copy what's typed in the Schedule Manager into CLASSES, so adding/archiving never wipes unsaved edits
+function captureScheduleEdits() {
+  const activeTerm = (document.getElementById('activeTermInput').value || '').trim() || 'Fall 26/27';
+  CLASSES.forEach((c, idx) => {
+    const nameEl = document.getElementById(`parentSchedName_${idx}`);
+    if (!nameEl) return;
+    c.name = nameEl.value.trim() || c.name;
+    const per = parseInt(document.getElementById(`parentSchedPeriod_${idx}`).value, 10);
+    if (!isNaN(per)) c.period = per;
+    c.icon = document.getElementById(`parentSchedIcon_${idx}`).value.trim() || c.icon || '📚';
+    c.teacher = document.getElementById(`parentSchedTeacher_${idx}`).value.trim();
+    c.days = document.getElementById(`parentSchedDays_${idx}`).value.trim();
+    c.time = document.getElementById(`parentSchedTime_${idx}`).value.trim();
+    c.needsScribe = document.getElementById(`parentSchedScribe_${idx}`).checked;
+    c.term = activeTerm;
+  });
+}
+
 document.getElementById('addNewClassBtn').addEventListener('click', () => {
-  const newPeriod = CLASSES.length + 1;
+  captureScheduleEdits();
+  const newPeriod = Math.max(0, ...CLASSES.filter(c => c.isActive !== false).map(c => Number(c.period) || 0)) + 1;
   CLASSES.push({
     code: `CLS_${Date.now().toString(36).slice(2, 6).toUpperCase()}`,
-    name: `New Class (P${newPeriod})`,
+    name: 'New Class',
     period: newPeriod,
     teacher: '',
     days: 'Mon, Wed, Fri',
@@ -7336,21 +7440,17 @@ document.getElementById('addNewClassBtn').addEventListener('click', () => {
     isActive: true
   });
   renderParentScheduleEditor();
+  // bring the new class into view and put the cursor in its name
+  const idx = CLASSES.length - 1;
+  const el = document.getElementById(`parentSchedName_${idx}`);
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); el.select(); }
 });
  
 document.getElementById('saveScheduleBtn').addEventListener('click', () => {
-  const activeTerm = document.getElementById('activeTermInput').value.trim() || 'Fall 26/27';
-  CLASSES.forEach((c, idx) => {
-    const nameEl = document.getElementById(`parentSchedName_${idx}`);
-    if (nameEl) {
-      c.name = nameEl.value.trim();
-      c.teacher = document.getElementById(`parentSchedTeacher_${idx}`).value.trim();
-      c.days = document.getElementById(`parentSchedDays_${idx}`).value.trim();
-      c.time = document.getElementById(`parentSchedTime_${idx}`).value.trim();
-      c.needsScribe = document.getElementById(`parentSchedScribe_${idx}`).checked;
-      c.term = activeTerm;
-    }
-  });
+  captureScheduleEdits();
+  const periods = CLASSES.filter(c => c.isActive !== false).map(c => c.period);
+  if (new Set(periods).size !== periods.length && !confirm('Two active classes share a period. Save anyway?')) return;
+  CLASSES.sort((a, b) => (a.period || 0) - (b.period || 0));
   localStorage.setItem(classesKey(), JSON.stringify(CLASSES));
   localStorage.setItem(dirtyClassesKey(), 'true');
   renderClassRibbon();
@@ -7386,6 +7486,401 @@ document.getElementById('pushClassesBtn').addEventListener('click', async () => 
   }
 });
  
+/* =====================================================================
+   STUDENT_LIBRARY (SharePoint document library): course books, handouts and worksheet PDFs
+   Folders: <StudentId>/<ClassCode>/books/…  and  <StudentId>/<ClassCode>/lectures/<lectureId>/…
+   ===================================================================== */
+const LIBRARY_NAME = 'Student_Library';
+let cachedDriveId = null;
+
+async function getLibraryDrive(token) {
+  if (cachedDriveId) return cachedDriveId;
+  const siteId = await resolveSiteId(token);
+  const r = await fetchGraphWithRetry(`https://graph.microsoft.com/v1.0/sites/${siteId}/drives?$select=id,name,webUrl`, { method: 'GET' }, token);
+  const d = await r.json();
+  const drive = (d.value || []).find(x => x.name === LIBRARY_NAME || /\/Student_Library\/?$/i.test(x.webUrl || ''));
+  if (!drive) throw new Error(`The "${LIBRARY_NAME}" document library was not found on the Bible_App site.`);
+  cachedDriveId = drive.id;
+  return cachedDriveId;
+}
+
+const encPath = p => p.split('/').map(encodeURIComponent).join('/');
+
+async function ensureLibraryFolder(path, token) {
+  const driveId = await getLibraryDrive(token);
+  let parent = '';
+  for (const seg of path.split('/').filter(Boolean)) {
+    const here = parent ? `${parent}/${seg}` : seg;
+    const check = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(here)}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!check.ok) {
+      const url = parent ? `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(parent)}:/children` : `https://graph.microsoft.com/v1.0/drives/${driveId}/root/children`;
+      await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: seg, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' }) });
+    }
+    parent = here;
+  }
+}
+
+// Small files in one request; large files (like a 42 MB textbook) in 5 MB pieces
+async function uploadToLibrary(path, blob, token, onProgress) {
+  const driveId = await getLibraryDrive(token);
+  await ensureLibraryFolder(path.split('/').slice(0, -1).join('/'), token);
+  if (blob.size <= 4 * 1024 * 1024) {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}:/content`, {
+      method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+    if (!r.ok) throw new Error(`Upload failed (${r.status})`);
+    return;
+  }
+  const sr = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}:/createUploadSession`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } }) });
+  if (!sr.ok) throw new Error(`Could not start the upload (${sr.status})`);
+  const { uploadUrl } = await sr.json();
+  const CHUNK = 320 * 1024 * 16; // 5 MB, a multiple of 320 KB as SharePoint requires
+  for (let start = 0; start < blob.size; start += CHUNK) {
+    const end = Math.min(blob.size, start + CHUNK);
+    const r = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes ${start}-${end - 1}/${blob.size}` }, body: blob.slice(start, end) });
+    if (!r.ok && r.status !== 202) throw new Error(`Upload stopped at ${Math.round(start / 1048576)} MB (${r.status})`);
+    if (onProgress) onProgress(end / blob.size);
+  }
+}
+
+async function downloadFromLibrary(path, token) {
+  const driveId = await getLibraryDrive(token);
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}:/content`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) return null;
+  return await r.blob();
+}
+
+async function uploadJsonToLibrary(path, obj, token) {
+  await uploadToLibrary(path, new Blob([JSON.stringify(obj)], { type: 'application/json' }), token);
+}
+async function downloadJsonFromLibrary(path, token) {
+  const b = await downloadFromLibrary(path, token);
+  if (!b) return null;
+  try { return JSON.parse(await b.text()); } catch (e) { return null; }
+}
+
+function libClassFolder(classCode) { return `${getStudentId()}/${classCode}`; }
+
+/* ---------- Course books: chapters in memory, IndexedDB and Student_Library ---------- */
+let BOOKS = {}; // classCode -> [{ id, name, chapters:[{n,title,text}], pdfPath, addedAt }]
+let BOOK_STATE = {}; // classCode -> { currentChapter: { bookId, n } }
+
+async function loadBooksFromDB() {
+  BOOKS = {};
+  const all = await idbGetAll('books').catch(() => []);
+  all.filter(b => String(b.studentId || 'MAC').toUpperCase() === getStudentId()).forEach(b => {
+    (BOOKS[b.classCode] = BOOKS[b.classCode] || []).push(b);
+  });
+  try { BOOK_STATE = JSON.parse(localStorage.getItem(`ss_book_state_${getStudentId()}`) || '{}'); } catch (e) { BOOK_STATE = {}; }
+}
+function saveBookState() { localStorage.setItem(`ss_book_state_${getStudentId()}`, JSON.stringify(BOOK_STATE)); }
+
+function chapterLabel(book, ch) {
+  return `${book.name} · ${/^\d+$/.test(String(ch.n)) ? 'Ch. ' + ch.n : ch.n}${ch.title ? ' · ' + ch.title : ''}`;
+}
+
+// Split plain text into chapters at "Chapter N" / "Unit N" headings; long text without headings becomes parts
+function splitIntoChapters(text) {
+  const lines = String(text).replace(/\r/g, '').split('\n');
+  const heads = [];
+  const re = /^\s*(chapter|unit)\s+(\d{1,3}|[ivxlc]{1,6})\b[\s:.\-–—]*(.{0,80})$/i;
+  lines.forEach((ln, i) => {
+    const m = ln.match(re);
+    if (m) heads.push({ i, n: m[2], title: m[3].trim() });
+  });
+  // keep headings whose numbers move forward (drops table-of-contents repeats)
+  const seen = new Set(); const good = [];
+  heads.forEach(h => { const key = String(h.n).toLowerCase(); if (!seen.has(key)) { seen.add(key); good.push(h); } else { const k = good.findIndex(g => String(g.n).toLowerCase() === key); if (k >= 0) good[k] = h; } });
+  good.sort((a, b) => a.i - b.i);
+  if (good.length >= 2) {
+    const out = [];
+    if (good[0].i > 20) out.push({ n: 'Intro', title: 'Front matter', text: lines.slice(0, good[0].i).join('\n') });
+    good.forEach((h, k) => out.push({ n: h.n, title: h.title, text: lines.slice(h.i, k + 1 < good.length ? good[k + 1].i : lines.length).join('\n') }));
+    return out.filter(c => c.text.trim().length > 200);
+  }
+  const words = String(text).split(/\s+/);
+  const out = [];
+  for (let i = 0; i < words.length; i += 6000) out.push({ n: `Part ${out.length + 1}`, title: '', text: words.slice(i, i + 6000).join(' ') });
+  return out;
+}
+
+function chapterOptionsHtml(classCode, selected) {
+  const books = BOOKS[classCode] || [];
+  const sel = selected ? `${selected.bookId}|${selected.n}` : '';
+  return `<option value="">No specific chapter</option>` + books.map(b =>
+    `<optgroup label="${escText(b.name)}">${b.chapters.map(ch => `<option value="${escText(b.id)}|${escText(String(ch.n))}" ${sel === `${b.id}|${ch.n}` ? 'selected' : ''}>${escText(/^\d+$/.test(String(ch.n)) ? 'Ch. ' + ch.n : String(ch.n))}${ch.title ? ' · ' + escText(ch.title) : ''}</option>`).join('')}</optgroup>`).join('');
+}
+
+function parseChapterValue(v, classCode) {
+  if (!v) return null;
+  const [bookId, n] = v.split('|');
+  const b = (BOOKS[classCode] || []).find(x => x.id === bookId);
+  const ch = b && b.chapters.find(c => String(c.n) === n);
+  return b && ch ? { bookId, n, label: chapterLabel(b, ch) } : null;
+}
+
+function getCurrentChapter(classCode) { return (BOOK_STATE[classCode] || {}).currentChapter || null; }
+
+async function setCurrentChapter(classCode, ref) {
+  BOOK_STATE[classCode] = { currentChapter: ref };
+  saveBookState();
+  if (classCode === activeClassCode) renderChapterPicker();
+  try { await pushBookManifest(classCode, await getMsalTokenSilent() || await getMsalToken()); }
+  catch (e) { (BOOKS[classCode] || []).forEach(b => { b.dirtyManifest = true; }); }
+}
+
+function renderChapterPicker() {
+  const has = (BOOKS[activeClassCode] || []).length > 0;
+  const row = document.getElementById('chapterRow');
+  const urow = document.getElementById('unitChapterRow');
+  if (row) row.style.display = has ? 'flex' : 'none';
+  if (urow) urow.style.display = has ? 'block' : 'none';
+  if (!has) return;
+  const cur = getCurrentChapter(activeClassCode);
+  document.getElementById('intakeChapter').innerHTML = chapterOptionsHtml(activeClassCode, cur);
+  document.getElementById('unitChapterSelect').innerHTML = chapterOptionsHtml(activeClassCode, cur);
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'unitChapterSelect') {
+    setCurrentChapter(activeClassCode, parseChapterValue(e.target.value, activeClassCode));
+    document.getElementById('intakeChapter').value = e.target.value;
+    showToast(e.target.value ? 'Current chapter set' : 'No current chapter');
+  }
+});
+
+/* ---------- The coach pulls the chapter that matters for each question ---------- */
+const BOOK_STOP = new Set('what when where which while with that this from have does into about your their there they them were been will would could should explain describe answer question chapter page pages make made more most some such than then also only very much many each other like just what\'s'.split(' '));
+function questionTerms(q) {
+  return [...new Set(String(q || '').toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !BOOK_STOP.has(w)))];
+}
+function scoreText(lc, terms) {
+  let sc = 0;
+  terms.forEach(t => { let i = 0, n = 0; while ((i = lc.indexOf(t, i)) !== -1 && n < 25) { n++; i += t.length; } sc += n; });
+  return sc;
+}
+// Long chapters: keep the windows that mention the question's terms most, in book order
+function bestWindows(text, terms, budget) {
+  if (text.length <= budget) return text;
+  const W = 4000, wins = [];
+  for (let i = 0; i < text.length; i += W) wins.push({ i, t: text.slice(i, i + W) });
+  wins.forEach(w => { w.sc = scoreText(w.t.toLowerCase(), terms); });
+  const pick = wins.slice().sort((a, b) => b.sc - a.sc).slice(0, Math.max(1, Math.floor(budget / W))).sort((a, b) => a.i - b.i);
+  return pick.map(w => w.t).join('\n[…]\n');
+}
+
+function bookExcerptFor(lectures, question) {
+  const books = BOOKS[activeClassCode] || [];
+  if (!books.length) return '';
+  const terms = questionTerms(question);
+  const all = books.flatMap(b => b.chapters.map(ch => ({ b, ch })));
+  all.forEach(x => { if (!x.ch._lc) Object.defineProperty(x.ch, '_lc', { value: x.ch.text.toLowerCase(), enumerable: false }); });
+  const scored = all.map(x => ({ ...x, sc: scoreText(x.ch._lc, terms) + (terms.some(t => String(x.ch.title || '').toLowerCase().includes(t)) ? 15 : 0) }))
+    .sort((a, b) => b.sc - a.sc);
+  const chosen = [];
+  const refs = lectures.map(l => l.chapterRef).filter(Boolean);
+  if (!refs.length && getCurrentChapter(activeClassCode) && !terms.length) refs.push(getCurrentChapter(activeClassCode));
+  refs.forEach(r => { const hit = scored.find(x => x.b.id === r.bookId && String(x.ch.n) === String(r.n)); if (hit && !chosen.includes(hit)) chosen.push(hit); });
+  // the question points elsewhere (or no chapter was set): add the best-matching chapter
+  const best = scored[0];
+  const chosenScore = chosen.reduce((m, x) => Math.max(m, x.sc), 0);
+  if (best && best.sc >= 2 && !chosen.includes(best) && (chosenScore === 0 || best.sc > chosenScore * 1.5)) chosen.push(best);
+  if (!chosen.length) return '';
+  const budget = Math.floor(60000 / chosen.length);
+  return chosen.slice(0, 2).map(x => `[COURSE BOOK EXCERPT · ${x.b.name} · ${/^\d+$/.test(String(x.ch.n)) ? 'Ch. ' + x.ch.n : x.ch.n}${x.ch.title ? ' · ' + x.ch.title : ''}]\n${bestWindows(x.ch.text, terms, budget)}`).join('\n\n');
+}
+
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    sc.onload = res; sc.onerror = () => rej(new Error('Could not load the PDF reader'));
+    document.head.appendChild(sc);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
+// Reads the PDF's own text layer in the browser (fast, free). Scanned pages without text are reported.
+async function pdfToChapters(file, onProgress) {
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const pages = [];
+  let empty = 0;
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    let text = '', lastY = null;
+    tc.items.forEach(it => { const y = it.transform ? it.transform[5] : null; text += (lastY !== null && y !== null && Math.abs(y - lastY) > 4 ? '\n' : ' ') + it.str; lastY = y; });
+    if (text.trim().length < 30) empty++;
+    pages.push(text);
+    if (i % 10 === 0 && onProgress) onProgress(`Reading page ${i} of ${pdf.numPages}…`);
+  }
+  if (empty > pdf.numPages * 0.6) throw new Error('This PDF looks scanned (no text inside). Copy its text out or use smaller chapter PDFs instead.');
+  // A page whose top lines start a chapter begins a new chapter
+  const chapters = [];
+  let cur = { n: 'Intro', title: 'Front matter', text: '', startPage: 1 };
+  const seen = new Set();
+  pages.forEach((txt, idx) => {
+    // look line by line at the top of the page, so the title stops at the end of its line
+    let m = null;
+    for (const line of txt.split('\n').slice(0, 6)) {
+      m = line.match(/\b(chapter|unit)\s+(\d{1,3})\b[\s:.\-–—]*([A-Za-z][^\n]{0,70})?/i);
+      if (m) break;
+    }
+    const isToc = (txt.match(/\bchapter\s+\d+/gi) || []).length > 3;
+    if (m && !isToc && !seen.has(m[2])) {
+      if (cur.text.trim()) chapters.push(cur);
+      seen.add(m[2]);
+      cur = { n: m[2], title: (m[3] || '').trim().slice(0, 70), text: '', startPage: idx + 1 };
+    }
+    cur.text += `\n[p.${idx + 1}]\n` + txt;
+  });
+  if (cur.text.trim()) chapters.push(cur);
+  if (chapters.length < 3) {
+    // no clear chapter headings: 20-page parts
+    const parts = [];
+    for (let i = 0; i < pages.length; i += 20) parts.push({ n: `Pages ${i + 1}-${Math.min(pages.length, i + 20)}`, title: '',
+      text: pages.slice(i, i + 20).map((t, k) => `[p.${i + k + 1}]\n${t}`).join('\n') });
+    return { chapters: parts, pageCount: pdf.numPages };
+  }
+  return { chapters: chapters.filter(c => c.text.trim().length > 200 || /^\d+$/.test(String(c.n))), pageCount: pdf.numPages };
+}
+
+async function saveBook(classCode, name, chapters, extra = {}) {
+  const book = { id: 'bk' + Date.now().toString(36), classCode, studentId: getStudentId(), name, chapters,
+    addedAt: new Date().toISOString(), ...extra };
+  await idbPut('books', book);
+  (BOOKS[classCode] = BOOKS[classCode] || []).push(book);
+  // to Student_Library, so every device gets it on Sync
+  try {
+    const token = await getMsalToken();
+    await uploadJsonToLibrary(`${libClassFolder(classCode)}/books/${book.id}.json`, book, token);
+    await pushBookManifest(classCode, token);
+    book.synced = true;
+    await idbPut('books', book);
+  } catch (e) {
+    showToast('Saved on this device. It will go to Student_Library on the next Sync. (' + e.message + ')');
+  }
+  return book;
+}
+
+async function pushBookManifest(classCode, token) {
+  const manifest = { books: (BOOKS[classCode] || []).map(b => ({ id: b.id, name: b.name, pdfPath: b.pdfPath || '', chapters: b.chapters.length, addedAt: b.addedAt })),
+    currentChapter: (BOOK_STATE[classCode] || {}).currentChapter || null, updatedAt: new Date().toISOString() };
+  await uploadJsonToLibrary(`${libClassFolder(classCode)}/books/manifest.json`, manifest, token);
+}
+
+// Sync: upload books not yet sent, then bring down books added on other devices
+async function syncBooks(token) {
+  let added = 0;
+  for (const c of CLASSES) {
+    const mine = BOOKS[c.code] || [];
+    let uploadedAny = false;
+    for (const b of mine.filter(x => !x.synced && !x.removed)) {
+      await uploadJsonToLibrary(`${libClassFolder(c.code)}/books/${b.id}.json`, b, token);
+      b.synced = true; await idbPut('books', b); uploadedAny = true;
+    }
+    if (uploadedAny || mine.some(x => x.dirtyManifest)) { await pushBookManifest(c.code, token); mine.forEach(x => { x.dirtyManifest = false; }); }
+    const m = await downloadJsonFromLibrary(`${libClassFolder(c.code)}/books/manifest.json`, token);
+    if (!m) continue;
+    for (const entry of (m.books || [])) {
+      if (mine.some(x => x.id === entry.id)) continue;
+      const book = await downloadJsonFromLibrary(`${libClassFolder(c.code)}/books/${entry.id}.json`, token);
+      if (book) { book.synced = true; await idbPut('books', book); (BOOKS[c.code] = BOOKS[c.code] || []).push(book); added++; }
+    }
+    // keep only books still in the manifest (removed elsewhere)
+    const keep = new Set((m.books || []).map(x => x.id));
+    for (const b of mine.filter(x => x.synced && !keep.has(x.id))) { await idbDelete('books', b.id); }
+    BOOKS[c.code] = (BOOKS[c.code] || []).filter(x => !x.synced || keep.has(x.id));
+    if (m.currentChapter && JSON.stringify(m.currentChapter) !== JSON.stringify((BOOK_STATE[c.code] || {}).currentChapter)) {
+      BOOK_STATE[c.code] = { currentChapter: m.currentChapter }; saveBookState();
+    }
+  }
+  return added;
+}
+
+function renderClassBooks(classCode) {
+  const box = document.getElementById('classBooksList');
+  if (!box) return;
+  const list = BOOKS[classCode] || [];
+  box.innerHTML = list.length ? list.map(b => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13.5px">
+      <span style="flex:1">📘 <b>${escText(b.name)}</b> · ${b.chapters.length} chapter${b.chapters.length === 1 ? '' : 's'}${b.pdfPath ? ' · PDF in library' : ''}</span>
+      <button type="button" class="say sm" data-remove-book="${escText(b.id)}">✕</button></div>`).join('')
+    : '<p style="font-size:13px;color:var(--mut);margin:0">No books yet.</p>';
+}
+
+async function addBookFromText(text, name) {
+  const progress = document.getElementById('bookProgress');
+  const chapters = splitIntoChapters(text);
+  progress.textContent = `Saving ${chapters.length} chapter(s)…`;
+  await saveBook(editingClassCode, name, chapters);
+  progress.textContent = `✔ ${name}: ${chapters.length} chapter(s) saved.`;
+  renderClassBooks(editingClassCode);
+  renderChapterPicker();
+}
+
+document.getElementById('addBookPdfBtn').addEventListener('click', () => document.getElementById('bookPdfInput').click());
+document.getElementById('addBookTextBtn').addEventListener('click', () => document.getElementById('bookTextInput').click());
+document.getElementById('pasteBookTextBtn').addEventListener('click', () => {
+  const box = document.getElementById('bookPasteBox');
+  const show = box.style.display === 'none';
+  box.style.display = show ? 'block' : 'none';
+  document.getElementById('savePastedBookBtn').style.display = show ? 'inline-block' : 'none';
+});
+function bookNameOr(fallback) { return document.getElementById('bookNameInput').value.trim() || fallback; }
+
+document.getElementById('savePastedBookBtn').addEventListener('click', async () => {
+  const text = document.getElementById('bookPasteBox').value.trim();
+  if (text.length < 300) { showToast('Paste more text first'); return; }
+  await addBookFromText(text, bookNameOr('Course book'));
+  document.getElementById('bookPasteBox').value = '';
+});
+document.getElementById('bookTextInput').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  await addBookFromText(await f.text(), bookNameOr(f.name.replace(/\.(txt|md)$/i, '')));
+});
+document.getElementById('bookPdfInput').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const progress = document.getElementById('bookProgress');
+  const name = bookNameOr(f.name.replace(/\.pdf$/i, ''));
+  try {
+    progress.innerHTML = '<span class="spin"></span>Reading the PDF…';
+    const { chapters, pageCount } = await pdfToChapters(f, t => { progress.innerHTML = `<span class="spin"></span>${t}`; });
+    let pdfPath = '';
+    try {
+      const token = await getMsalToken();
+      pdfPath = `${libClassFolder(editingClassCode)}/books/${f.name}`;
+      progress.innerHTML = '<span class="spin"></span>Uploading the PDF to Student_Library…';
+      await uploadToLibrary(pdfPath, f, token, pct => { progress.innerHTML = `<span class="spin"></span>Uploading the PDF… ${Math.round(pct * 100)}%`; });
+    } catch (upErr) { pdfPath = ''; showToast('Chapters saved; the PDF itself did not upload: ' + upErr.message); }
+    progress.innerHTML = '<span class="spin"></span>Saving chapters…';
+    await saveBook(editingClassCode, name, chapters, { pdfPath, pageCount });
+    progress.textContent = `✔ ${name}: ${pageCount} pages, ${chapters.length} chapter(s) saved.`;
+    renderClassBooks(editingClassCode);
+    renderChapterPicker();
+  } catch (err) {
+    progress.textContent = '⚠️ ' + err.message;
+  }
+});
+document.addEventListener('click', async (e) => {
+  const rb = e.target.closest('[data-remove-book]');
+  if (!rb) return;
+  const list = BOOKS[editingClassCode] || [];
+  const b = list.find(x => x.id === rb.dataset.removeBook);
+  if (!b || !confirm(`Remove "${b.name}" from this class?`)) return;
+  await idbDelete('books', b.id);
+  BOOKS[editingClassCode] = list.filter(x => x.id !== b.id);
+  try { await pushBookManifest(editingClassCode, await getMsalToken()); } catch (err) { list.forEach(x => { x.dirtyManifest = true; }); }
+  renderClassBooks(editingClassCode);
+  renderChapterPicker();
+});
+
 // Brings this student's classes down from SharePoint. Returns true when the class list changed.
 async function pullClassesFromSharePoint(siteId, token, opts = {}) {
   if (localStorage.getItem(dirtyClassesKey())) return false; // local class edits not pushed yet win
@@ -7705,7 +8200,7 @@ function migrateLegacyMissKeys() {
   });
 }
 
-const APP_VERSION = 'V24';
+const APP_VERSION = 'V26';
 console.info('Student Study', APP_VERSION);
 
 (async function init() {
@@ -7719,6 +8214,7 @@ console.info('Student Study', APP_VERSION);
   CLASSES = loadClassesForStudent();
  
   await loadLecturesFromDB();
+  await loadBooksFromDB();
  
   activeClassCode = localStorage.getItem(lastClassKey());
   if (!CLASSES.some(c => c.code === activeClassCode)) activeClassCode = CLASSES[0].code;
@@ -7740,6 +8236,7 @@ console.info('Student Study', APP_VERSION);
 
   renderClassRibbon();
   renderStudentPill();
+  renderChapterPicker();
   updateRecScheduleHint();
   renderAll();
   loadSubjectChat();
