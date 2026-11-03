@@ -4014,7 +4014,6 @@ function handleStagedFile(file) {
       const txt = new TextDecoder('latin1').decode(new Uint8Array(buf));
       const pages = (txt.match(/\/Type\s*\/Page(?!s)/g) || []).length;
       if (!pages) return;
-      // the file finishes staging separately; attach the count once its chip exists
       let tries = 0;
       const attach = () => {
         const f = stagedFiles.find(x => x.name === file.name);
@@ -4024,86 +4023,98 @@ function handleStagedFile(file) {
       };
       attach();
     }).catch(() => {});
-  }
 
-  if (isPdf || isImg) {
     const reader = new FileReader();
     reader.onload = (ev) => {
       stagedFiles.push({
         id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
         name: file.name,
-        type: isPdf ? 'pdf' : 'image',
-        mime: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+        type: 'pdf',
+        mime: file.type || 'application/pdf',
         base64: ev.target.result.split(',')[1]
       });
       renderStagedFiles();
       showToast(`Staged: ${file.name}`);
     };
     reader.readAsDataURL(file);
-  } else {
-    // Plain text / notepad
+    return;
+  }
+
+  if (isImg) {
+    // Client-side canvas compression for student handwritten photos
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const cur = document.getElementById('mainPastedNotes').value;
-      document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[Notes: ${file.name}]\n` + ev.target.result;
-      showToast(`Loaded notes: ${file.name}`);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        const maxDim = 2048; // Preserves high DPI stroke resolution for 9th-grade handwriting
+        
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round((height / width) * maxDim); width = maxDim; }
+          else { width = Math.round((width / height) * maxDim); height = maxDim; }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // 88% JPEG quality maintains line edge contrast without compression artifacts
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
+        
+        stagedFiles.push({
+          id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
+          name: file.name,
+          type: 'image',
+          mime: 'image/jpeg',
+          base64: compressedBase64,
+          size: Math.round(compressedBase64.length * 0.75)
+        });
+        renderStagedFiles();
+        showToast(`Staged & optimized: ${file.name}`);
+      };
+      img.src = ev.target.result;
     };
-    reader.readAsText(file);
+    reader.readAsDataURL(file);
+    return;
   }
-}
- 
-function renderStagedFiles() {
-  const container = document.getElementById('stagedFilesContainer');
-  container.innerHTML = '';
-  stagedFiles.forEach(f => {
-    const chip = document.createElement('div');
-    chip.className = 'staged-chip';
-    chip.innerHTML = `
-      <span>${f.role === 'guide' ? '📝' : f.type === 'pdf' ? '📄' : f.type === 'audio' ? '🎧' : '📷'} ${escText(f.name)}${f.size ? ` <small style="color:var(--mut)">${(f.size / 1048576).toFixed(1)} MB</small>` : ''}${f.pages ? ` <small style="color:${f.pages > 30 ? 'var(--bad)' : 'var(--mut)'}">${f.pages} pages</small>` : ''}</span>
-      ${f.type === 'pdf' || f.type === 'image' ? `<select data-file-role="${f.id}" title="What is this file?" style="width:auto;padding:1px 4px;font-size:11.5px">
-        <option value="handout" ${f.role !== 'guide' ? 'selected' : ''}>Handout</option>
-        <option value="guide" ${f.role === 'guide' ? 'selected' : ''}>Study guide (questions)</option>
-      </select>` : ''}
-      <button class="say sm" data-remove-file="${f.id}" style="padding:1px 5px;font-size:11px">✕</button>
-    `;
-    container.appendChild(chip);
-  });
-}
- 
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-remove-file]');
-  if (btn) {
-    stagedFiles = stagedFiles.filter(f => f.id !== btn.dataset.removeFile);
-    renderStagedFiles();
-  }
-});
- 
-document.addEventListener('change', (e) => {
-  const sel = e.target.closest && e.target.closest('[data-file-role]');
-  if (!sel) return;
-  const f = stagedFiles.find(x => x.id === sel.dataset.fileRole);
-  if (f) { f.role = sel.value; renderStagedFiles(); }
-});
 
-function clearStagedFiles() {
-  stagedFiles = [];
-  mainFileInput.value = '';
-  document.getElementById('mainPastedNotes').value = '';
-  document.getElementById('mainPastedNotes').style.height = '';
-  const ng = document.getElementById('notesIsGuide');
-  if (ng) ng.checked = false;
-  renderStagedFiles();
+  // Plain text / notepad
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const cur = document.getElementById('mainPastedNotes').value;
+    document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[Notes: ${file.name}]\n` + ev.target.result;
+    showToast(`Loaded notes: ${file.name}`);
+  };
+  reader.readAsText(file);
 }
  
-/* =====================================================================
-   SECTION 7 - REAL AI INTAKE ENGINE (LABELED SOURCES & STRUCTURED JSON)
-   ===================================================================== */
+
 /* ---------------------------------------------------------------------
-   AUDIO PIPELINE (same approach as Sermon Scribe): decode in the browser,
-   cut into 5-minute 16 kHz mono WAV slices, transcribe one slice at a time.
-   Sequential slices are the throttle: one small request in flight, with
-   retry and backoff. The study guide is then built from the transcript text.
+   DOCUMENT OCR EXTRACTION: Transcribes image/handout text once, upfront.
+   Converts heavy Base64 data into lightweight text for all downstream study/quiz calls.
    --------------------------------------------------------------------- */
+async function extractDocText(fileObj, key, model, onProgress) {
+  if (onProgress) onProgress(`🔍 Reading text from ${fileObj.name}…`);
+  const prompt = `You are an expert OCR and document transcription AI. 
+Transcribe all text on this page or photo verbatim, in logical reading order.
+- Include handwritten notes, margin scribbles, and whiteboard text accurately.
+- Preserve the structure of math problems, equations, bulleted lists, and tables.
+- If there is a diagram, graph, or visual picture, describe it concisely in [square brackets] so no educational context is lost.
+- Mark completely unreadable words as [illegible].
+- Do not output conversational preamble or postscript—output only the extracted text.`;
+
+  const res = await queryGeminiWaterfall([{
+    role: 'user',
+    parts: [
+      { inlineData: { mimeType: fileObj.mime, data: fileObj.base64 } },
+      { text: prompt }
+    ]
+  }], key, model, { temperature: 0.1, maxOutputTokens: 8192 });
+
+  return res.text.trim();
+}
 const SLICE_SECONDS = 300;
 const TARGET_RATE = 16000;
 const INLINE_LIMIT_BYTES = 18 * 1024 * 1024; // stay under Gemini's ~20 MB inline request limit
@@ -4833,12 +4844,20 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
         parts.push({ text: `[${id} · audio: transcript of ${label}]\n${text}` });
         transcriptAll += (transcriptAll ? '\n\n' : '') + `### ${label}\n${text}`;
       });
-      let saved = await idbGetByIndex('lectureFiles', 'byLecture', addTarget.clientId).catch(() => []);
+     let saved = await idbGetByIndex('lectureFiles', 'byLecture', addTarget.clientId).catch(() => []);
       for (const f of saved.filter(x => excluded.has(x.name))) await idbDelete('lectureFiles', f.id);
       saved = saved.filter(x => !excluded.has(x.name));
       saved.forEach(f => {
-        parts.push({ text: `[${addSource(f.kind, f.name)} · ${f.kind}: ${f.name}]` });
-        parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+        const sid = addSource(f.kind, f.name);
+        if (f.extractedText) {
+          // Re-use saved OCR text: 0 MB Base64 payload!
+          parts.push({ text: `[${sid} · ${f.kind}: ${f.name}]\n${f.extractedText}` });
+          sourceTexts[sid] = f.extractedText;
+        } else {
+          // Fallback for legacy files saved before this update
+          parts.push({ text: `[${sid} · ${f.kind}: ${f.name}]` });
+          parts.push({ inlineData: { mimeType: f.mime, data: f.base64 } });
+        }
       });
       // PDFs and photos from before V13 were not kept: carry what the guide extracted from them
       const savedNames = new Set(saved.map(f => f.name));
@@ -4912,16 +4931,34 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       parts.push({ text: `[${audioId} · audio: transcript of ${src.label}]\n${r.text}` });
     }
 
-    // 2. PDFs and photos
+ // 2. PDFs and photos (NOW WITH SEQUENTIAL OCR EXTRACTION)
     const guideInputs = []; // teacher study guides: questions are pulled out after the guide is built
-    docFiles.forEach(f => {
+    for (const f of docFiles) {
+      checkCancel();
       const kind = f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo');
       const sidx = addSource(kind, f.name);
-      const label = { text: `[${sidx} · ${kind}: ${f.name}]` };
-      const data = { inlineData: { mimeType: f.mime, data: f.base64 } };
-      parts.push(label, data);
-      if (kind === 'guide') guideInputs.push({ name: f.name, parts: [label, data] });
-    });
+
+      // Extract text via Gemini OCR if not already cached
+      if (!f.extractedText) {
+        f.extractedText = await extractDocText(f, key, model, setStatus);
+      }
+      checkCancel();
+
+      // Send the clean, lightweight transcribed text downstream instead of raw Base64
+      parts.push({ text: `[${sidx} · ${kind}: ${f.name}]\n${f.extractedText}` });
+      sourceTexts[sidx] = f.extractedText;
+
+      // Only teacher study-guide worksheets keep raw Base64 for the specialized extractStudyGuide parser
+      if (kind === 'guide') {
+        guideInputs.push({
+          name: f.name,
+          parts: [
+            { text: `[${sidx} · ${kind}: ${f.name}]` },
+            { inlineData: { mimeType: f.mime, data: f.base64 } }
+          ]
+        });
+      }
+    }
 
     // 3. Typed or pasted notes
     const notesAreGuide = hasNotes && document.getElementById('notesIsGuide').checked;
@@ -4936,7 +4973,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     }
 
     checkCancel();
-    // Size guard: base64 and text both count toward the request limit
+    // Size guard: now only protects text + any guide worksheet image, preventing false 18MB trips
     const approxBytes = parts.reduce((sum, p) => sum + (p.inlineData ? p.inlineData.data.length : (p.text || '').length), 0);
     if (approxBytes > INLINE_LIMIT_BYTES) {
       throw new Error(`These attachments add up to about ${(approxBytes / 1048576).toFixed(1)} MB, over the ~18 MB request limit. ${addTarget ? 'Try "Make a separate part" instead, or ' : ''}Generate with fewer files at a time.`);
@@ -5089,11 +5126,19 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     // Copies to Student_Library in the background, so 🖨 Original worksheet works on every device
     if (docFiles.length) uploadLectureFiles(targetLecture, docFiles, classCodeAtStart);
 
-    // Keep this run's PDFs and photos on the device with their lecture
+   // Keep this run's PDFs and photos on the device with their lecture
     for (const f of docFiles) {
-      await idbPut('lectureFiles', { id: 'lf_' + Date.now() + Math.random().toString(36).slice(2, 6),
-        lectureClientId: targetLecture.clientId, name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
-        mime: f.mime, base64: f.base64, size: f.size || 0, addedAt: new Date().toISOString() });
+      await idbPut('lectureFiles', {
+        id: 'lf_' + Date.now() + Math.random().toString(36).slice(2, 6),
+        lectureClientId: targetLecture.clientId,
+        name: f.name,
+        kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
+        mime: f.mime,
+        base64: f.base64,
+        extractedText: f.extractedText || '', // Cached OCR text for all future rebuilds
+        size: f.size || 0,
+        addedAt: new Date().toISOString()
+      });
     }
 
     let newDeadlines = 0;
