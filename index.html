@@ -566,8 +566,9 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       <div id="bookProgress" style="font-size:13px;color:var(--mut);margin-top:6px"></div>
     </div>
   </div>
-  <div class="dlg-foot">
-    <button class="btn" id="saveStudentSchedBtn">Save Class</button>
+ <div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
+    <button type="button" class="btn alt" id="deleteLectBtn" style="color:var(--bad)">🗑 Delete Lesson</button>
+    <button class="btn" id="saveEditLectBtn">Save Changes</button>
   </div>
 </dialog>
  
@@ -587,8 +588,8 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <label id="editLectChapterLbl">📖 Chapter (from the course book)
       <select id="editLectChapter"></select>
     </label>
-  </div>
-  <div class="dlg-foot">
+<div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
+    <button type="button" class="btn alt" id="deleteLectBtn" style="color:var(--bad)">🗑 Delete Lesson</button>
     <button class="btn" id="saveEditLectBtn">Save Changes</button>
   </div>
 </dialog>
@@ -7189,7 +7190,56 @@ document.getElementById('saveEditLectBtn').addEventListener('click', async () =>
   renderAll();
   showToast('Lesson updated! Changes will sync to SharePoint.');
 });
- 
+ document.getElementById('deleteLectBtn').addEventListener('click', async () => {
+  if (!editingLectureId) return;
+  const ds = getActiveDataset();
+  const idx = ds.lectures.findIndex(x => x.id === editingLectureId);
+  if (idx < 0) return;
+  const lect = ds.lectures[idx];
+
+  const confirmMsg = `Are you sure you want to delete "${lect.t}"?\n\nThis will remove this lesson part, its notes, questions, and attached files.`;
+  if (!confirm(confirmMsg)) return;
+
+  // 1. Delete from SharePoint list if it was already synced
+  if (lect.spItemId) {
+    try {
+      const token = await getMsalTokenSilent();
+      if (token) {
+        const siteId = await resolveSiteId(token);
+        await fetchGraphWithRetry(
+          `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/Student_Lectures/items/${lect.spItemId}`,
+          { method: 'DELETE' },
+          token
+        );
+      }
+    } catch (e) {
+      console.warn('Could not delete from SharePoint:', e.message);
+    }
+  }
+
+  // 2. Delete from local IndexedDB stores
+  if (lect.clientId) {
+    await idbDelete('lectures', lect.clientId);
+    await idbDeleteByIndex('lectureFiles', 'byLecture', lect.clientId).catch(() => {});
+    localStorage.removeItem(`ss_exchanges_${lect.clientId}`);
+    localStorage.removeItem(`ss_dirty_chat_${lect.clientId}`);
+  }
+
+  // 3. Remove from memory
+  ds.lectures.splice(idx, 1);
+  delete pickedLectures[editingLectureId];
+
+  // 4. Keep the latest remaining tile selected
+  if (!Object.keys(pickedLectures).length && ds.lectures.length) {
+    pickedLectures[ds.lectures[ds.lectures.length - 1].id] = true;
+  }
+
+  document.getElementById('editLectureDlg').close();
+  resetQuiz();
+  renderAll();
+  renderSameDayBanner();
+  showToast('Lesson deleted.');
+});
 let editingClassCode = null;
  
 function openStudentScheduleModal(code) {
