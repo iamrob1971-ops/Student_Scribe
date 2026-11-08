@@ -5232,7 +5232,9 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       includedSessionIds.delete(sx.id);
     }
 
-    clearStagedFiles();
+   clearStagedFiles();
+    document.getElementById('mainPastedNotes').value = ''; // <--- Clears notes box
+    document.getElementById('notesIsGuide').checked = false; // <--- Unchecks the box
     renderPendingRecordings();
     document.getElementById('recTimer').textContent = '0:00 · saves every 10s';
 
