@@ -563,12 +563,11 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
       </div>
       <textarea id="bookPasteBox" rows="5" placeholder="Paste the book or chapter text here, then tap Save pasted text" style="display:none;width:100%;margin-top:6px"></textarea>
       <button type="button" class="say sm" id="savePastedBookBtn" style="display:none;margin-top:4px">💾 Save pasted text</button>
-      <div id="bookProgress" style="font-size:13px;color:var(--mut);margin-top:6px"></div>
+    <div id="bookProgress" style="font-size:13px;color:var(--mut);margin-top:6px"></div>
     </div>
   </div>
- <div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
-    <button type="button" class="btn alt" id="deleteLectBtn" style="color:var(--bad)">🗑 Delete Lesson</button>
-    <button class="btn" id="saveEditLectBtn">Save Changes</button>
+  <div class="dlg-foot">
+    <button class="btn" id="saveStudentSchedBtn">Save Class</button>
   </div>
 </dialog>
  
@@ -588,7 +587,8 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
     <label id="editLectChapterLbl">📖 Chapter (from the course book)
       <select id="editLectChapter"></select>
     </label>
-<div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
+  </div>
+  <div class="dlg-foot" style="display:flex;gap:8px;justify-content:space-between">
     <button type="button" class="btn alt" id="deleteLectBtn" style="color:var(--bad)">🗑 Delete Lesson</button>
     <button class="btn" id="saveEditLectBtn">Save Changes</button>
   </div>
