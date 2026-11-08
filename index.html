@@ -4090,7 +4090,64 @@ function handleStagedFile(file) {
   reader.readAsText(file);
 }
  
+/* =====================================================================
+   STAGED FILES RENDER & CLEAR HELPERS
+   ===================================================================== */
+function renderStagedFiles() {
+  const container = document.getElementById('stagedFilesContainer');
+  if (!container) return;
+  
+  if (!stagedFiles.length) {
+    container.innerHTML = '';
+    return;
+  }
 
+  container.innerHTML = stagedFiles.map((f, idx) => {
+    const icon = f.type === 'pdf' ? '📄' : f.type === 'image' ? '📷' : '🎙️';
+    const pageTxt = f.pages ? ` (${f.pages} pgs)` : '';
+    const isGuide = f.role === 'guide';
+
+    return `
+      <div class="staged-chip" id="chip_${f.id}">
+        <span>${icon} <b>${escText(f.name)}</b>${pageTxt}</span>
+        ${f.type === 'pdf' || f.type === 'image' ? `
+          <label style="font-size:11px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;margin-left:4px">
+            <input type="checkbox" data-chip-guide="${idx}" ${isGuide ? 'checked' : ''} style="width:auto;margin:0">
+            Study guide
+          </label>
+        ` : ''}
+        <button type="button" class="say sm" data-remove-staged="${idx}" style="padding:0 5px;font-size:11px;margin-left:4px" title="Remove file">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function clearStagedFiles() {
+  stagedFiles = [];
+  renderStagedFiles();
+  const fileInput = document.getElementById('mainIntakeFileInput');
+  if (fileInput) fileInput.value = '';
+}
+
+// Event delegation for staged chip interactions (toggle guide or remove)
+document.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-remove-staged]');
+  if (rm) {
+    const idx = parseInt(rm.dataset.removeStaged, 10);
+    stagedFiles.splice(idx, 1);
+    renderStagedFiles();
+  }
+});
+
+document.addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-chip-guide]');
+  if (cb) {
+    const idx = parseInt(cb.dataset.chipGuide, 10);
+    if (stagedFiles[idx]) {
+      stagedFiles[idx].role = cb.checked ? 'guide' : 'handout';
+    }
+  }
+});
 /* ---------------------------------------------------------------------
    DOCUMENT OCR EXTRACTION: Transcribes image/handout text once, upfront.
    Converts heavy Base64 data into lightweight text for all downstream study/quiz calls.
@@ -4806,6 +4863,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   const classCodeAtStart = activeClassCode;
   const sid = getStudentId();
   const readingLevel = getConfig('reading_level') || '5';
+  const model = getStudyModel(); // <--- MOVE THIS HERE so extractDocText can use it
   const sysInst = getConfig('prompt.master', classCodeAtStart) || DEFAULT_SYSTEM_PROMPT;
   const studySystem = `${sysInst}\n\n[LEARNER PROFILE]\n${getProfileText()}`;
 
@@ -4980,7 +5038,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
     }
 
     setStatus('⏳ Building the study guide…');
-    const model = getStudyModel();
+    
     const res = await queryGeminiWaterfall(
       [{ role: 'user', parts: [...parts, { text: buildStudyPrompt(currentClass.name, dateIsoString, readingLevel, sourceList, getAnalogyRule(classCodeAtStart)) }] }],
       key, model, {
