@@ -2545,16 +2545,23 @@ function renderStudyGuide() {
   selected.forEach((l, idx) => {
     const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
  
-    html += renderCoverageBar(l);
-    (l.studyGuides || []).forEach(g => {
-      const total = g.questions.length;
-      const answered = g.questions.filter(q => (q.myAnswer || '').trim()).length;
-      const checked = g.questions.filter(q => q.teacher === 'confirmed' || q.teacher === 'revised').length;
-      html += `<div class="card"><div class="sg-card-head">
-        <h3 style="margin:0">📝 Teacher Study Guide · ${escText(g.name)}</h3>
-        <button class="btn" data-open-sg="${escText(l.clientId)}|${escText(g.id)}">Work on it →</button></div>
-        <p style="margin:6px 0 0;color:var(--mut);font-size:14px">${total} questions · ${answered} answered · ${checked} checked by teacher</p></div>`;
-    });
+   // WITH:
+(l.studyGuides || []).forEach(g => {
+  const total = g.questions.length;
+  const answered = g.questions.filter(q => (q.myAnswer || '').trim()).length;
+  const checked = g.questions.filter(q => q.teacher === 'confirmed' || q.teacher === 'revised').length;
+  html += `<div class="card">
+    <div class="sg-card-head">
+      <h3 style="margin:0">📝 Teacher Study Guide · ${escText(g.name)}</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" data-open-sg="${escText(l.clientId)}|${escText(g.id)}|written">✍️ Written</button>
+        <button class="btn alt" data-open-sg="${escText(l.clientId)}|${escText(g.id)}|mc">🎯 Multiple Choice</button>
+        <button class="btn alt" data-open-sg="${escText(l.clientId)}|${escText(g.id)}|mixed">🎲 Mixed Drill</button>
+      </div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--mut);font-size:14px">${total} questions · ${answered} answered · ${checked} checked by teacher</p>
+  </div>`;
+});
  
     html += `
       <div class="card">
@@ -3094,10 +3101,10 @@ Otherwise, answer his follow-up about this question. If he got it wrong, help hi
 }
 
 /* =====================================================================
-   TEACHER STUDY GUIDE: he types his answer; Check, Hint and the read-only ⓘ suggested
-   answer help; teacher check marks; parent fill behind the PIN; three print layouts.
+   TEACHER STUDY GUIDE: Written, Multiple Choice & Mixed Practice Drill Modes
    ===================================================================== */
 let sgState = null; // { clientId, guideId, idx }
+let sgMode = 'written'; // 'written' | 'mc' | 'mixed'
 const sgInfoOpen = new Set(JSON.parse(localStorage.getItem('ss_sg_info_open') || '[]'));
 let sgSaveTimer = null;
 let sgBusy = false;
@@ -3112,7 +3119,70 @@ function sgFind() {
 
 function sgQid(g, q) { return `${g.id}:${q.id}`; }
 
-function openStudyGuide(clientId, guideId, idx = 0) {
+const SG_MC_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    format: { type: 'STRING', enum: ['mc', 'tf'] },
+    options: { type: 'ARRAY', items: { type: 'STRING' } },
+    correct: { type: 'INTEGER' },
+    feedback: { type: 'STRING' }
+  },
+  required: ['format', 'options', 'correct', 'feedback'],
+  propertyOrdering: ['format', 'options', 'correct', 'feedback']
+};
+
+async function generateSGMC(l, questionText, mode = 'mc') {
+  const key = localStorage.getItem('ss_gemini_key') || '';
+  const model = getStudyModel();
+  const formatInstruction = mode === 'tf'
+    ? 'Format must be "tf": options must be exactly ["True", "False"]. Reword into a clear statement to evaluate as True or False.'
+    : mode === 'mixed'
+    ? 'Choose the most educational format: either "mc" (4 plausible choices) or "tf" (options ["True", "False"]).'
+    : 'Format must be "mc": options must be exactly 4 plausible choices, one correct and three educational distractors from this subject.';
+
+  const prompt = `Convert this teacher study guide question into an interactive drill item for a high school student.
+Question: "${questionText}"
+
+${formatInstruction}
+Rules:
+1. One option is strictly correct based on the class material. Distractors must be plausible and relevant from this subject (never joke or giveaway options).
+2. "correct": 0-based index of the correct option.
+3. "feedback": 1-2 clear, helpful sentences explaining why the correct answer is right without praising.
+4. Keep reading level mature but clear (Grade 5-8).`;
+
+  const res = await queryGeminiWaterfall(
+    [{ role: 'user', parts: [{ text: prompt }] }],
+    key, model, {
+      system: buildCoachSystem([l], { question: questionText }),
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+      responseSchema: SG_MC_SCHEMA
+    }
+  );
+
+  const parsed = parseModelJson(res.text);
+  let options = arrOf(parsed.options).map(strOf);
+  let correct = Number(parsed.correct) || 0;
+  const format = parsed.format || (options.length === 2 ? 'tf' : 'mc');
+
+  // Shuffle multiple-choice options so the correct answer is not always in the first position
+  if (format === 'mc' && options.length > 2) {
+    const correctText = options[correct];
+    options = fisherYates(options);
+    correct = options.indexOf(correctText);
+  }
+
+  return {
+    format,
+    options: options.length >= 2 ? options : ['Option A', 'Option B', 'Option C', 'Option D'],
+    correct: Math.max(0, Math.min(correct, options.length - 1)),
+    feedback: strOf(parsed.feedback) || 'Correct answer.'
+  };
+}
+
+function openStudyGuide(clientId, guideId, idx = 0, mode = 'written') {
+  sgMode = mode || 'written';
   sgState = { clientId, guideId, idx };
   navigateTo('sg');
   renderStudyGuideScreen();
@@ -3120,7 +3190,11 @@ function openStudyGuide(clientId, guideId, idx = 0) {
 
 document.addEventListener('click', (e) => {
   const o = e.target.closest('[data-open-sg]');
-  if (o) { const [c, g] = o.dataset.openSg.split('|'); openStudyGuide(c, g, 0); return; }
+  if (o) {
+    const parts = o.dataset.openSg.split('|');
+    openStudyGuide(parts[0], parts[1], 0, parts[2] || 'written');
+    return;
+  }
   const oq = e.target.closest('[data-open-sgq]');
   if (oq) {
     document.getElementById('chatHistoryDrawer').classList.remove('open');
@@ -3131,11 +3205,54 @@ document.addEventListener('click', (e) => {
     }
     showToast('That study guide is not on this device yet. Try Sync.');
   }
+
+  // Click handlers for in-screen Multiple Choice interactions
+  if (!document.getElementById('s-sg') || !document.getElementById('s-sg').classList.contains('on')) return;
+  const t = e.target;
+  const modeBtn = t.closest('[data-sg-mode]');
+  if (modeBtn) {
+    sgMode = modeBtn.dataset.sgMode;
+    renderStudyGuideScreen();
+    return;
+  }
+  const sgOpt = t.closest('[data-sg-opt]');
+  if (sgOpt) {
+    const { l, q } = sgFind();
+    if (q && q.mc && q.mc.picked === undefined) {
+      q.mc.picked = parseInt(sgOpt.dataset.sgOpt, 10);
+      q.updatedAt = new Date().toISOString();
+      persistLectureObj(l);
+      renderStudyGuideScreen();
+    }
+    return;
+  }
+  if (t.closest('#sgRetryMcBtn')) {
+    const { l, q } = sgFind();
+    if (q && q.mc) {
+      delete q.mc.picked;
+      q.updatedAt = new Date().toISOString();
+      persistLectureObj(l);
+      renderStudyGuideScreen();
+    }
+    return;
+  }
+  if (t.closest('#sgCopyMcBtn')) {
+    const { l, q } = sgFind();
+    if (q && q.mc) {
+      const best = q.mc.options[q.mc.correct];
+      q.myAnswer = `${best}. ${q.mc.feedback || ''}`.trim();
+      q.updatedAt = new Date().toISOString();
+      persistLectureObj(l);
+      sgMode = 'written';
+      renderStudyGuideScreen();
+      showToast('Copied into your written answer box!');
+    }
+    return;
+  }
 });
 
 function sgFeed(l, g, q) {
   const qid = sgQid(g, q);
-  // After Start over the panel opens fresh; older exchanges stay in History
   const since = g.resetAt || '';
   const list = loadExchangesForTarget(l.clientId).filter(ex => ex.context === 'guide' && ex.qid === qid && (!since || (ex.ts || '') > since));
   if (!list.length) return `<p class="hint">Write your answer, then tap ✓ Check my answer. Stuck? Try 💡 Hint.</p>`;
@@ -3150,11 +3267,86 @@ function renderStudyGuideScreen() {
   if (sgState.review) { renderReviewAll(l, g); return; }
   const i = sgState.idx, total = g.questions.length;
   const open = sgInfoOpen.has(sgQid(g, q));
+
+  // Question navigation dots: reflects correct/incorrect in quiz modes, or answered in written mode
   const dots = g.questions.map((x, k) => {
-    const cls = [x.teacher === 'confirmed' ? 'ok' : x.teacher === 'revised' ? 'rev' : (x.myAnswer || '').trim() ? 'ans' : '', k === i ? 'cur' : '',
-      (x.sa || (x.suggested || '').trim()) ? 'has-sa' : ''].join(' ');
+    const isMcAnswered = x.mc && x.mc.picked !== undefined;
+    const isMcCorrect = isMcAnswered && x.mc.picked === x.mc.correct;
+    const cls = [
+      x.teacher === 'confirmed' ? 'ok' : x.teacher === 'revised' ? 'rev' :
+      (sgMode !== 'written' && isMcAnswered) ? (isMcCorrect ? 'ok' : 'rev') :
+      (x.myAnswer || '').trim() ? 'ans' : '',
+      k === i ? 'cur' : '',
+      (x.sa || (x.suggested || '').trim()) ? 'has-sa' : ''
+    ].join(' ');
     return `<button class="sg-dot ${cls}" data-sg-go="${k}" title="Question ${x.n}">${x.n}</button>`;
   }).join('');
+
+  // Auto-generate MC options on-demand if the student is in MC or Mixed mode
+  if (sgMode !== 'written' && !q.mc && !q._mcLoading) {
+    q._mcLoading = true;
+    const targetMode = sgMode === 'mixed' ? (q.n % 2 === 0 ? 'tf' : 'mc') : 'mc';
+    generateSGMC(l, g.instructions ? `${q.text}\n(Directions: ${g.instructions})` : q.text, targetMode)
+      .then(mc => {
+        q.mc = mc;
+        delete q._mcLoading;
+        q.updatedAt = new Date().toISOString();
+        persistLectureObj(l);
+        if (sgFind().q === q) renderStudyGuideScreen();
+      })
+      .catch(err => {
+        delete q._mcLoading;
+        showToast('Could not build quiz options: ' + err.message);
+        if (sgFind().q === q) renderStudyGuideScreen();
+      });
+  }
+
+  // Interactive Question Area: switches between Textarea and Multiple Choice
+  let interactiveBody = '';
+  if (sgMode === 'written') {
+    interactiveBody = `
+      <label style="font-weight:600;font-size:14px">Your answer (in your own words)
+        <textarea id="sgAnswer" class="grow" rows="3" placeholder="Type your answer here." style="width:100%;margin-top:4px">${escText(q.myAnswer || '')}</textarea>
+      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn" id="sgCheckBtn">✓ Check my answer</button>
+      </div>
+    `;
+  } else if (q._mcLoading || !q.mc) {
+    interactiveBody = `
+      <div style="padding:26px 14px;text-align:center;color:var(--mut)">
+        <span class="spin"></span> Creating ${sgMode === 'mixed' ? 'interactive' : 'multiple choice'} drill question…
+      </div>
+    `;
+  } else {
+    const answered = q.mc.picked !== undefined;
+    const isCorrect = answered && q.mc.picked === q.mc.correct;
+    interactiveBody = `
+      <div style="font-size:12.5px;color:var(--mut);margin-bottom:6px">
+        ${q.mc.format === 'tf' ? '⚖️ True or False:' : '🎯 Select the best answer:'}
+      </div>
+      <div class="sg-mc-options">
+        ${q.mc.options.map((opt, idx) => {
+          let cls = '';
+          if (answered && idx === q.mc.correct) cls = 'ok';
+          else if (answered && idx === q.mc.picked) cls = 'no';
+          return `<button class="opt ${cls}" data-sg-opt="${idx}" ${answered ? 'disabled' : ''}><b>${q.mc.format === 'tf' ? '' : quizLetter(idx) + ') '}</b>${escText(opt)}</button>`;
+        }).join('')}
+      </div>
+      ${answered ? `
+        <div class="answer-panel">
+          <div class="verdict" style="color:${isCorrect ? 'var(--ok)' : 'var(--bad)'}">
+            ${isCorrect ? '✔ Correct!' : `Not quite. The correct answer is <b>${escText(q.mc.options[q.mc.correct])}</b>.`}
+          </div>
+          ${q.mc.feedback ? `<div style="margin-top:4px">${applyBionic(escText(q.mc.feedback))}</div>` : ''}
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+            ${!isCorrect ? '<button class="say sm" id="sgRetryMcBtn">↺ Try again</button>' : ''}
+            <button class="say sm" id="sgCopyMcBtn">✍️ Copy to My Answer &amp; Switch to Written</button>
+          </div>
+        </div>
+      ` : ''}
+    `;
+  }
 
   box.innerHTML = `
     <div class="row" style="flex-wrap:wrap;gap:8px">
@@ -3173,16 +3365,22 @@ function renderStudyGuideScreen() {
     ${g.instructions ? `<div class="banner" style="margin:6px 0 0;font-size:14px">📋 <b>Directions:</b> ${escText(g.instructions)}</div>` : ''}
     <div id="sgFillProgress"></div>
     <div class="sg-dots">${dots}</div>
+
+    <!-- Mode Switcher -->
+    <div style="display:flex;gap:6px;align-items:center;margin:4px 0 8px">
+      <span style="font-size:13px;font-weight:600;color:var(--mut)">Mode:</span>
+      <button class="say sm ${sgMode === 'written' ? 'on' : ''}" data-sg-mode="written">✍️ Written</button>
+      <button class="say sm ${sgMode === 'mc' ? 'on' : ''}" data-sg-mode="mc">🎯 Multiple Choice</button>
+      <button class="say sm ${sgMode === 'mixed' ? 'on' : ''}" data-sg-mode="mixed">🎲 Mixed (MC &amp; T/F)</button>
+    </div>
+
     <div class="quiz-layout">
       <div class="card">
         <h3 style="font-size:16px"><span id="sgQText">${q.n}. ${applyBionic(escText(q.text))}</span> <button class="say btn-speak" data-target="sgQText">🔊</button></h3>
-        <label style="font-weight:600;font-size:14px">Your answer (in your own words)
-          <textarea id="sgAnswer" class="grow" rows="3" placeholder="Type your answer here." style="width:100%;margin-top:4px">${escText(q.myAnswer || '')}</textarea>
-        </label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="btn" id="sgCheckBtn">✓ Check my answer</button>
-        </div>
-        <div class="sg-teacher">
+        
+        ${interactiveBody}
+
+        <div class="sg-teacher" style="margin-top:14px">
           <span>Teacher check:</span>
           <button class="say sm ${q.teacher === 'none' ? 'on' : ''}" data-sg-teacher="none">Not checked yet</button>
           <button class="say sm ${q.teacher === 'confirmed' ? 'on' : ''}" data-sg-teacher="confirmed">✓ Teacher confirmed</button>
@@ -3218,14 +3416,16 @@ function renderStudyGuideScreen() {
     </div>`;
 
   const ans = document.getElementById('sgAnswer');
-  autoGrow(ans);
-  ans.addEventListener('paste', (e) => { e.preventDefault(); showToast('Type it in your own words. That is how it sticks.'); });
-  ans.addEventListener('input', () => {
-    q.myAnswer = ans.value;
-    q.updatedAt = new Date().toISOString();
-    clearTimeout(sgSaveTimer);
-    sgSaveTimer = setTimeout(() => persistLectureObj(l), 700);
-  });
+  if (ans) {
+    autoGrow(ans);
+    ans.addEventListener('paste', (e) => { e.preventDefault(); showToast('Type it in your own words. That is how it sticks.'); });
+    ans.addEventListener('input', () => {
+      q.myAnswer = ans.value;
+      q.updatedAt = new Date().toISOString();
+      clearTimeout(sgSaveTimer);
+      sgSaveTimer = setTimeout(() => persistLectureObj(l), 700);
+    });
+  }
   const tn = document.getElementById('sgTeacherNote');
   if (tn) tn.addEventListener('input', () => {
     q.teacherNote = tn.value;
