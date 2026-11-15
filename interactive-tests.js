@@ -43,7 +43,10 @@
     const interaction = /\b(interactive|editable|fill[ -]?in|fill (out|in)|type (in|my|the)|enter (my|the)|practice test|worksheet|tabular)\b/i.test(q);
     const assessment = /\b(test|table|tabular|matrix|worksheet|quiz|exercise|practice|order number|chronolog|key people)\b/i.test(q);
     const instruction = /\b(create|make|build|generate|give|design|set up|turn|format|want|will|let me)\b/i.test(q);
-    return interaction && assessment && instruction;
+    const tableIntent = /\b(table|tabular|matrix|grid|cells|columns|rows)\b/i.test(q) ||
+      /\b(order number|chronological order|key people)\b/i.test(q) ||
+      (/\binteractive\b/i.test(q) && /\b(fill|type|enter|worksheet)\b/i.test(q));
+    return interaction && assessment && instruction && tableIntent;
   }
 
   const testSchema = {
@@ -177,7 +180,7 @@ User's test request: ${text}`;
     const duplicates = {};
     for (const c of d.columns) if (c.unique) {
       const counts = {};
-      d.rows.forEach(r => { const v = clean(fieldCell(test, r.id, c.id)); if (v) counts[v] = (counts[v] || 0) + 1; });
+      d.rows.forEach(r => { const raw = clean(fieldCell(test, r.id, c.id)); const v = c.kind === 'number' && raw ? String(Number(raw)) : raw; if (v) counts[v] = (counts[v] || 0) + 1; });
       duplicates[c.id] = counts;
     }
     for (const r of d.rows) {
@@ -185,7 +188,7 @@ User's test request: ${text}`;
       for (const c of d.columns) {
         const expected = r.key[c.id] || '';
         const entered = fieldCell(test, r.id, c.id);
-        const duplicate = !!(c.unique && entered.trim() && duplicates[c.id][clean(entered)] > 1);
+        const duplicate = !!(c.unique && entered.trim() && duplicates[c.id][c.kind === 'number' ? String(Number(entered)) : clean(entered)] > 1);
         let points = null;
         if (expected.trim()) {
           points = c.kind === 'number' ? (Number(entered) === Number(expected) && entered.trim() !== '' ? 1 : 0)
@@ -220,7 +223,7 @@ User's test request: ${text}`;
     let results = '';
     if (active) {
       const grade = active.grade;
-      results = `<div class="it-result"><b>Checked attempt ${test.attempts.length}</b> · ${grade.max ? `${grade.earned}/${grade.max} points on verified fields` : 'No verified answer key available'}
+      results = `<div class="it-result"><b>Checked attempt ${test.attempts.findIndex(a => a.id === active.id) + 1}</b> · ${grade.max ? `${grade.earned}/${grade.max} points on verified fields` : 'No verified answer key available'}
         <div class="it-note">✓ Correct · ◐ Partial · ✕ Review · ◇ Not graded (no verified key).</div>
         ${def.rows.map(r => {
           const flags = def.columns.map(c => {
@@ -280,6 +283,10 @@ User's test request: ${text}`;
     if (!state) return;
     const n = state.definition.rows.reduce((count, r) => count + state.definition.columns.filter(c => fieldCell(state, r.id, c.id).trim()).length, 0);
     outer.querySelector('.it-status').textContent = `${n}/${state.definition.rows.length * state.definition.columns.length} cells filled · Saved locally; SharePoint sync pending`;
+    // Once edited, the visible old grade is no longer the grade for these answers.
+    const result = outer.querySelector('.it-result');
+    if (result) result.remove();
+    outer.querySelectorAll('.it-review').forEach(note => note.remove());
   });
 
   document.addEventListener('click', event => {
