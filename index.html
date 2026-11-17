@@ -4042,7 +4042,8 @@ const lectureUploadTasks = new Map();
 
 async function uploadLectureFiles(l, docFiles, classCode) {
   const incoming = docFiles.map(f => ({
-    name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
+    name: f.name, originalName: f.originalName || f.name,
+    kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
     mime: f.mime, path: [getStudentId(), classCode, 'lectures', l.id, f.name.replace(/[\\/]/g, '_')].join('/'),
     status: 'pending'
   }));
@@ -5918,7 +5919,7 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       await idbPut('lectureFiles', {
         id: 'lf_' + Date.now() + Math.random().toString(36).slice(2, 6),
         lectureClientId: targetLecture.clientId,
-        name: f.name,
+        name: f.name, originalName: f.originalName || f.name,
         kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
         mime: f.mime,
         base64: f.base64,
