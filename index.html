@@ -7964,13 +7964,21 @@ async function uploadToLibrary(path, blob, token, onProgress) {
   }
 }
 
+// Graph /content redirects and can fail browser CORS preflights with Authorization.
+// Fetch metadata first and then download from its short-lived preauthenticated URL.
 async function downloadFromLibrary(path, token) {
   const driveId = await getLibraryDrive(token);
-  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}:/content`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) return null;
-  return await r.blob();
+  const metaUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}?${new URLSearchParams({ '$select': 'id,name,@microsoft.graph.downloadUrl' })}`;
+  const response = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`SharePoint lookup failed (${response.status})`);
+  const item = await response.json();
+  const url = item['@microsoft.graph.downloadUrl'];
+  if (!url) throw new Error('SharePoint did not return a file download URL.');
+  const file = await fetch(url);
+  if (!file.ok) throw new Error(`SharePoint file download failed (${file.status})`);
+  return await file.blob();
 }
-
 async function uploadJsonToLibrary(path, obj, token) {
   await uploadToLibrary(path, new Blob([JSON.stringify(obj)], { type: 'application/json' }), token);
 }
