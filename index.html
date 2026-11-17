@@ -4825,7 +4825,7 @@ function renderStagedFiles() {
 
     return `
       <div class="staged-chip" id="chip_${f.id}">
-        <span>${icon} <b>${escText(f.name)}</b>${pageTxt}</span>
+        <span ${f.originalName && f.originalName !== f.name ? `title="Original filename: ${escSourceAttr(f.originalName)}"` : ''}>${icon} <b>${escText(f.name)}</b>${pageTxt}</span>
         ${f.type === 'pdf' || f.type === 'image' ? `
           <label style="font-size:11px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;margin-left:4px">
             <input type="checkbox" data-chip-guide="${idx}" ${isGuide ? 'checked' : ''} style="width:auto;margin:0">
@@ -5525,6 +5525,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
   }
   const btn = document.getElementById('generateIntakeBtn');
   if (btn.disabled) return;
+  if (intakePendingNames.size) {
+    showToast('Images or PDFs are still loading. Generate after they appear in the Intake file list.');
+    return;
+  }
 
   // Rebuild mode (Remove source / Add correction): no new inputs, rebuild one lecture from what it keeps
   const rb = pendingRebuild;
@@ -5591,6 +5595,10 @@ document.getElementById('generateIntakeBtn').addEventListener('click', async () 
       ? sameDayLectures().find(l => l.clientId === sameDayChoice) || null : null;
   const excluded = rb ? rb.exclude : new Set();
   const chapterRef = rb ? null : parseChapterValue((document.getElementById('intakeChapter') || {}).value || '', activeClassCode);
+
+  // The target can change after file staging. Recheck every original filename
+  // against the selected lesson before sending to Gemini or saving to SharePoint.
+  if (!rb && docFiles.length) finalizeIntakeNames(docFiles, addTarget);
 
   try {
     const parts = [];
