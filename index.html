@@ -2534,6 +2534,10 @@ function getSourceBadgeHtml(src) {
 const SOURCE_LABELS = { audio: '🎙️ Audio', pdf: '📄 PDF', photo: '📷 Photo', notes: '✍️ Notes' };
 
 // Coverage compares what was attached with what the guide's items are actually tagged with
+function escSourceAttr(v) {
+  return escText(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function isViewableSourceKind(kind) {
   return kind === 'pdf' || kind === 'photo' || kind === 'guide';
 }
@@ -2556,9 +2560,9 @@ function getLectureSourceRows(l) {
   return rows;
 }
 
-function sourceOpenButton(l, f) {
+function sourceOpenButton(l, f, withName = false) {
   if (!l || !l.clientId || l.isDemo || !isViewableSourceKind(f.kind)) return '';
-  return `<button type="button" class="say sm" data-open-source="${escText(l.clientId)}" data-source-name="${escText(f.name)}" title="View original source">👁 View</button>`;
+  return `<button type="button" class="say sm" data-open-source="${escSourceAttr(l.clientId)}" data-source-name="${escSourceAttr(f.name)}" title="View original source">👁 ${withName ? escText(f.name) : 'View'}</button>`;
 }
 
 // Includes filenames from the lecture's source coverage and original-file manifest.
@@ -2571,12 +2575,12 @@ function renderCoverageBar(l) {
     const status = f.used === true ? 'Used in study guide' : f.covered === true ? 'Covered by another source'
       : f.used === false ? 'Not used in generated guide' : '';
     const canRemove = l.clientId && !l.isDemo;
-    const remove = canRemove ? `<button class="say sm" data-remove-src="${escText(l.clientId)}" data-src-label="${escText(f.name)}" title="Remove source and rebuild">✕</button>` : '';
+    const remove = canRemove ? `<button class="say sm" data-remove-src="${escSourceAttr(l.clientId)}" data-src-label="${escSourceAttr(f.name)}" title="Remove source and rebuild">✕</button>` : '';
     h += `<div class="source-file-row"><span>${SOURCE_ICONS[f.kind] || '📎'}</span><span class="source-file-name"><strong>${escText(f.name)}</strong>${status ? `<span class="source-file-status"> · ${escText(status)}</span>` : ''}</span>${sourceOpenButton(l, f)}${remove}</div>`;
   });
   h += '</div>';
   if (cov && Array.isArray(cov.files) && cov.files.length && l.clientId && !l.isDemo) {
-    h += `<button class="say sm" data-add-correction="${escText(l.clientId)}" style="margin-top:9px">✎ Add correction</button>`;
+    h += `<button class="say sm" data-add-correction="${escSourceAttr(l.clientId)}" style="margin-top:9px">✎ Add correction</button>`;
   }
   if (cov && cov.missingSections && cov.missingSections.length) h += `<p class="source-file-status">⚠️ No notes for: ${escText(cov.missingSections.join(', '))}</p>`;
   if (cov && cov.failedSlices) h += `<p class="source-file-status">⚠️ ${cov.failedSlices} audio segment(s) could not be transcribed</p>`;
@@ -2591,7 +2595,7 @@ function renderQuizSourceButtons(cur) {
   if (!files.length) return '';
   const matching = files.find(f => f.id && f.id === cur.sourceId);
   const ordered = matching ? [matching, ...files.filter(f => f !== matching)] : files;
-  return `<div class="quiz-source-list"><span>📎 Source files:</span>${ordered.map(f => sourceOpenButton(l, f)).join('')}</div>`;
+  return `<div class="quiz-source-list"><span>📎 Source files:</span>${ordered.map(f => sourceOpenButton(l, f, true)).join('')}</div>`;
 }
 
 function renderStudyGuide() {
@@ -7147,6 +7151,17 @@ function mergeLectureRecs(localRec, remoteRec) {
   base.notesEntries = unionBy(notesEntriesOf(L), notesEntriesOf(R), e => e.id).sort((x, y) => String(x.ts).localeCompare(String(y.ts)));
   base.notesText = base.notesEntries.map(e => e.text).join('\n\n');
   base.studyGuides = mergeStudyGuides(L.studyGuides, R.studyGuides);
+
+  // Never lose original-file references when two devices edit the same lecture.
+  // A completed upload wins over a pending manifest for the same file.
+  const libraryFiles = new Map();
+  [...(R.libFiles || []), ...(L.libFiles || [])].forEach(f => {
+    const key = String(f.path || f.name || '').toLowerCase();
+    if (!key) return;
+    const old = libraryFiles.get(key);
+    if (!old || (f.status === 'uploaded' && old.status !== 'uploaded')) libraryFiles.set(key, f);
+  });
+  base.libFiles = [...libraryFiles.values()];
 
   const rec = { ...localRec };
   rec.studyPayload = JSON.stringify(base);
