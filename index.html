@@ -4334,6 +4334,10 @@ async function openSourceFile(clientId, filename) {
 document.getElementById('sourceViewerClose').addEventListener('click', () => document.getElementById('sourceViewerDlg').close());
 document.getElementById('sourceViewerDlg').addEventListener('close', () => {
   sourceViewerRequest++;
+  if (sourceViewerExpanded && sourceViewerSavedRect) {
+    const rect = sourceViewerSavedRect;
+    setSourceViewerRect(rect.left, rect.top, rect.width, rect.height);
+  }
   sourceViewerExpanded = false;
   sourceViewerSavedRect = null;
   const d = document.getElementById('sourceViewerDlg');
