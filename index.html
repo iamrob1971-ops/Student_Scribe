@@ -3985,25 +3985,109 @@ async function uploadLectureFiles(l, docFiles, classCode) {
 
 async function sgOpenOriginal() {
   const { l, g } = sgFind();
-  const files = await idbGetByIndex('lectureFiles', 'byLecture', l.clientId).catch(() => []);
-  let f = files.find(x => x.name === g.name) || files.find(x => x.kind === 'guide');
-  let blob = null;
-  if (f) {
-    const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
-    blob = new Blob([bytes], { type: f.mime });
-  } else {
-    // not on this device: fetch it from Student_Library
-    const lf = (l.libFiles || []).find(x => x.name === g.name) || (l.libFiles || []).find(x => x.kind === 'guide');
-    if (!lf) { showToast('This worksheet was added before files were kept in Student_Library, or was typed in.'); return; }
-    showToast('Opening from Student_Library…');
-    try { const b = await downloadFromLibrary(lf.path, await getMsalToken()); if (b) blob = new Blob([b], { type: lf.mime || b.type }); } catch (e) {}
-    if (!blob) { showToast('Could not open it from Student_Library. Try Sync, then again.'); return; }
-  }
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w) showToast('Allow pop-ups to open the worksheet');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  if (l && g) await openSourceFile(l.clientId, g.name);
 }
+
+/* Original-file viewer shared by Study Guide, Teacher Guide and Practice Drill.
+   Use IndexedDB for this device, Student_Library for files on other devices. */
+let sourceViewerRequest = 0;
+let sourceViewerObjectUrl = null;
+
+function clearSourceViewerUrl() {
+  if (sourceViewerObjectUrl) URL.revokeObjectURL(sourceViewerObjectUrl);
+  sourceViewerObjectUrl = null;
+}
+
+function displaySourceBlob(blob, filename, mime) {
+  const body = document.getElementById('sourceViewerBody');
+  const btn = document.getElementById('sourceViewerNewTab');
+  clearSourceViewerUrl();
+  const type = mime || blob.type || '';
+  const name = String(filename || '').toLowerCase();
+  const finalBlob = type && blob.type !== type ? new Blob([blob], { type }) : blob;
+  sourceViewerObjectUrl = URL.createObjectURL(finalBlob);
+  body.replaceChildren();
+  if (type === 'application/pdf' || name.endsWith('.pdf')) {
+    const frame = document.createElement('iframe');
+    frame.title = filename;
+    frame.src = sourceViewerObjectUrl;
+    body.appendChild(frame);
+  } else if (type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(name)) {
+    const image = document.createElement('img');
+    image.alt = filename;
+    image.src = sourceViewerObjectUrl;
+    body.appendChild(image);
+  } else if (type.startsWith('text/') || /\.(txt|md|csv)$/i.test(name)) {
+    const pre = document.createElement('pre');
+    pre.textContent = 'Opening text…';
+    body.appendChild(pre);
+    finalBlob.text().then(t => { if (pre.isConnected) pre.textContent = t; });
+  } else {
+    const msg = document.createElement('p');
+    msg.textContent = 'This file cannot be previewed here. Use Open in new tab.';
+    body.appendChild(msg);
+  }
+  btn.disabled = false;
+  btn.onclick = () => {
+    // A separate URL keeps the external tab alive after this preview is closed.
+    const url = URL.createObjectURL(finalBlob);
+    const tab = window.open(url, '_blank');
+    if (tab) tab.opener = null;
+    else showToast('Allow pop-ups to open this source in a new tab.');
+    setTimeout(() => URL.revokeObjectURL(url), 15 * 60 * 1000);
+  };
+}
+
+async function openSourceFile(clientId, filename) {
+  const dlg = document.getElementById('sourceViewerDlg');
+  const body = document.getElementById('sourceViewerBody');
+  const openBtn = document.getElementById('sourceViewerNewTab');
+  const request = ++sourceViewerRequest;
+  openBtn.disabled = true;
+  openBtn.onclick = null;
+  document.getElementById('sourceViewerTitle').textContent = '📎 ' + filename;
+  body.textContent = 'Loading original source…';
+  if (!dlg.open) dlg.showModal();
+  try {
+    const l = findLectureByClientId(clientId);
+    if (!l) throw new Error('This lecture is not available on this device. Try Sync.');
+    const saved = await idbGetByIndex('lectureFiles', 'byLecture', clientId);
+    const local = saved.find(f => f.name === filename && f.base64);
+    let blob, mime = (local && local.mime) || '';
+    if (local) {
+      const bytes = Uint8Array.from(atob(local.base64), c => c.charCodeAt(0));
+      blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+    } else {
+      const lib = (l.libFiles || []).find(f => f.name === filename);
+      const record = (await idbGetAll('lectures')).find(r => r.clientId === clientId);
+      const classCode = (record && record.classCode) || activeClassCode;
+      const path = (lib && lib.path) ||
+        [l.studentId || getStudentId(), classCode, 'lectures', l.id, filename.replace(/[\\/]/g, '_')].join('/');
+      const token = await getMsalToken();
+      blob = await downloadFromLibrary(path, token);
+      mime = (lib && lib.mime) || '';
+      if (!blob) throw new Error('Original not found in Student_Library. It may have been added before originals were saved, or the upload may still be pending on the other device.');
+    }
+    if (request !== sourceViewerRequest || !dlg.open) return;
+    displaySourceBlob(blob, filename, mime);
+  } catch (err) {
+    if (request !== sourceViewerRequest || !dlg.open) return;
+    body.textContent = 'Could not open this source: ' + err.message;
+    console.warn('Source viewer:', err);
+  }
+}
+
+document.getElementById('sourceViewerClose').addEventListener('click', () => document.getElementById('sourceViewerDlg').close());
+document.getElementById('sourceViewerDlg').addEventListener('close', () => {
+  sourceViewerRequest++;
+  clearSourceViewerUrl();
+  document.getElementById('sourceViewerBody').replaceChildren();
+  document.getElementById('sourceViewerNewTab').disabled = true;
+});
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-open-source]');
+  if (btn) openSourceFile(btn.dataset.openSource, btn.dataset.sourceName);
+});
 
 function sgSuggestedPrintHtml(q) {
   if (q.sa) {
