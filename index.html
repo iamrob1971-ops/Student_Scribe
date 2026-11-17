@@ -4634,6 +4634,68 @@ mainFileInput.addEventListener('change', (e) => {
  
 const AUDIO_EXT = /\.(webm|mp3|m4a|wav|ogg|aac|mp4|flac)$/i;
 
+// Source filenames are SharePoint path keys within a lecture. Preserve the first
+// name and suffix collisions instead of replacing earlier uploaded images/PDFs.
+const intakePendingNames = new Set();
+
+function intakeCurrentAddTarget() {
+  if (!sameDayChoice || sameDayChoice === 'new') return null;
+  return sameDayLectures().find(l => l.clientId === sameDayChoice) || null;
+}
+
+function intakeExistingFileNames(lecture) {
+  const names = new Set();
+  if (!lecture) return names;
+  (lecture.libFiles || []).forEach(f => { if (f.name) names.add(String(f.name).toLowerCase()); });
+  ((lecture.coverage && lecture.coverage.files) || []).forEach(f => {
+    if ((f.kind === 'pdf' || f.kind === 'photo' || f.kind === 'guide') && f.label)
+      names.add(String(f.label).toLowerCase());
+  });
+  (lecture.studyGuides || []).forEach(g => { if (g.name) names.add(String(g.name).toLowerCase()); });
+  return names;
+}
+
+function uniqueIntakeFilename(original, taken) {
+  const name = String(original || 'unnamed').replace(/[\\/]/g, '_');
+  if (!taken.has(name.toLowerCase())) return name;
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  const numbered = base.match(/^(.*) \((\d+)\)$/);
+  const stem = numbered ? numbered[1] : base;
+  let n = numbered ? Math.max(2, Number(numbered[2]) + 1) : 2;
+  let candidate;
+  do { candidate = `${stem} (${n++})${ext}`; }
+  while (taken.has(candidate.toLowerCase()));
+  return candidate;
+}
+
+function reserveIntakeFilename(original) {
+  const taken = intakeExistingFileNames(intakeCurrentAddTarget());
+  stagedFiles.filter(f => f.type === 'pdf' || f.type === 'image')
+    .forEach(f => taken.add(String(f.name).toLowerCase()));
+  intakePendingNames.forEach(x => taken.add(x));
+  const name = uniqueIntakeFilename(original, taken);
+  intakePendingNames.add(name.toLowerCase());
+  return name;
+}
+function releaseIntakeFilename(name) { intakePendingNames.delete(String(name).toLowerCase()); }
+
+function finalizeIntakeNames(files, targetLecture) {
+  const taken = intakeExistingFileNames(targetLecture);
+  let renamed = 0;
+  for (const f of files) {
+    const unique = uniqueIntakeFilename(f.originalName || f.name, taken);
+    if (f.name !== unique) { f.name = unique; renamed++; }
+    taken.add(unique.toLowerCase());
+  }
+  if (renamed) {
+    renderStagedFiles();
+    showToast(`${renamed} duplicate filename(s) automatically renamed to preserve existing lesson files.`);
+  }
+}
+
+
 function handleStagedFile(file) {
   const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
   const isImg = file.type.startsWith('image/');
