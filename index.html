@@ -6185,16 +6185,7 @@ document.addEventListener('click', (e) => {
 function loadSubjectChat() {
   // Do not accidentally send an image attached under another class/student.
   if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode)) {
-    // Pinning is intentionally session-only, never persisted into SharePoint.
-    // Count successful Gemini responses (not failed requests) toward the 3 sends.
-    const sentIds = new Set(messageAttachments.map(a => a.id));
-    coachImageDraft = coachImageDraft.filter(a => {
-      if (!sentIds.has(a.id)) return true;
-      if ((a.sendRemaining || 0) <= 1) return false;
-      a.sendRemaining--;
-      a.sentOnce = true;
-      return true;
-    });
+    coachImageDraft = [];
     renderCoachImageDraft();
   }
   updateToneButton();
@@ -6935,7 +6926,15 @@ async function sendChatMessage(query, isRetry = false, retryAttachments = null) 
       if (bubble && !bubble.querySelector('[data-open-coach-image], [data-open-source]'))
         bubble.insertAdjacentHTML('beforeend', renderCoachAttachmentLinks(attachmentRefs));
     }
-    coachImageDraft = [];
+    // Pinning remains browser-session-only. Decrement only on successful responses.
+    const sentIds = new Set(messageAttachments.map(a => a.id));
+    coachImageDraft = coachImageDraft.filter(a => {
+      if (!sentIds.has(a.id)) return true;
+      if ((a.sendRemaining || 0) <= 1) return false;
+      a.sendRemaining--;
+      a.sentOnce = true;
+      return true;
+    });
     renderCoachImageDraft();
     aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}<div class="chat-vis"></div>${saveAnswerButton(exTs)}`;
     feed.appendChild(aiMsgEl);
