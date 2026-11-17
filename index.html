@@ -6185,7 +6185,16 @@ document.addEventListener('click', (e) => {
 function loadSubjectChat() {
   // Do not accidentally send an image attached under another class/student.
   if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode)) {
-    coachImageDraft = [];
+    // Pinning is intentionally session-only, never persisted into SharePoint.
+    // Count successful Gemini responses (not failed requests) toward the 3 sends.
+    const sentIds = new Set(messageAttachments.map(a => a.id));
+    coachImageDraft = coachImageDraft.filter(a => {
+      if (!sentIds.has(a.id)) return true;
+      if ((a.sendRemaining || 0) <= 1) return false;
+      a.sendRemaining--;
+      a.sentOnce = true;
+      return true;
+    });
     renderCoachImageDraft();
   }
   updateToneButton();
@@ -6571,6 +6580,24 @@ function renderCoachImageDraft() {
     const title = document.createElement('span');
     title.className = 'coach-filename';
     title.textContent = a.name;
+    const pin = document.createElement('button');
+    pin.className = 'say sm';
+    pin.type = 'button';
+    const remaining = Number(a.sendRemaining) || 0;
+    pin.textContent = remaining ? '📌 ' + (a.sentOnce ? remaining + ' left' : '3 sends') : '📌 Keep 3';
+    pin.title = remaining ? 'Stop automatically including this picture in new questions'
+      : 'Include this picture in the next three successful Coach questions';
+    pin.disabled = chatBusy;
+    pin.onclick = () => {
+      if (remaining) {
+        if (a.sentOnce) coachImageDraft.splice(i, 1); // stop resending immediately
+        else a.sendRemaining = 0; // still available for the first question
+      } else {
+        a.sendRemaining = 3;
+        a.sentOnce = false;
+      }
+      renderCoachImageDraft();
+    };
     const remove = document.createElement('button');
     remove.className = 'say sm';
     remove.type = 'button';
@@ -6578,7 +6605,7 @@ function renderCoachImageDraft() {
     remove.textContent = '✕';
     remove.disabled = chatBusy;
     remove.onclick = () => { coachImageDraft.splice(i, 1); renderCoachImageDraft(); };
-    card.append(preview, title, remove);
+    card.append(preview, title, pin, remove);
     box.appendChild(card);
   });
 }
@@ -6748,9 +6775,14 @@ async function coachSaveAttachmentRefs(attachments) {
     } else {
       const path = [a.studentId || getStudentId(), a.classCode || activeClassCode,
         'coach-images', a.id + '.jpg'].join('/');
-      const rec = { id: a.id, studentId: a.studentId || getStudentId(), classCode: a.classCode || activeClassCode,
-        name: a.name, mime: a.mime, base64: a.base64, path, status: 'pending' };
-      await idbPut('coachImages', rec);
+      // A pinned image can appear in several consecutive Q&A entries, but its
+      // original bytes should be cached/uploaded just once for that image ID.
+      if (!a.persisted) {
+        const rec = { id: a.id, studentId: a.studentId || getStudentId(), classCode: a.classCode || activeClassCode,
+          name: a.name, mime: a.mime, base64: a.base64, path, status: 'pending' };
+        await idbPut('coachImages', rec);
+        a.persisted = true;
+      }
       refs.push({ kind: 'coach', id: a.id, name: a.name, mime: a.mime, path });
     }
   }
