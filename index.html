@@ -146,6 +146,22 @@ dialog.source-viewer-dlg[open] { display: flex; flex-direction: column; }
 .source-viewer-dlg.source-minimized .dlg-head { border-bottom: 0; }
 @media (max-width: 600px) { .source-viewer-dlg .dlg-head { padding: 9px; } }
 
+/* Coach Chat: paste/upload or reuse photos already saved with Intake */
+.coach-attach-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:0 0 7px; }
+.coach-attach-toolbar .say { font-size:12px; padding:4px 10px; }
+.coach-attach-toolbar small { color:var(--mut); }
+.coach-attach-draft { display:none; flex-wrap:wrap; gap:8px; margin:0 0 8px; }
+.coach-attach-draft.has-images { display:flex; }
+.coach-attach-card { display:flex; align-items:center; gap:7px; background:var(--sel); border:1px solid var(--line); border-radius:10px; padding:5px 7px; max-width:min(270px,100%); }
+.coach-attach-card img { width:52px; height:52px; object-fit:contain; border-radius:6px; background:#fff; flex:none; }
+.coach-attach-card .coach-filename { min-width:0; overflow-wrap:anywhere; font-size:12px; }
+.coach-attach-card .say { padding:3px 7px; flex:none; }
+.coach-attachment-pill { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); padding:4px 7px; margin-top:5px; margin-right:5px; font-size:12px; cursor:pointer; overflow-wrap:anywhere; }
+.coach-attachment-pill:hover { border-color:var(--c); }
+.coach-gallery-item { width:100%; display:flex; gap:10px; justify-content:space-between; align-items:center; text-align:left; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:10px; cursor:pointer; }
+.coach-gallery-item:hover { border-color:var(--c); background:var(--sel); }
+.coach-gallery-title { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+.coach-gallery-detail { font-size:12px; color:var(--mut); }
 /* Practice drill: question left, "ask about this" panel right on wide screens */
 @media (min-width: 1020px) { main.two #s-quiz { grid-column: 1 / -1; } }
 .quiz-layout { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
@@ -513,8 +529,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button class="btn alt sample-q">Explain it with a real-world analogy</button>
         <button class="btn alt sample-q">Give me a quick 3-question drill</button>
       </div>
+      <div class="coach-attach-toolbar">
+        <button class="say sm" id="coachUploadImageBtn" type="button" title="Choose an image from this device">📎 Add picture</button>
+        <button class="say sm" id="coachReuseImageBtn" type="button" title="Reuse a picture previously saved from Intake">🖼️ From Intake</button>
+        <small>Paste a screenshot here with Ctrl+V (or Cmd+V)</small>
+        <input type="file" id="coachImageFileInput" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple hidden>
+      </div>
+      <div id="chatImageDraft" class="coach-attach-draft" aria-live="polite"></div>
       <div class="card row" style="padding:10px 14px">
-        <textarea id="chatInput" class="grow" rows="1" placeholder="Ask your coach anything... (Shift+Enter for a new line)" style="flex:1;border:0;background:transparent;outline:none"></textarea>
+        <textarea id="chatInput" class="grow" rows="1" placeholder="Ask your coach anything, or paste a picture (Shift+Enter for a new line)" style="flex:1;border:0;background:transparent;outline:none"></textarea>
         <button class="say" id="chatMicBtn">🎤 Speak</button>
         <button class="btn" id="chatSendBtn" style="min-height:40px;padding:8px 16px">Send</button>
       </div>
@@ -959,6 +982,14 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <div class="source-viewer-grip" id="sourceViewerResizeGrip" title="Drag to resize the source viewer" role="separator" aria-label="Resize source viewer">◢</div>
 </dialog>
 
+<dialog class="cfg-dlg" id="coachImagePickerDlg" style="max-width:650px" aria-labelledby="coachImagePickerTitle">
+  <div class="dlg-head">
+    <h3 id="coachImagePickerTitle" style="margin:0;color:var(--c)">🖼️ Images from Intake</h3>
+    <button class="say" id="coachImagePickerClose" type="button">✕ Close</button>
+  </div>
+  <div class="dlg-body" id="coachImagePickerBody" style="gap:7px;max-height:60vh"></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
  
 <script>
@@ -1217,7 +1248,7 @@ let stagedFiles = [];
    SECTION 2 - INDEXEDDB STORAGE (SEPARATED SESSIONS & LECTURES)
    ===================================================================== */
 const DB_NAME = 'StudentStudy_v4';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 let dbPromise = null;
  
 function getDB() {
@@ -1240,6 +1271,8 @@ function getDB() {
         }
         // Course books: chapter text per class, so the coach can pull the chapter that matters
         if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
+        // Small pasted Coach images live outside synced chat JSON; SharePoint holds synced originals.
+        if (!db.objectStoreNames.contains('coachImages')) db.createObjectStore('coachImages', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains('deadlines')) db.createObjectStore('deadlines', { keyPath: 'deadlineId' });
       };
@@ -6150,6 +6183,11 @@ document.addEventListener('click', (e) => {
 });
 
 function loadSubjectChat() {
+  // Do not accidentally send an image attached under another class/student.
+  if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode || a.chatTargetKey !== getActiveChatTargetKey())) {
+    coachImageDraft = [];
+    renderCoachImageDraft();
+  }
   updateToneButton();
   const c = CLASSES.find(x => x.code === activeClassCode);
   const targetKey = getActiveChatTargetKey();
@@ -6168,7 +6206,7 @@ function loadSubjectChat() {
  
   exchanges.forEach(ex => {
     if (!ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide') {
-      feed.innerHTML += `<div class="msg me">${escText(ex.q)}</div>`;
+      feed.innerHTML += `<div class="msg me">${escText(ex.q)}${renderCoachAttachmentLinks(ex.attachments)}</div>`;
       feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}${ex.visuals ? renderVisuals(ex.visuals) : ''}${saveAnswerButton(ex.ts, ex.saved)}</div>`;
     }
   });
@@ -6217,7 +6255,7 @@ function renderHistoryDrawer() {
     const when = new Date(ex.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     item.innerHTML = `
       <div style="font-weight:600;font-size:13px;color:var(--c)">${label}</div>
-      <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}</div>
+      <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}${ex.attachments?.length ? ` · 📎 ${ex.attachments.length} picture(s)` : ''}</div>
       <small style="color:var(--mut)">${when}</small>
       ${ex.isMiss ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
         ${ex.context === 'guide'
@@ -6473,9 +6511,331 @@ function buildChatGrounding(lectures, opts = {}) {
   return `[CLASS MATERIAL FOR THIS QUESTION]\nAnswer from this material first. When the transcript covers the question, say roughly when in class it came up (the [mm:ss] marks).\n\n${blocks}`;
 }
  
-async function sendChatMessage(query, isRetry = false) {
-  if (chatBusy) return;
-  const text = (query || document.getElementById('chatInput').value).trim();
+
+/* Coach image attachment draft: clipboard/device images and existing Intake sources.
+   Keep image bytes out of Student_Chats JSON; save only source references in history. */
+const COACH_MAX_IMAGES = 3;
+const COACH_MAX_FILE_BYTES = 25 * 1024 * 1024;
+let coachImageDraft = [];
+let coachImageLoading = false;
+let coachGalleryEntries = [];
+
+function coachImageId() {
+  return 'ci_' + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() :
+    Date.now() + '_' + Math.random().toString(36).slice(2, 10));
+}
+function coachImageBase64ToBlob(base64, mime) {
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  return new Blob([bytes], { type: mime || 'image/jpeg' });
+}
+function coachFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error('Could not read image'));
+    reader.readAsDataURL(file);
+  });
+}
+async function coachOptimizeImage(file) {
+  if (!file || !file.type.startsWith('image/')) throw new Error('Please choose a picture (PNG, JPG, WebP, or GIF).');
+  if (file.size > COACH_MAX_FILE_BYTES) throw new Error('Picture is too large. Please use an image under 25 MB.');
+  const dataUrl = await coachFileAsDataUrl(file);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error('This image format could not be opened.'));
+    img.src = dataUrl;
+  });
+  const scale = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Image conversion is unavailable in this browser.');
+  ctx.fillStyle = '#ffffff'; // JPEG cannot retain transparency
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { base64: canvas.toDataURL('image/jpeg', 0.9).split(',')[1], mime: 'image/jpeg' };
+}
+
+function renderCoachImageDraft() {
+  const box = document.getElementById('chatImageDraft');
+  box.replaceChildren();
+  box.classList.toggle('has-images', coachImageDraft.length > 0);
+  coachImageDraft.forEach((a, i) => {
+    const card = document.createElement('div');
+    card.className = 'coach-attach-card';
+    const preview = document.createElement('img');
+    preview.alt = 'Attached picture preview';
+    preview.src = 'data:' + a.mime + ';base64,' + a.base64;
+    const title = document.createElement('span');
+    title.className = 'coach-filename';
+    title.textContent = a.name;
+    const pin = document.createElement('button');
+    pin.className = 'say sm';
+    pin.type = 'button';
+    const remaining = Number(a.sendRemaining) || 0;
+    pin.textContent = remaining ? '📌 ' + (a.sentOnce ? remaining + ' left' : '3 sends') : '📌 Keep 3';
+    pin.title = remaining ? 'Stop automatically including this picture in new questions'
+      : 'Include this picture in the next three successful Coach questions';
+    pin.disabled = chatBusy;
+    pin.onclick = () => {
+      if (remaining) {
+        if (a.sentOnce) coachImageDraft.splice(i, 1); // stop resending immediately
+        else a.sendRemaining = 0; // still available for the first question
+      } else {
+        a.sendRemaining = 3;
+        a.sentOnce = false;
+      }
+      renderCoachImageDraft();
+    };
+    const remove = document.createElement('button');
+    remove.className = 'say sm';
+    remove.type = 'button';
+    remove.title = 'Remove attached picture';
+    remove.textContent = '✕';
+    remove.disabled = chatBusy;
+    remove.onclick = () => { coachImageDraft.splice(i, 1); renderCoachImageDraft(); };
+    card.append(preview, title, pin, remove);
+    box.appendChild(card);
+  });
+}
+
+function coachAddDraftAttachment(attachment) {
+  if (coachImageDraft.length >= COACH_MAX_IMAGES) {
+    showToast('Attach up to 3 pictures per question.');
+    return false;
+  }
+  attachment.chatTargetKey = getActiveChatTargetKey();
+  coachImageDraft.push(attachment);
+  renderCoachImageDraft();
+  showToast('Picture ready — type your question or press Send.');
+  return true;
+}
+
+async function coachAddFiles(files, origin) {
+  if (chatBusy || coachImageLoading) return;
+  coachImageLoading = true;
+  document.getElementById('coachUploadImageBtn').disabled = true;
+  document.getElementById('coachReuseImageBtn').disabled = true;
+  try {
+    for (const file of Array.from(files || [])) {
+      if (coachImageDraft.length >= COACH_MAX_IMAGES) { showToast('Maximum 3 pictures per question.'); break; }
+      const data = await coachOptimizeImage(file);
+      coachAddDraftAttachment({ id: coachImageId(), kind: 'coach', name: file.name || 'Pasted picture.jpg',
+        mime: data.mime, base64: data.base64, origin: origin || 'device',
+        classCode: activeClassCode, studentId: getStudentId() });
+    }
+  } catch (err) { showToast('Could not attach picture: ' + err.message); }
+  finally {
+    coachImageLoading = false;
+    document.getElementById('coachUploadImageBtn').disabled = chatBusy;
+    document.getElementById('coachReuseImageBtn').disabled = chatBusy;
+  }
+}
+
+document.getElementById('coachUploadImageBtn').addEventListener('click', () =>
+  document.getElementById('coachImageFileInput').click());
+document.getElementById('coachImageFileInput').addEventListener('change', e => {
+  coachAddFiles(e.target.files, 'device');
+  e.target.value = '';
+});
+document.getElementById('chatInput').addEventListener('paste', e => {
+  const pictures = Array.from(e.clipboardData?.items || [])
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile()).filter(Boolean);
+  if (!pictures.length) return; // Normal text paste remains unchanged.
+  e.preventDefault();
+  coachAddFiles(pictures, 'paste');
+});
+
+function renderCoachAttachmentLinks(attachments) {
+  if (!Array.isArray(attachments) || !attachments.length) return '';
+  return '<div>' + attachments.map(a => {
+    const attrs = a.kind === 'intake'
+      ? `data-open-source="${escSourceAttr(a.lectureClientId || '')}" data-source-name="${escSourceAttr(a.name || '')}"`
+      : `data-open-coach-image="${escSourceAttr(a.id || '')}" data-coach-image-name="${escSourceAttr(a.name || '')}" data-coach-image-path="${escSourceAttr(a.path || '')}" data-coach-image-mime="${escSourceAttr(a.mime || '')}"`;
+    return `<button type="button" class="coach-attachment-pill" ${attrs}>📷 ${escText(a.name || 'Picture')}</button>`;
+  }).join('') + '</div>';
+}
+
+async function listCoachIntakeImages() {
+  const rows = await idbGetAll('lectures');
+  const own = rows.filter(r => isMyRecord(r) && r.classCode === activeClassCode && r.studyPayload);
+  const results = [];
+  for (const rec of own) {
+    let l;
+    try { l = JSON.parse(rec.studyPayload); } catch (e) { continue; }
+    const localFiles = (await idbGetByIndex('lectureFiles', 'byLecture', rec.clientId))
+      .filter(f => /image\//i.test(f.mime || ''));
+    const meta = new Map((l.libFiles || []).map(x => [x.name, x]));
+    const names = new Set([
+      ...localFiles.map(f => f.name),
+      ...(l.libFiles || []).filter(f => f.kind === 'photo' || /^image\//i.test(f.mime || '')).map(f => f.name),
+      ...((l.coverage && l.coverage.files) || []).filter(f => f.kind === 'photo').map(f => f.label)
+    ]);
+    for (const name of names) {
+      const cached = localFiles.find(f => f.name === name);
+      const lib = meta.get(name);
+      results.push({
+        name, lectureClientId: rec.clientId, lectureId: l.id, classCode: rec.classCode,
+        studentId: rec.studentId || getStudentId(), lectureTitle: l.t || rec.topicLabel || 'Lecture',
+        mime: (cached && cached.mime) || (lib && lib.mime) || 'image/jpeg',
+        path: lib && lib.path,
+        cachedBase64: cached && cached.base64
+      });
+    }
+  }
+  return results.slice().reverse().slice(0, 120);
+}
+
+async function coachOpenIntakePicker() {
+  const dlg = document.getElementById('coachImagePickerDlg');
+  const box = document.getElementById('coachImagePickerBody');
+  box.textContent = 'Loading saved Intake pictures…';
+  dlg.showModal();
+  try {
+    coachGalleryEntries = await listCoachIntakeImages();
+    if (!dlg.open) return;
+    box.replaceChildren();
+    if (!coachGalleryEntries.length) {
+      box.textContent = 'No saved Intake pictures were found for this class. Add a photo in Intake and generate a lecture first, or use Add picture.';
+      return;
+    }
+    coachGalleryEntries.forEach((f, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'coach-gallery-item';
+      const desc = document.createElement('span');
+      const title = document.createElement('div'); title.className = 'coach-gallery-title'; title.textContent = '📷 ' + f.name;
+      const sub = document.createElement('div'); sub.className = 'coach-gallery-detail';
+      sub.textContent = f.lectureTitle + (f.cachedBase64 ? ' · On this device' : ' · From SharePoint');
+      desc.append(title, sub);
+      b.append(desc);
+      const add = document.createElement('span'); add.textContent = '+ Attach'; add.style.whiteSpace = 'nowrap';
+      b.append(add);
+      b.addEventListener('click', () => coachAttachIntakeImage(i));
+      box.append(b);
+    });
+  } catch (err) { box.textContent = 'Could not load Intake pictures: ' + err.message; }
+}
+
+async function coachAttachIntakeImage(index) {
+  const entry = coachGalleryEntries[index];
+  if (!entry || coachImageDraft.length >= COACH_MAX_IMAGES || coachImageLoading) return;
+  const box = document.getElementById('coachImagePickerBody');
+  coachImageLoading = true;
+  const oldText = box.textContent;
+  box.textContent = 'Opening the original picture…';
+  try {
+    let base64 = entry.cachedBase64;
+    let mime = entry.mime || 'image/jpeg';
+    if (!base64) {
+      const path = entry.path || [entry.studentId, entry.classCode, 'lectures', entry.lectureId,
+        entry.name.replace(/[\\/]/g, '_')].join('/');
+      const blob = await downloadFromLibrary(path, await getMsalToken());
+      if (!blob) throw new Error('Picture not found in Student_Library.');
+      mime = blob.type || mime;
+      base64 = await blobToBase64(blob);
+    }
+    if (!mime.startsWith('image/')) throw new Error('This original file is not an image.');
+    // Use the same image-size budget as pasted screenshots, without uploading
+    // a second copy of the original Intake file to SharePoint.
+    const cleaned = await coachOptimizeImage(new File([coachImageBase64ToBlob(base64, mime)],
+      entry.name, { type: mime }));
+    coachAddDraftAttachment({
+      id: coachImageId(), kind: 'intake', name: entry.name, mime: cleaned.mime, base64: cleaned.base64,
+      lectureClientId: entry.lectureClientId, classCode: entry.classCode, studentId: entry.studentId
+    });
+    document.getElementById('coachImagePickerDlg').close();
+    document.getElementById('chatInput').focus();
+  } catch (err) {
+    box.textContent = 'Could not attach picture: ' + err.message;
+    console.warn('Intake picture attach:', err.message);
+  } finally { coachImageLoading = false; }
+}
+
+document.getElementById('coachReuseImageBtn').addEventListener('click', coachOpenIntakePicker);
+document.getElementById('coachImagePickerClose').addEventListener('click', () =>
+  document.getElementById('coachImagePickerDlg').close());
+
+async function coachSaveAttachmentRefs(attachments) {
+  const refs = [];
+  for (const a of attachments) {
+    if (a.kind === 'intake') {
+      refs.push({ kind: 'intake', name: a.name, lectureClientId: a.lectureClientId });
+    } else {
+      const path = [a.studentId || getStudentId(), a.classCode || activeClassCode,
+        'coach-images', a.id + '.jpg'].join('/');
+      // A pinned image can appear in several consecutive Q&A entries, but its
+      // original bytes should be cached/uploaded just once for that image ID.
+      if (!a.persisted) {
+        const rec = { id: a.id, studentId: a.studentId || getStudentId(), classCode: a.classCode || activeClassCode,
+          name: a.name, mime: a.mime, base64: a.base64, path, status: 'pending' };
+        await idbPut('coachImages', rec);
+        a.persisted = true;
+      }
+      refs.push({ kind: 'coach', id: a.id, name: a.name, mime: a.mime, path });
+    }
+  }
+  return refs;
+}
+
+// Existing SharePoint Sync uploads pending pasted images, not enormous chat payloads.
+async function retryPendingCoachImages(token) {
+  const pics = await idbGetAll('coachImages');
+  let success = 0, failed = 0;
+  for (const p of pics.filter(p => p.studentId === getStudentId() && p.status === 'pending')) {
+    if (!p.base64 || !p.path) continue;
+    try {
+      await uploadToLibrary(p.path, coachImageBase64ToBlob(p.base64, p.mime), token);
+      p.status = 'uploaded';
+      p.uploadedAt = new Date().toISOString();
+      await idbPut('coachImages', p);
+      success++;
+    } catch (err) {
+      failed++;
+      console.warn('Coach image upload pending:', p.id, err.message);
+    }
+  }
+  if (success) showToast(`📷 ${success} Coach picture(s) uploaded to SharePoint.`);
+  if (failed) showToast(`📷 ${failed} Coach picture(s) remain saved only on this device.`);
+}
+
+async function openCoachChatImage(id, name, path, mime) {
+  const dlg = document.getElementById('sourceViewerDlg');
+  const body = document.getElementById('sourceViewerBody');
+  const openBtn = document.getElementById('sourceViewerNewTab');
+  const request = ++sourceViewerRequest;
+  document.getElementById('sourceViewerTitle').textContent = '📷 ' + name;
+  body.textContent = 'Loading original Coach picture…';
+  openBtn.disabled = true;
+  openBtn.onclick = null;
+  openBtn.textContent = '↗ Open in window';
+  if (!dlg.open) { placeSourceViewer(); dlg.show(); }
+  if (dlg.classList.contains('source-minimized')) toggleSourceViewerMinimize();
+  try {
+    const saved = (await idbGetAll('coachImages')).find(p => p.id === id && p.studentId === getStudentId());
+    let blob;
+    if (saved && saved.base64) blob = coachImageBase64ToBlob(saved.base64, saved.mime);
+    else if (path && path.startsWith(getStudentId() + '/')) blob = await downloadFromLibrary(path, await getMsalToken());
+    if (!blob) throw new Error('Picture is unavailable here. Sync from the original device to upload it first.');
+    if (request === sourceViewerRequest && dlg.open) displaySourceBlob(blob, name, mime || blob.type);
+  } catch (err) {
+    if (request === sourceViewerRequest && dlg.open) body.textContent = 'Could not open picture: ' + err.message;
+  }
+}
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-open-coach-image]');
+  if (btn) openCoachChatImage(btn.dataset.openCoachImage, btn.dataset.coachImageName,
+    btn.dataset.coachImagePath, btn.dataset.coachImageMime);
+});
+
+async function sendChatMessage(query, isRetry = false, retryAttachments = null) {
+  if (chatBusy || coachImageLoading) return;
+  const messageAttachments = retryAttachments || coachImageDraft.slice();
+  const typed = (query || document.getElementById('chatInput').value).trim();
+  const text = typed || (messageAttachments.length ? 'Please explain the attached picture using our class material where relevant.' : '');
   if (!text) return;
   document.getElementById('chatInput').value = '';
   autoGrow(document.getElementById('chatInput'));
@@ -6486,6 +6846,19 @@ async function sendChatMessage(query, isRetry = false) {
     const userMsgEl = document.createElement('div');
     userMsgEl.className = 'msg me';
     userMsgEl.textContent = text;
+    if (messageAttachments.length) {
+      const preview = document.createElement('div');
+      preview.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:7px';
+      messageAttachments.forEach(a => {
+        const thumbnail = document.createElement('img');
+        thumbnail.src = 'data:' + a.mime + ';base64,' + a.base64;
+        thumbnail.alt = a.name;
+        thumbnail.title = a.name;
+        thumbnail.style.cssText = 'width:74px;height:74px;object-fit:contain;background:#fff;border-radius:8px';
+        preview.appendChild(thumbnail);
+      });
+      userMsgEl.appendChild(preview);
+    }
     feed.appendChild(userMsgEl);
     feed.scrollTop = feed.scrollHeight;
   }
@@ -6513,7 +6886,11 @@ async function sendChatMessage(query, isRetry = false) {
     contentsPayload.push({ role: 'user', parts: [{ text: h.q }] });
     contentsPayload.push({ role: 'model', parts: [{ text: h.a }] });
   });
-  contentsPayload.push({ role: 'user', parts: [{ text: text }] });
+  // Gemini receives real image pixels with the text; prior images are NOT
+  // automatically resent on unrelated follow-up turns.
+  const userParts = [{ text }];
+  messageAttachments.forEach(a => userParts.push({ inlineData: { mimeType: a.mime, data: a.base64 } }));
+  contentsPayload.push({ role: 'user', parts: userParts });
  
   const thinkingEl = document.createElement('div');
   thinkingEl.className = 'msg ai';
@@ -6534,7 +6911,32 @@ async function sendChatMessage(query, isRetry = false) {
     const aiMsgEl = document.createElement('div');
     aiMsgEl.className = 'msg ai';
     // Which model answered and how long it took, for diagnosing slow answers from SharePoint
-    const exTs = recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
+    let attachmentRefs = [];
+    if (messageAttachments.length) {
+      try { attachmentRefs = await coachSaveAttachmentRefs(messageAttachments); }
+      catch (saveErr) { showToast('Answer received, but the image could not be saved for cross-device history.'); console.warn('Coach image storage:', saveErr.message); }
+    }
+    const exTs = recordExchange(targetKey, text, result.text, false, null, {
+      model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined,
+      ...(attachmentRefs.length ? { attachments: attachmentRefs } : {})
+    });
+    if (attachmentRefs.length) {
+      // On retry the earlier question bubble is still present, so link it too.
+      const bubbles = [...feed.querySelectorAll('.msg.me')];
+      const bubble = bubbles[bubbles.length - 1];
+      if (bubble && !bubble.querySelector('[data-open-coach-image], [data-open-source]'))
+        bubble.insertAdjacentHTML('beforeend', renderCoachAttachmentLinks(attachmentRefs));
+    }
+    // Pinning remains browser-session-only. Decrement only on successful responses.
+    const sentIds = new Set(messageAttachments.map(a => a.id));
+    coachImageDraft = coachImageDraft.filter(a => {
+      if (!sentIds.has(a.id)) return true;
+      if ((a.sendRemaining || 0) <= 1) return false;
+      a.sendRemaining--;
+      a.sentOnce = true;
+      return true;
+    });
+    renderCoachImageDraft();
     aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}<div class="chat-vis"></div>${saveAnswerButton(exTs)}`;
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
@@ -6565,7 +6967,7 @@ async function sendChatMessage(query, isRetry = false) {
     retryBtn.className = 'btn alt sm';
     retryBtn.style.marginTop = '8px';
     retryBtn.textContent = '🔄 Try Again';
-    retryBtn.onclick = () => { errEl.remove(); sendChatMessage(text, true); };
+    retryBtn.onclick = () => { errEl.remove(); sendChatMessage(text, true, messageAttachments); };
     errEl.appendChild(retryBtn);
  
     feed.appendChild(errEl);
@@ -6580,6 +6982,10 @@ function setChatBusy(on) {
   chatBusy = on;
   document.getElementById('chatSendBtn').disabled = on;
   document.getElementById('chatMicBtn').disabled = on;
+  document.getElementById('coachUploadImageBtn').disabled = on || coachImageLoading;
+  document.getElementById('coachReuseImageBtn').disabled = on || coachImageLoading;
+  document.getElementById('coachImageFileInput').disabled = on;
+  document.querySelectorAll('#chatImageDraft button').forEach(b => b.disabled = on);
   document.querySelectorAll('.sample-q').forEach(b => b.disabled = on);
 }
  
@@ -7517,7 +7923,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     catch (bookErr) { console.warn('Book sync skipped:', bookErr.message); }
     await pullConfigFromSharePoint(siteId, token);
 
-    // Retry original source files before sending lecture metadata to SharePoint.
+    // Upload locally saved Coach pictures and lecture originals before chat references are synced.
+    await retryPendingCoachImages(token);
     await retryPendingLectureFiles(token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
