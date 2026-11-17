@@ -4115,6 +4115,7 @@ async function openSourceFile(clientId, filename) {
   const request = ++sourceViewerRequest;
   openBtn.disabled = true;
   openBtn.onclick = null;
+  openBtn.textContent = '↗ Open in new tab';
   document.getElementById('sourceViewerTitle').textContent = '📎 ' + filename;
   body.textContent = 'Loading original source…';
   if (!dlg.open) dlg.showModal();
@@ -4142,8 +4143,13 @@ async function openSourceFile(clientId, filename) {
     displaySourceBlob(blob, filename, mime);
   } catch (err) {
     if (request !== sourceViewerRequest || !dlg.open) return;
-    body.textContent = 'Could not open this source: ' + err.message;
-    console.warn('Source viewer:', err);
+    body.textContent = 'Could not preview this source: ' + err.message;
+    if (err.sharePointUrl) {
+      openBtn.textContent = '↗ Open in SharePoint';
+      openBtn.disabled = false;
+      openBtn.onclick = () => window.open(err.sharePointUrl, '_blank', 'noopener,noreferrer');
+    }
+    console.warn('Source viewer:', err.message);
   }
 }
 
@@ -8134,18 +8140,53 @@ async function uploadToLibrary(path, blob, token, onProgress) {
 
 // Graph /content redirects and can fail browser CORS preflights with Authorization.
 // Fetch metadata first and then download from its short-lived preauthenticated URL.
+// Resolve the file by path, then request the ephemeral download URL by drive item ID.
+// Some SharePoint responses omit the downloadUrl when it is selected on a path lookup.
 async function downloadFromLibrary(path, token) {
   const driveId = await getLibraryDrive(token);
-  const metaUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}?${new URLSearchParams({ '$select': 'id,name,@microsoft.graph.downloadUrl' })}`;
-  const response = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`SharePoint lookup failed (${response.status})`);
-  const item = await response.json();
-  const url = item['@microsoft.graph.downloadUrl'];
-  if (!url) throw new Error('SharePoint did not return a file download URL.');
-  const file = await fetch(url);
-  if (!file.ok) throw new Error(`SharePoint file download failed (${file.status})`);
-  return await file.blob();
+  const base = `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const lookup = await fetch(`${base}/root:/${encPath(path)}`, { headers });
+  if (lookup.status === 404) return null;
+  if (!lookup.ok) throw new Error(`SharePoint lookup failed (${lookup.status})`);
+  const item = await lookup.json();
+  if (item.folder) throw new Error('The SharePoint source path points to a folder, not a file.');
+  if (!item.id) throw new Error('SharePoint did not return a file ID.');
+
+  let downloadUrl = item['@microsoft.graph.downloadUrl'];
+  if (!downloadUrl) {
+    const itemUrl = `${base}/items/${encodeURIComponent(item.id)}`;
+    // Microsoft documents selection of this *instance annotation* by item ID.
+    // Retry the unfiltered item response for tenants that omit selected annotations.
+    for (const suffix of ['?$select=id,@microsoft.graph.downloadUrl', '?select=id,@microsoft.graph.downloadUrl', '']) {
+      const res = await fetch(itemUrl + suffix, { headers });
+      if (!res.ok) continue;
+      const details = await res.json();
+      downloadUrl = details['@microsoft.graph.downloadUrl'];
+      if (downloadUrl) break;
+    }
+  }
+
+  // The original SharePoint URL remains a useful last-resort fallback.
+  const sharePointUrl = (() => {
+    try {
+      const u = new URL(item.webUrl || '');
+      return u.protocol === 'https:' && u.hostname.toLowerCase().endsWith('.sharepoint.com') ? u.href : '';
+    } catch (e) { return ''; }
+  })();
+  if (!downloadUrl) {
+    const error = new Error('SharePoint did not provide a preview download link for this file.');
+    error.sharePointUrl = sharePointUrl;
+    throw error;
+  }
+  try {
+    const response = await fetch(downloadUrl); // preauthenticated: do NOT send the Graph token
+    if (!response.ok) throw new Error(`SharePoint file download failed (${response.status})`);
+    return await response.blob();
+  } catch (err) {
+    err.sharePointUrl = sharePointUrl;
+    throw err;
+  }
 }
 async function uploadJsonToLibrary(path, obj, token) {
   await uploadToLibrary(path, new Blob([JSON.stringify(obj)], { type: 'application/json' }), token);
