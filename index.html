@@ -6184,7 +6184,7 @@ document.addEventListener('click', (e) => {
 
 function loadSubjectChat() {
   // Do not accidentally send an image attached under another class/student.
-  if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode)) {
+  if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode || a.chatTargetKey !== getActiveChatTargetKey())) {
     coachImageDraft = [];
     renderCoachImageDraft();
   }
@@ -6606,6 +6606,7 @@ function coachAddDraftAttachment(attachment) {
     showToast('Attach up to 3 pictures per question.');
     return false;
   }
+  attachment.chatTargetKey = getActiveChatTargetKey();
   coachImageDraft.push(attachment);
   renderCoachImageDraft();
   showToast('Picture ready — type your question or press Send.');
