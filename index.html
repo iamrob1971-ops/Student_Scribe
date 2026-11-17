@@ -919,7 +919,7 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <div class="dlg-head">
     <h3 id="sourceViewerTitle" style="margin:0;color:var(--c)">📎 Original source</h3>
     <div class="source-viewer-actions">
-      <button class="say sm" id="sourceViewerNewTab" type="button" disabled>↗ Open in new tab</button>
+      <button class="say sm" id="sourceViewerNewTab" type="button" disabled>↗ Open in window</button>
       <button class="say sm" id="sourceViewerClose" type="button">✕ Close</button>
     </div>
   </div>
@@ -4068,6 +4068,25 @@ function clearSourceViewerUrl() {
   sourceViewerObjectUrl = null;
 }
 
+// Ask desktop browsers for a separate, movable source window (browsers may
+// choose a tab on mobile or when a user's popup settings override this request).
+function openSourcePopupWindow(url) {
+  const sw = (window.screen && window.screen.availWidth) || 1280;
+  const sh = (window.screen && window.screen.availHeight) || 900;
+  const width = Math.min(1000, Math.max(450, Math.round(sw * 0.64)));
+  const height = Math.min(850, Math.max(450, Math.round(sh * 0.83)));
+  const left = Math.max(0, sw - width - 28);
+  const top = Math.max(0, Math.round((sh - height) / 2));
+  const features = `popup=yes,resizable=yes,scrollbars=yes,width=${width},height=${height},left=${left},top=${top}`;
+  const pop = window.open(url, '_blank', features);
+  if (!pop) {
+    showToast('Allow pop-ups for Student Scribe to open a separate window.');
+    return false;
+  }
+  try { pop.opener = null; } catch (e) { /* Some browsers restrict access. */ }
+  return true;
+}
+
 function displaySourceBlob(blob, filename, mime) {
   const body = document.getElementById('sourceViewerBody');
   const btn = document.getElementById('sourceViewerNewTab');
@@ -4094,16 +4113,14 @@ function displaySourceBlob(blob, filename, mime) {
     finalBlob.text().then(t => { if (pre.isConnected) pre.textContent = t; });
   } else {
     const msg = document.createElement('p');
-    msg.textContent = 'This file cannot be previewed here. Use Open in new tab.';
+    msg.textContent = 'This file cannot be previewed here. Use Open in window.';
     body.appendChild(msg);
   }
   btn.disabled = false;
   btn.onclick = () => {
     // A separate URL keeps the external tab alive after this preview is closed.
     const url = URL.createObjectURL(finalBlob);
-    const tab = window.open(url, '_blank');
-    if (tab) tab.opener = null;
-    else showToast('Allow pop-ups to open this source in a new tab.');
+    openSourcePopupWindow(url);
     setTimeout(() => URL.revokeObjectURL(url), 15 * 60 * 1000);
   };
 }
@@ -4115,7 +4132,7 @@ async function openSourceFile(clientId, filename) {
   const request = ++sourceViewerRequest;
   openBtn.disabled = true;
   openBtn.onclick = null;
-  openBtn.textContent = '↗ Open in new tab';
+  openBtn.textContent = '↗ Open in window';
   document.getElementById('sourceViewerTitle').textContent = '📎 ' + filename;
   body.textContent = 'Loading original source…';
   if (!dlg.open) dlg.showModal();
@@ -4145,9 +4162,9 @@ async function openSourceFile(clientId, filename) {
     if (request !== sourceViewerRequest || !dlg.open) return;
     body.textContent = 'Could not preview this source: ' + err.message;
     if (err.sharePointUrl) {
-      openBtn.textContent = '↗ Open in SharePoint';
+      openBtn.textContent = '↗ Open SharePoint window';
       openBtn.disabled = false;
-      openBtn.onclick = () => window.open(err.sharePointUrl, '_blank', 'noopener,noreferrer');
+      openBtn.onclick = () => openSourcePopupWindow(err.sharePointUrl);
     }
     console.warn('Source viewer:', err.message);
   }
