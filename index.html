@@ -146,6 +146,22 @@ dialog.source-viewer-dlg[open] { display: flex; flex-direction: column; }
 .source-viewer-dlg.source-minimized .dlg-head { border-bottom: 0; }
 @media (max-width: 600px) { .source-viewer-dlg .dlg-head { padding: 9px; } }
 
+/* Coach Chat: paste/upload or reuse photos already saved with Intake */
+.coach-attach-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:0 0 7px; }
+.coach-attach-toolbar .say { font-size:12px; padding:4px 10px; }
+.coach-attach-toolbar small { color:var(--mut); }
+.coach-attach-draft { display:none; flex-wrap:wrap; gap:8px; margin:0 0 8px; }
+.coach-attach-draft.has-images { display:flex; }
+.coach-attach-card { display:flex; align-items:center; gap:7px; background:var(--sel); border:1px solid var(--line); border-radius:10px; padding:5px 7px; max-width:min(270px,100%); }
+.coach-attach-card img { width:52px; height:52px; object-fit:contain; border-radius:6px; background:#fff; flex:none; }
+.coach-attach-card .coach-filename { min-width:0; overflow-wrap:anywhere; font-size:12px; }
+.coach-attach-card .say { padding:3px 7px; flex:none; }
+.coach-attachment-pill { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); padding:4px 7px; margin-top:5px; margin-right:5px; font-size:12px; cursor:pointer; overflow-wrap:anywhere; }
+.coach-attachment-pill:hover { border-color:var(--c); }
+.coach-gallery-item { width:100%; display:flex; gap:10px; justify-content:space-between; align-items:center; text-align:left; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:10px; cursor:pointer; }
+.coach-gallery-item:hover { border-color:var(--c); background:var(--sel); }
+.coach-gallery-title { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+.coach-gallery-detail { font-size:12px; color:var(--mut); }
 /* Practice drill: question left, "ask about this" panel right on wide screens */
 @media (min-width: 1020px) { main.two #s-quiz { grid-column: 1 / -1; } }
 .quiz-layout { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
@@ -513,8 +529,15 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
         <button class="btn alt sample-q">Explain it with a real-world analogy</button>
         <button class="btn alt sample-q">Give me a quick 3-question drill</button>
       </div>
+      <div class="coach-attach-toolbar">
+        <button class="say sm" id="coachUploadImageBtn" type="button" title="Choose an image from this device">📎 Add picture</button>
+        <button class="say sm" id="coachReuseImageBtn" type="button" title="Reuse a picture previously saved from Intake">🖼️ From Intake</button>
+        <small>Paste a screenshot here with Ctrl+V (or Cmd+V)</small>
+        <input type="file" id="coachImageFileInput" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple hidden>
+      </div>
+      <div id="chatImageDraft" class="coach-attach-draft" aria-live="polite"></div>
       <div class="card row" style="padding:10px 14px">
-        <textarea id="chatInput" class="grow" rows="1" placeholder="Ask your coach anything... (Shift+Enter for a new line)" style="flex:1;border:0;background:transparent;outline:none"></textarea>
+        <textarea id="chatInput" class="grow" rows="1" placeholder="Ask your coach anything, or paste a picture (Shift+Enter for a new line)" style="flex:1;border:0;background:transparent;outline:none"></textarea>
         <button class="say" id="chatMicBtn">🎤 Speak</button>
         <button class="btn" id="chatSendBtn" style="min-height:40px;padding:8px 16px">Send</button>
       </div>
@@ -959,6 +982,14 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   <div class="source-viewer-grip" id="sourceViewerResizeGrip" title="Drag to resize the source viewer" role="separator" aria-label="Resize source viewer">◢</div>
 </dialog>
 
+<dialog class="cfg-dlg" id="coachImagePickerDlg" style="max-width:650px" aria-labelledby="coachImagePickerTitle">
+  <div class="dlg-head">
+    <h3 id="coachImagePickerTitle" style="margin:0;color:var(--c)">🖼️ Images from Intake</h3>
+    <button class="say" id="coachImagePickerClose" type="button">✕ Close</button>
+  </div>
+  <div class="dlg-body" id="coachImagePickerBody" style="gap:7px;max-height:60vh"></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
  
 <script>
@@ -1217,7 +1248,7 @@ let stagedFiles = [];
    SECTION 2 - INDEXEDDB STORAGE (SEPARATED SESSIONS & LECTURES)
    ===================================================================== */
 const DB_NAME = 'StudentStudy_v4';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 let dbPromise = null;
  
 function getDB() {
@@ -1240,6 +1271,8 @@ function getDB() {
         }
         // Course books: chapter text per class, so the coach can pull the chapter that matters
         if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
+        // Small pasted Coach images live outside synced chat JSON; SharePoint holds synced originals.
+        if (!db.objectStoreNames.contains('coachImages')) db.createObjectStore('coachImages', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('lectures')) db.createObjectStore('lectures', { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains('deadlines')) db.createObjectStore('deadlines', { keyPath: 'deadlineId' });
       };
