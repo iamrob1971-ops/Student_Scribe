@@ -4630,6 +4630,7 @@ mainFileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) {
     Array.from(e.target.files).forEach(f => handleStagedFile(f));
   }
+  e.target.value = ''; // allow choosing the same filename again
 });
  
 const AUDIO_EXT = /\.(webm|mp3|m4a|wav|ogg|aac|mp4|flac)$/i;
@@ -4702,102 +4703,109 @@ function handleStagedFile(file) {
   const isAudio = file.type.startsWith('audio/') || AUDIO_EXT.test(file.name);
 
   if (isAudio) {
-    // Audio stays as a File; it is decoded and sliced only when Generate runs
+    // Audio stays as a File; it is decoded and sliced only when Generate runs.
     stagedFiles.push({
       id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
-      name: file.name,
-      type: 'audio',
-      mime: file.type || 'audio/webm',
-      file: file,
-      size: file.size
+      name: file.name, type: 'audio', mime: file.type || 'audio/webm',
+      file: file, size: file.size
     });
     renderStagedFiles();
     showToast(`Staged audio: ${file.name}`);
     return;
   }
 
+  // Allocate before asynchronous FileReader work so simultaneous uploads with
+  // the same filename cannot claim one another's SharePoint/library path.
+  const stagedName = (isPdf || isImg) ? reserveIntakeFilename(file.name) : file.name;
+  const stagedId = 'f_' + Date.now() + Math.random().toString(36).slice(2, 8);
+  const finishName = () => releaseIntakeFilename(stagedName);
+  const intakeToast = prefix => showToast(stagedName === file.name
+    ? `${prefix}: ${file.name}`
+    : `${prefix} as ${stagedName} (renamed duplicate of ${file.name})`);
+
   if (isPdf) {
-    // Rough page count from the file itself, for a heads-up on long documents
+    // Rough PDF page count for long teacher documents. Match by staging ID,
+    // not filename: multiple uploaded documents may share an original name.
     file.slice(0, Math.min(file.size, 40 * 1024 * 1024)).arrayBuffer().then(buf => {
       const txt = new TextDecoder('latin1').decode(new Uint8Array(buf));
       const pages = (txt.match(/\/Type\s*\/Page(?!s)/g) || []).length;
       if (!pages) return;
       let tries = 0;
       const attach = () => {
-        const f = stagedFiles.find(x => x.name === file.name);
-        if (f) { f.pages = pages; renderStagedFiles(); }
+        const item = stagedFiles.find(x => x.id === stagedId);
+        if (item) { item.pages = pages; renderStagedFiles(); }
         else if (tries++ < 20) return setTimeout(attach, 250);
-        if (pages > 30) setTimeout(() => showToast(`${file.name} has about ${pages} pages. It may take a few minutes, and splitting it by chapter gives a more detailed guide.`), 1200);
+        if (pages > 30) setTimeout(() =>
+          showToast(`${stagedName} has about ${pages} pages. It may take a few minutes, and splitting it by chapter gives a more detailed guide.`), 1200);
       };
       attach();
     }).catch(() => {});
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       stagedFiles.push({
-        id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
-        name: file.name,
-        type: 'pdf',
-        mime: file.type || 'application/pdf',
-        base64: ev.target.result.split(',')[1]
+        id: stagedId, name: stagedName, originalName: file.name,
+        type: 'pdf', mime: file.type || 'application/pdf',
+        base64: String(ev.target.result).split(',')[1]
       });
+      finishName();
       renderStagedFiles();
-      showToast(`Staged: ${file.name}`);
+      intakeToast('Staged');
     };
+    reader.onerror = () => { finishName(); showToast('Could not read ' + file.name); };
     reader.readAsDataURL(file);
     return;
   }
 
   if (isImg) {
-    // Client-side canvas compression for student handwritten photos
+    // Client-side image compression retains readable handwritten notes.
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let { width, height } = img;
-        const maxDim = 2048; // Preserves high DPI stroke resolution for 9th-grade handwriting
-        
-        if (width > maxDim || height > maxDim) {
-          if (width > height) { height = Math.round((height / width) * maxDim); width = maxDim; }
-          else { width = Math.round((width / height) * maxDim); height = maxDim; }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // 88% JPEG quality maintains line edge contrast without compression artifacts
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
-        
-        stagedFiles.push({
-          id: 'f_' + Date.now() + Math.random().toString(36).slice(2, 6),
-          name: file.name,
-          type: 'image',
-          mime: 'image/jpeg',
-          base64: compressedBase64,
-          size: Math.round(compressedBase64.length * 0.75)
-        });
-        renderStagedFiles();
-        showToast(`Staged & optimized: ${file.name}`);
+        try {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+          const maxDim = 2048;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+            else { width = Math.round(width * maxDim / height); height = maxDim; }
+          }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas unavailable');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
+
+          stagedFiles.push({
+            id: stagedId, name: stagedName, originalName: file.name,
+            type: 'image', mime: 'image/jpeg', base64: compressedBase64,
+            size: Math.round(compressedBase64.length * 0.75)
+          });
+          renderStagedFiles();
+          intakeToast('Staged & optimized');
+        } catch (err) { showToast('Could not prepare ' + file.name + ': ' + err.message); }
+        finally { finishName(); }
       };
+      img.onerror = () => { finishName(); showToast('Could not open ' + file.name); };
       img.src = ev.target.result;
     };
+    reader.onerror = () => { finishName(); showToast('Could not read ' + file.name); };
     reader.readAsDataURL(file);
     return;
   }
 
-  // Plain text / notepad
+  // Plain text/notepad files go into the notes field, not the original-file library.
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = ev => {
     const cur = document.getElementById('mainPastedNotes').value;
-    document.getElementById('mainPastedNotes').value = (cur ? cur + '\n\n' : '') + `[Notes: ${file.name}]\n` + ev.target.result;
+    document.getElementById('mainPastedNotes').value =
+      (cur ? cur + '\n\n' : '') + `[Notes: ${file.name}]\n` + ev.target.result;
     showToast(`Loaded notes: ${file.name}`);
   };
   reader.readAsText(file);
 }
- 
+
 /* =====================================================================
    STAGED FILES RENDER & CLEAR HELPERS
    ===================================================================== */
