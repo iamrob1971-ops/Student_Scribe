@@ -6201,7 +6201,7 @@ function loadSubjectChat() {
  
   exchanges.forEach(ex => {
     if (!ex.isMiss && ex.context !== 'drill' && ex.context !== 'guide') {
-      feed.innerHTML += `<div class="msg me">${escText(ex.q)}</div>`;
+      feed.innerHTML += `<div class="msg me">${escText(ex.q)}${renderCoachAttachmentLinks(ex.attachments)}</div>`;
       feed.innerHTML += `<div class="msg ai"><button class="say btn-speak" style="float:right">🔊</button>${applyBionic(mdToHtml(ex.a))}${ex.visuals ? renderVisuals(ex.visuals) : ''}${saveAnswerButton(ex.ts, ex.saved)}</div>`;
     }
   });
@@ -6250,7 +6250,7 @@ function renderHistoryDrawer() {
     const when = new Date(ex.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     item.innerHTML = `
       <div style="font-weight:600;font-size:13px;color:var(--c)">${label}</div>
-      <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}</div>
+      <div style="margin:2px 0 4px;font-size:13px">${escapeHtml(ex.q)}${ex.attachments?.length ? ` · 📎 ${ex.attachments.length} picture(s)` : ''}</div>
       <small style="color:var(--mut)">${when}</small>
       ${ex.isMiss ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
         ${ex.context === 'guide'
@@ -6798,9 +6798,11 @@ document.addEventListener('click', e => {
     btn.dataset.coachImagePath, btn.dataset.coachImageMime);
 });
 
-async function sendChatMessage(query, isRetry = false) {
-  if (chatBusy) return;
-  const text = (query || document.getElementById('chatInput').value).trim();
+async function sendChatMessage(query, isRetry = false, retryAttachments = null) {
+  if (chatBusy || coachImageLoading) return;
+  const messageAttachments = retryAttachments || coachImageDraft.slice();
+  const typed = (query || document.getElementById('chatInput').value).trim();
+  const text = typed || (messageAttachments.length ? 'Please explain the attached picture using our class material where relevant.' : '');
   if (!text) return;
   document.getElementById('chatInput').value = '';
   autoGrow(document.getElementById('chatInput'));
@@ -6811,6 +6813,19 @@ async function sendChatMessage(query, isRetry = false) {
     const userMsgEl = document.createElement('div');
     userMsgEl.className = 'msg me';
     userMsgEl.textContent = text;
+    if (messageAttachments.length) {
+      const preview = document.createElement('div');
+      preview.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:7px';
+      messageAttachments.forEach(a => {
+        const thumbnail = document.createElement('img');
+        thumbnail.src = 'data:' + a.mime + ';base64,' + a.base64;
+        thumbnail.alt = a.name;
+        thumbnail.title = a.name;
+        thumbnail.style.cssText = 'width:74px;height:74px;object-fit:contain;background:#fff;border-radius:8px';
+        preview.appendChild(thumbnail);
+      });
+      userMsgEl.appendChild(preview);
+    }
     feed.appendChild(userMsgEl);
     feed.scrollTop = feed.scrollHeight;
   }
@@ -6838,7 +6853,11 @@ async function sendChatMessage(query, isRetry = false) {
     contentsPayload.push({ role: 'user', parts: [{ text: h.q }] });
     contentsPayload.push({ role: 'model', parts: [{ text: h.a }] });
   });
-  contentsPayload.push({ role: 'user', parts: [{ text: text }] });
+  // Gemini receives real image pixels with the text; prior images are NOT
+  // automatically resent on unrelated follow-up turns.
+  const userParts = [{ text }];
+  messageAttachments.forEach(a => userParts.push({ inlineData: { mimeType: a.mime, data: a.base64 } }));
+  contentsPayload.push({ role: 'user', parts: userParts });
  
   const thinkingEl = document.createElement('div');
   thinkingEl.className = 'msg ai';
@@ -6859,7 +6878,21 @@ async function sendChatMessage(query, isRetry = false) {
     const aiMsgEl = document.createElement('div');
     aiMsgEl.className = 'msg ai';
     // Which model answered and how long it took, for diagnosing slow answers from SharePoint
-    const exTs = recordExchange(targetKey, text, result.text, false, null, { model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined });
+    let attachmentRefs = [];
+    if (messageAttachments.length) {
+      try { attachmentRefs = await coachSaveAttachmentRefs(messageAttachments); }
+      catch (saveErr) { showToast('Answer received, but the image could not be saved for cross-device history.'); console.warn('Coach image storage:', saveErr.message); }
+    }
+    const exTs = recordExchange(targetKey, text, result.text, false, null, {
+      model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined,
+      ...(attachmentRefs.length ? { attachments: attachmentRefs } : {})
+    });
+    if (attachmentRefs.length && !isRetry) {
+      const bubble = [...feed.querySelectorAll('.msg.me')].at(-1);
+      if (bubble) bubble.insertAdjacentHTML('beforeend', renderCoachAttachmentLinks(attachmentRefs));
+    }
+    coachImageDraft = [];
+    renderCoachImageDraft();
     aiMsgEl.innerHTML = `<button class="say btn-speak" style="float:right">🔊</button>${formattedHtml}<div class="chat-vis"></div>${saveAnswerButton(exTs)}`;
     feed.appendChild(aiMsgEl);
     feed.scrollTop = feed.scrollHeight;
@@ -6890,7 +6923,7 @@ async function sendChatMessage(query, isRetry = false) {
     retryBtn.className = 'btn alt sm';
     retryBtn.style.marginTop = '8px';
     retryBtn.textContent = '🔄 Try Again';
-    retryBtn.onclick = () => { errEl.remove(); sendChatMessage(text, true); };
+    retryBtn.onclick = () => { errEl.remove(); sendChatMessage(text, true, messageAttachments); };
     errEl.appendChild(retryBtn);
  
     feed.appendChild(errEl);
@@ -6905,6 +6938,10 @@ function setChatBusy(on) {
   chatBusy = on;
   document.getElementById('chatSendBtn').disabled = on;
   document.getElementById('chatMicBtn').disabled = on;
+  document.getElementById('coachUploadImageBtn').disabled = on || coachImageLoading;
+  document.getElementById('coachReuseImageBtn').disabled = on || coachImageLoading;
+  document.getElementById('coachImageFileInput').disabled = on;
+  document.querySelectorAll('#chatImageDraft button').forEach(b => b.disabled = on);
   document.querySelectorAll('.sample-q').forEach(b => b.disabled = on);
 }
  
@@ -7842,7 +7879,8 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     catch (bookErr) { console.warn('Book sync skipped:', bookErr.message); }
     await pullConfigFromSharePoint(siteId, token);
 
-    // Retry original source files before sending lecture metadata to SharePoint.
+    // Upload locally saved Coach pictures and lecture originals before chat references are synced.
+    await retryPendingCoachImages(token);
     await retryPendingLectureFiles(token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
