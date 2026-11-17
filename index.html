@@ -6506,6 +6506,298 @@ function buildChatGrounding(lectures, opts = {}) {
   return `[CLASS MATERIAL FOR THIS QUESTION]\nAnswer from this material first. When the transcript covers the question, say roughly when in class it came up (the [mm:ss] marks).\n\n${blocks}`;
 }
  
+
+/* Coach image attachment draft: clipboard/device images and existing Intake sources.
+   Keep image bytes out of Student_Chats JSON; save only source references in history. */
+const COACH_MAX_IMAGES = 3;
+const COACH_MAX_FILE_BYTES = 25 * 1024 * 1024;
+let coachImageDraft = [];
+let coachImageLoading = false;
+let coachGalleryEntries = [];
+
+function coachImageId() {
+  return 'ci_' + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() :
+    Date.now() + '_' + Math.random().toString(36).slice(2, 10));
+}
+function coachImageBase64ToBlob(base64, mime) {
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  return new Blob([bytes], { type: mime || 'image/jpeg' });
+}
+function coachFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error('Could not read image'));
+    reader.readAsDataURL(file);
+  });
+}
+async function coachOptimizeImage(file) {
+  if (!file || !file.type.startsWith('image/')) throw new Error('Please choose a picture (PNG, JPG, WebP, or GIF).');
+  if (file.size > COACH_MAX_FILE_BYTES) throw new Error('Picture is too large. Please use an image under 25 MB.');
+  const dataUrl = await coachFileAsDataUrl(file);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error('This image format could not be opened.'));
+    img.src = dataUrl;
+  });
+  const scale = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Image conversion is unavailable in this browser.');
+  ctx.fillStyle = '#ffffff'; // JPEG cannot retain transparency
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { base64: canvas.toDataURL('image/jpeg', 0.9).split(',')[1], mime: 'image/jpeg' };
+}
+
+function renderCoachImageDraft() {
+  const box = document.getElementById('chatImageDraft');
+  box.replaceChildren();
+  box.classList.toggle('has-images', coachImageDraft.length > 0);
+  coachImageDraft.forEach((a, i) => {
+    const card = document.createElement('div');
+    card.className = 'coach-attach-card';
+    const preview = document.createElement('img');
+    preview.alt = 'Attached picture preview';
+    preview.src = 'data:' + a.mime + ';base64,' + a.base64;
+    const title = document.createElement('span');
+    title.className = 'coach-filename';
+    title.textContent = a.name;
+    const remove = document.createElement('button');
+    remove.className = 'say sm';
+    remove.type = 'button';
+    remove.title = 'Remove attached picture';
+    remove.textContent = '✕';
+    remove.disabled = chatBusy;
+    remove.onclick = () => { coachImageDraft.splice(i, 1); renderCoachImageDraft(); };
+    card.append(preview, title, remove);
+    box.appendChild(card);
+  });
+}
+
+function coachAddDraftAttachment(attachment) {
+  if (coachImageDraft.length >= COACH_MAX_IMAGES) {
+    showToast('Attach up to 3 pictures per question.');
+    return false;
+  }
+  coachImageDraft.push(attachment);
+  renderCoachImageDraft();
+  showToast('Picture ready — type your question or press Send.');
+  return true;
+}
+
+async function coachAddFiles(files, origin) {
+  if (chatBusy || coachImageLoading) return;
+  coachImageLoading = true;
+  document.getElementById('coachUploadImageBtn').disabled = true;
+  document.getElementById('coachReuseImageBtn').disabled = true;
+  try {
+    for (const file of Array.from(files || [])) {
+      if (coachImageDraft.length >= COACH_MAX_IMAGES) { showToast('Maximum 3 pictures per question.'); break; }
+      const data = await coachOptimizeImage(file);
+      coachAddDraftAttachment({ id: coachImageId(), kind: 'coach', name: file.name || 'Pasted picture.jpg',
+        mime: data.mime, base64: data.base64, origin: origin || 'device',
+        classCode: activeClassCode, studentId: getStudentId() });
+    }
+  } catch (err) { showToast('Could not attach picture: ' + err.message); }
+  finally {
+    coachImageLoading = false;
+    document.getElementById('coachUploadImageBtn').disabled = chatBusy;
+    document.getElementById('coachReuseImageBtn').disabled = chatBusy;
+  }
+}
+
+document.getElementById('coachUploadImageBtn').addEventListener('click', () =>
+  document.getElementById('coachImageFileInput').click());
+document.getElementById('coachImageFileInput').addEventListener('change', e => {
+  coachAddFiles(e.target.files, 'device');
+  e.target.value = '';
+});
+document.getElementById('chatInput').addEventListener('paste', e => {
+  const pictures = Array.from(e.clipboardData?.items || [])
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile()).filter(Boolean);
+  if (!pictures.length) return; // Normal text paste remains unchanged.
+  e.preventDefault();
+  coachAddFiles(pictures, 'paste');
+});
+
+function renderCoachAttachmentLinks(attachments) {
+  if (!Array.isArray(attachments) || !attachments.length) return '';
+  return '<div>' + attachments.map(a => {
+    const attrs = a.kind === 'intake'
+      ? `data-open-source="${escSourceAttr(a.lectureClientId || '')}" data-source-name="${escSourceAttr(a.name || '')}"`
+      : `data-open-coach-image="${escSourceAttr(a.id || '')}" data-coach-image-name="${escSourceAttr(a.name || '')}" data-coach-image-path="${escSourceAttr(a.path || '')}" data-coach-image-mime="${escSourceAttr(a.mime || '')}"`;
+    return `<button type="button" class="coach-attachment-pill" ${attrs}>📷 ${escText(a.name || 'Picture')}</button>`;
+  }).join('') + '</div>';
+}
+
+async function listCoachIntakeImages() {
+  const rows = await idbGetAll('lectures');
+  const local = await idbGetAll('lectureFiles');
+  const own = rows.filter(r => isMyRecord(r) && r.classCode === activeClassCode && r.studyPayload);
+  const results = [];
+  for (const rec of own) {
+    let l;
+    try { l = JSON.parse(rec.studyPayload); } catch (e) { continue; }
+    const localFiles = local.filter(f => f.lectureClientId === rec.clientId && /image\//i.test(f.mime || ''));
+    const meta = new Map((l.libFiles || []).map(x => [x.name, x]));
+    const names = new Set([
+      ...localFiles.map(f => f.name),
+      ...(l.libFiles || []).filter(f => f.kind === 'photo' || /^image\//i.test(f.mime || '')).map(f => f.name),
+      ...((l.coverage && l.coverage.files) || []).filter(f => f.kind === 'photo').map(f => f.label)
+    ]);
+    for (const name of names) {
+      const cached = localFiles.find(f => f.name === name);
+      const lib = meta.get(name);
+      results.push({
+        name, lectureClientId: rec.clientId, lectureId: l.id, classCode: rec.classCode,
+        studentId: rec.studentId || getStudentId(), lectureTitle: l.t || rec.topicLabel || 'Lecture',
+        mime: (cached && cached.mime) || (lib && lib.mime) || 'image/jpeg',
+        path: lib && lib.path,
+        cachedBase64: cached && cached.base64
+      });
+    }
+  }
+  return results.slice().reverse().slice(0, 120);
+}
+
+async function coachOpenIntakePicker() {
+  const dlg = document.getElementById('coachImagePickerDlg');
+  const box = document.getElementById('coachImagePickerBody');
+  box.textContent = 'Loading saved Intake pictures…';
+  dlg.showModal();
+  try {
+    coachGalleryEntries = await listCoachIntakeImages();
+    if (!dlg.open) return;
+    box.replaceChildren();
+    if (!coachGalleryEntries.length) {
+      box.textContent = 'No saved Intake pictures were found for this class. Add a photo in Intake and generate a lecture first, or use Add picture.';
+      return;
+    }
+    coachGalleryEntries.forEach((f, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'coach-gallery-item';
+      const desc = document.createElement('span');
+      const title = document.createElement('div'); title.className = 'coach-gallery-title'; title.textContent = '📷 ' + f.name;
+      const sub = document.createElement('div'); sub.className = 'coach-gallery-detail';
+      sub.textContent = f.lectureTitle + (f.cachedBase64 ? ' · On this device' : ' · From SharePoint');
+      desc.append(title, sub);
+      b.append(desc);
+      const add = document.createElement('span'); add.textContent = '+ Attach'; add.style.whiteSpace = 'nowrap';
+      b.append(add);
+      b.addEventListener('click', () => coachAttachIntakeImage(i));
+      box.append(b);
+    });
+  } catch (err) { box.textContent = 'Could not load Intake pictures: ' + err.message; }
+}
+
+async function coachAttachIntakeImage(index) {
+  const entry = coachGalleryEntries[index];
+  if (!entry || coachImageDraft.length >= COACH_MAX_IMAGES || coachImageLoading) return;
+  const box = document.getElementById('coachImagePickerBody');
+  coachImageLoading = true;
+  const oldText = box.textContent;
+  box.textContent = 'Opening the original picture…';
+  try {
+    let base64 = entry.cachedBase64;
+    let mime = entry.mime || 'image/jpeg';
+    if (!base64) {
+      const path = entry.path || [entry.studentId, entry.classCode, 'lectures', entry.lectureId,
+        entry.name.replace(/[\\/]/g, '_')].join('/');
+      const blob = await downloadFromLibrary(path, await getMsalToken());
+      if (!blob) throw new Error('Picture not found in Student_Library.');
+      mime = blob.type || mime;
+      base64 = await blobToBase64(blob);
+    }
+    if (!mime.startsWith('image/')) throw new Error('This original file is not an image.');
+    coachAddDraftAttachment({
+      id: coachImageId(), kind: 'intake', name: entry.name, mime, base64,
+      lectureClientId: entry.lectureClientId, classCode: entry.classCode, studentId: entry.studentId
+    });
+    document.getElementById('coachImagePickerDlg').close();
+    document.getElementById('chatInput').focus();
+  } catch (err) {
+    box.textContent = 'Could not attach picture: ' + err.message;
+    console.warn('Intake picture attach:', err.message);
+  } finally { coachImageLoading = false; }
+}
+
+document.getElementById('coachReuseImageBtn').addEventListener('click', coachOpenIntakePicker);
+document.getElementById('coachImagePickerClose').addEventListener('click', () =>
+  document.getElementById('coachImagePickerDlg').close());
+
+async function coachSaveAttachmentRefs(attachments) {
+  const refs = [];
+  for (const a of attachments) {
+    if (a.kind === 'intake') {
+      refs.push({ kind: 'intake', name: a.name, lectureClientId: a.lectureClientId });
+    } else {
+      const path = [a.studentId || getStudentId(), a.classCode || activeClassCode,
+        'coach-images', a.id + '.jpg'].join('/');
+      const rec = { id: a.id, studentId: a.studentId || getStudentId(), classCode: a.classCode || activeClassCode,
+        name: a.name, mime: a.mime, base64: a.base64, path, status: 'pending' };
+      await idbPut('coachImages', rec);
+      refs.push({ kind: 'coach', id: a.id, name: a.name, mime: a.mime, path });
+    }
+  }
+  return refs;
+}
+
+// Existing SharePoint Sync uploads pending pasted images, not enormous chat payloads.
+async function retryPendingCoachImages(token) {
+  const pics = await idbGetAll('coachImages');
+  let success = 0, failed = 0;
+  for (const p of pics.filter(p => p.studentId === getStudentId() && p.status === 'pending')) {
+    if (!p.base64 || !p.path) continue;
+    try {
+      await uploadToLibrary(p.path, coachImageBase64ToBlob(p.base64, p.mime), token);
+      p.status = 'uploaded';
+      p.uploadedAt = new Date().toISOString();
+      await idbPut('coachImages', p);
+      success++;
+    } catch (err) {
+      failed++;
+      console.warn('Coach image upload pending:', p.id, err.message);
+    }
+  }
+  if (success) showToast(`📷 ${success} Coach picture(s) uploaded to SharePoint.`);
+  if (failed) showToast(`📷 ${failed} Coach picture(s) remain saved only on this device.`);
+}
+
+async function openCoachChatImage(id, name, path, mime) {
+  const dlg = document.getElementById('sourceViewerDlg');
+  const body = document.getElementById('sourceViewerBody');
+  const openBtn = document.getElementById('sourceViewerNewTab');
+  const request = ++sourceViewerRequest;
+  document.getElementById('sourceViewerTitle').textContent = '📷 ' + name;
+  body.textContent = 'Loading original Coach picture…';
+  openBtn.disabled = true;
+  openBtn.onclick = null;
+  openBtn.textContent = '↗ Open in window';
+  if (!dlg.open) { placeSourceViewer(); dlg.show(); }
+  if (dlg.classList.contains('source-minimized')) toggleSourceViewerMinimize();
+  try {
+    const saved = (await idbGetAll('coachImages')).find(p => p.id === id && p.studentId === getStudentId());
+    let blob;
+    if (saved && saved.base64) blob = coachImageBase64ToBlob(saved.base64, saved.mime);
+    else if (path && path.startsWith(getStudentId() + '/')) blob = await downloadFromLibrary(path, await getMsalToken());
+    if (!blob) throw new Error('Picture is unavailable here. Sync from the original device to upload it first.');
+    if (request === sourceViewerRequest && dlg.open) displaySourceBlob(blob, name, mime || blob.type);
+  } catch (err) {
+    if (request === sourceViewerRequest && dlg.open) body.textContent = 'Could not open picture: ' + err.message;
+  }
+}
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-open-coach-image]');
+  if (btn) openCoachChatImage(btn.dataset.openCoachImage, btn.dataset.coachImageName,
+    btn.dataset.coachImagePath, btn.dataset.coachImageMime);
+});
+
 async function sendChatMessage(query, isRetry = false) {
   if (chatBusy) return;
   const text = (query || document.getElementById('chatInput').value).trim();
