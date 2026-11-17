@@ -4638,6 +4638,7 @@ const AUDIO_EXT = /\.(webm|mp3|m4a|wav|ogg|aac|mp4|flac)$/i;
 // Source filenames are SharePoint path keys within a lecture. Preserve the first
 // name and suffix collisions instead of replacing earlier uploaded images/PDFs.
 const intakePendingNames = new Set();
+let intakeFileOrder = 0;
 
 function intakeCurrentAddTarget() {
   if (!sameDayChoice || sameDayChoice === 'new') return null;
@@ -4685,7 +4686,10 @@ function releaseIntakeFilename(name) { intakePendingNames.delete(String(name).to
 function finalizeIntakeNames(files, targetLecture) {
   const taken = intakeExistingFileNames(targetLecture);
   let renamed = 0;
-  for (const f of files) {
+  // FileReader/Canvas completion order can differ from the student's selection order.
+  // Assign the unsuffixed filename to whichever file was selected first.
+  const ordered = files.slice().sort((a, b) => (a.intakeOrder || 0) - (b.intakeOrder || 0));
+  for (const f of ordered) {
     const unique = uniqueIntakeFilename(f.originalName || f.name, taken);
     if (f.name !== unique) { f.name = unique; renamed++; }
     taken.add(unique.toLowerCase());
@@ -4718,6 +4722,7 @@ function handleStagedFile(file) {
   // the same filename cannot claim one another's SharePoint/library path.
   const stagedName = (isPdf || isImg) ? reserveIntakeFilename(file.name) : file.name;
   const stagedId = 'f_' + Date.now() + Math.random().toString(36).slice(2, 8);
+  const intakeOrder = ++intakeFileOrder;
   const finishName = () => releaseIntakeFilename(stagedName);
   const intakeToast = prefix => showToast(stagedName === file.name
     ? `${prefix}: ${file.name}`
@@ -4744,7 +4749,7 @@ function handleStagedFile(file) {
     const reader = new FileReader();
     reader.onload = ev => {
       stagedFiles.push({
-        id: stagedId, name: stagedName, originalName: file.name,
+        id: stagedId, name: stagedName, originalName: file.name, intakeOrder,
         type: 'pdf', mime: file.type || 'application/pdf',
         base64: String(ev.target.result).split(',')[1]
       });
@@ -4778,7 +4783,7 @@ function handleStagedFile(file) {
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
 
           stagedFiles.push({
-            id: stagedId, name: stagedName, originalName: file.name,
+            id: stagedId, name: stagedName, originalName: file.name, intakeOrder,
             type: 'image', mime: 'image/jpeg', base64: compressedBase64,
             size: Math.round(compressedBase64.length * 0.75)
           });
