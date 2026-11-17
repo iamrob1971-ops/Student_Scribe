@@ -6183,6 +6183,11 @@ document.addEventListener('click', (e) => {
 });
 
 function loadSubjectChat() {
+  // Do not accidentally send an image attached under another class/student.
+  if (coachImageDraft.some(a => a.studentId !== getStudentId() || a.classCode !== activeClassCode)) {
+    coachImageDraft = [];
+    renderCoachImageDraft();
+  }
   updateToneButton();
   const c = CLASSES.find(x => x.code === activeClassCode);
   const targetKey = getActiveChatTargetKey();
@@ -6637,13 +6642,13 @@ function renderCoachAttachmentLinks(attachments) {
 
 async function listCoachIntakeImages() {
   const rows = await idbGetAll('lectures');
-  const local = await idbGetAll('lectureFiles');
   const own = rows.filter(r => isMyRecord(r) && r.classCode === activeClassCode && r.studyPayload);
   const results = [];
   for (const rec of own) {
     let l;
     try { l = JSON.parse(rec.studyPayload); } catch (e) { continue; }
-    const localFiles = local.filter(f => f.lectureClientId === rec.clientId && /image\//i.test(f.mime || ''));
+    const localFiles = (await idbGetByIndex('lectureFiles', 'byLecture', rec.clientId))
+      .filter(f => /image\//i.test(f.mime || ''));
     const meta = new Map((l.libFiles || []).map(x => [x.name, x]));
     const names = new Set([
       ...localFiles.map(f => f.name),
@@ -6715,8 +6720,12 @@ async function coachAttachIntakeImage(index) {
       base64 = await blobToBase64(blob);
     }
     if (!mime.startsWith('image/')) throw new Error('This original file is not an image.');
+    // Use the same image-size budget as pasted screenshots, without uploading
+    // a second copy of the original Intake file to SharePoint.
+    const cleaned = await coachOptimizeImage(new File([coachImageBase64ToBlob(base64, mime)],
+      entry.name, { type: mime }));
     coachAddDraftAttachment({
-      id: coachImageId(), kind: 'intake', name: entry.name, mime, base64,
+      id: coachImageId(), kind: 'intake', name: entry.name, mime: cleaned.mime, base64: cleaned.base64,
       lectureClientId: entry.lectureClientId, classCode: entry.classCode, studentId: entry.studentId
     });
     document.getElementById('coachImagePickerDlg').close();
@@ -6887,9 +6896,12 @@ async function sendChatMessage(query, isRetry = false, retryAttachments = null) 
       model: result.modelUsed, ms: Date.now() - t0, light: broad || undefined,
       ...(attachmentRefs.length ? { attachments: attachmentRefs } : {})
     });
-    if (attachmentRefs.length && !isRetry) {
-      const bubble = [...feed.querySelectorAll('.msg.me')].at(-1);
-      if (bubble) bubble.insertAdjacentHTML('beforeend', renderCoachAttachmentLinks(attachmentRefs));
+    if (attachmentRefs.length) {
+      // On retry the earlier question bubble is still present, so link it too.
+      const bubbles = [...feed.querySelectorAll('.msg.me')];
+      const bubble = bubbles[bubbles.length - 1];
+      if (bubble && !bubble.querySelector('[data-open-coach-image], [data-open-source]'))
+        bubble.insertAdjacentHTML('beforeend', renderCoachAttachmentLinks(attachmentRefs));
     }
     coachImageDraft = [];
     renderCoachImageDraft();
