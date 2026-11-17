@@ -98,6 +98,24 @@ main { padding: 4px 18px 140px; flex: 1; }
 .coverage-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--sel); border-radius: 12px; font-size: 12.5px; font-weight: 600; }
 .coverage-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--card); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
 .coverage-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+
+/* Original source files: visible in Study Guide and Practice Drill */
+.source-materials { margin-bottom: 14px; }
+.source-materials h3 { margin: 0 0 9px; font-size: 16px; }
+.source-file-list { display: grid; gap: 7px; }
+.source-file-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+.source-file-name { flex: 1 1 170px; overflow-wrap: anywhere; font-size: 13px; }
+.source-file-status { font-size: 11px; color: var(--mut); }
+.quiz-source-list { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; margin: 8px 0 12px; color: var(--mut); font-size: 12px; }
+dialog.source-viewer-dlg { width: min(1100px, 98vw); max-height: 96vh; }
+.source-viewer-dlg .dlg-head { gap: 10px; flex-wrap: wrap; }
+.source-viewer-dlg .dlg-head h3 { overflow-wrap: anywhere; font-size: 16px; }
+.source-viewer-body { height: min(74vh, 830px); overflow: auto; display: grid; place-items: center; padding: 8px; background: var(--bg); }
+.source-viewer-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+.source-viewer-body img { display: block; max-width: 100%; height: auto; object-fit: contain; }
+.source-viewer-body pre { text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; justify-self: stretch; }
+.source-viewer-actions { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 600px) { .source-viewer-body { height: 66vh; } .source-viewer-dlg .dlg-head { padding: 12px; } }
 /* Practice drill: question left, "ask about this" panel right on wide screens */
 @media (min-width: 1020px) { main.two #s-quiz { grid-column: 1 / -1; } }
 .quiz-layout { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
@@ -897,6 +915,17 @@ dialog::backdrop { background: rgba(30,30,30,.55); }
   </div>
 </dialog>
  
+<dialog class="cfg-dlg source-viewer-dlg" id="sourceViewerDlg" aria-labelledby="sourceViewerTitle">
+  <div class="dlg-head">
+    <h3 id="sourceViewerTitle" style="margin:0;color:var(--c)">📎 Original source</h3>
+    <div class="source-viewer-actions">
+      <button class="say sm" id="sourceViewerNewTab" type="button" disabled>↗ Open in new tab</button>
+      <button class="say sm" id="sourceViewerClose" type="button">✕ Close</button>
+    </div>
+  </div>
+  <div id="sourceViewerBody" class="source-viewer-body" role="region" aria-label="Source document preview"></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
  
 <script>
@@ -2505,31 +2534,68 @@ function getSourceBadgeHtml(src) {
 const SOURCE_LABELS = { audio: '🎙️ Audio', pdf: '📄 PDF', photo: '📷 Photo', notes: '✍️ Notes' };
 
 // Coverage compares what was attached with what the guide's items are actually tagged with
-function renderCoverageBar(l) {
-  const cov = l.coverage;
-  if (!cov) return '';
-  let h = `<div class="coverage-bar"><span>📥 Sources:</span>`;
-  if (Array.isArray(cov.files) && cov.files.length) {
-    cov.files.forEach(f => {
-      const state = f.used ? '✔' : f.covered ? '✔ covered by another source' : '⚠️ not used';
-      const rm = l.clientId && !l.isDemo ? ` <button class="say sm" data-remove-src="${escText(l.clientId)}" data-src-label="${escText(f.label)}" title="Remove this source and rebuild" style="padding:0 5px;font-size:11px">✕</button>` : '';
-      h += `<span class="coverage-chip ${f.used || f.covered ? '' : 'coverage-warn'}">${SOURCE_ICONS[f.kind] || '📎'} ${escText(f.label)} ${state}${rm}</span>`;
-    });
-    if (l.clientId && !l.isDemo) h += `<button class="say sm" data-add-correction="${escText(l.clientId)}">✎ Add correction</button>`;
-  } else (cov.expected || []).forEach(src => {
-    const ok = (cov.tagged || []).includes(src);
-    h += `<span class="coverage-chip ${ok ? '' : 'coverage-warn'}">${SOURCE_LABELS[src] || escText(src)} ${ok ? '✔' : '⚠️ not used'}</span>`;
+function escSourceAttr(v) {
+  return escText(v).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function isViewableSourceKind(kind) {
+  return kind === 'pdf' || kind === 'photo' || kind === 'guide';
+}
+
+function getLectureSourceRows(l) {
+  const rows = [];
+  const seen = new Set();
+  ((l.coverage && l.coverage.files) || []).forEach(f => {
+    const name = String(f.label || '').trim();
+    if (!name) return;
+    seen.add(name.toLowerCase());
+    rows.push({ id: f.id || '', name, kind: f.kind || '', used: f.used, covered: f.covered });
   });
-  if (cov.missingSections && cov.missingSections.length) {
-    h += `<span class="coverage-chip coverage-warn">⚠️ No notes for: ${escText(cov.missingSections.join(', '))}</span>`;
+  (l.libFiles || []).forEach(f => {
+    const name = String(f.name || '').trim();
+    if (!name || seen.has(name.toLowerCase())) return;
+    seen.add(name.toLowerCase());
+    rows.push({ id: '', name, kind: f.kind || '', used: null, covered: null });
+  });
+  return rows;
+}
+
+function sourceOpenButton(l, f, withName = false) {
+  if (!l || !l.clientId || l.isDemo || !isViewableSourceKind(f.kind)) return '';
+  return `<button type="button" class="say sm" data-open-source="${escSourceAttr(l.clientId)}" data-source-name="${escSourceAttr(f.name)}" title="View original source">👁 ${withName ? escText(f.name) : 'View'}</button>`;
+}
+
+// Includes filenames from the lecture's source coverage and original-file manifest.
+function renderCoverageBar(l) {
+  const rows = getLectureSourceRows(l);
+  const cov = l.coverage;
+  if (!rows.length && !cov) return '';
+  let h = '<div class="card source-materials"><h3>📥 Original Source Materials</h3><div class="source-file-list">';
+  rows.forEach(f => {
+    const status = f.used === true ? 'Used in study guide' : f.covered === true ? 'Covered by another source'
+      : f.used === false ? 'Not used in generated guide' : '';
+    const canRemove = l.clientId && !l.isDemo;
+    const remove = canRemove ? `<button class="say sm" data-remove-src="${escSourceAttr(l.clientId)}" data-src-label="${escSourceAttr(f.name)}" title="Remove source and rebuild">✕</button>` : '';
+    h += `<div class="source-file-row"><span>${SOURCE_ICONS[f.kind] || '📎'}</span><span class="source-file-name"><strong>${escText(f.name)}</strong>${status ? `<span class="source-file-status"> · ${escText(status)}</span>` : ''}</span>${sourceOpenButton(l, f)}${remove}</div>`;
+  });
+  h += '</div>';
+  if (cov && Array.isArray(cov.files) && cov.files.length && l.clientId && !l.isDemo) {
+    h += `<button class="say sm" data-add-correction="${escSourceAttr(l.clientId)}" style="margin-top:9px">✎ Add correction</button>`;
   }
-  if (cov.failedSlices) {
-    h += `<span class="coverage-chip coverage-warn">⚠️ ${cov.failedSlices} audio slice(s) could not be transcribed</span>`;
-  }
-  if (cov.gaps) {
-    h += `<span class="coverage-chip coverage-warn">⚠️ ${cov.gaps} possible gap(s) in the audio transcript</span>`;
-  }
-  return h + `</div>`;
+  if (cov && cov.missingSections && cov.missingSections.length) h += `<p class="source-file-status">⚠️ No notes for: ${escText(cov.missingSections.join(', '))}</p>`;
+  if (cov && cov.failedSlices) h += `<p class="source-file-status">⚠️ ${cov.failedSlices} audio segment(s) could not be transcribed</p>`;
+  if (cov && cov.gaps) h += `<p class="source-file-status">⚠️ ${cov.gaps} possible audio gap(s)</p>`;
+  return h + '</div>';
+}
+
+function renderQuizSourceButtons(cur) {
+  const l = cur.parentLecture;
+  if (!l) return '';
+  const files = getLectureSourceRows(l).filter(f => isViewableSourceKind(f.kind));
+  if (!files.length) return '';
+  const matching = files.find(f => f.id && f.id === cur.sourceId);
+  const ordered = matching ? [matching, ...files.filter(f => f !== matching)] : files;
+  return `<div class="quiz-source-list"><span>📎 Source files:</span>${ordered.map(f => sourceOpenButton(l, f, true)).join('')}</div>`;
 }
 
 function renderStudyGuide() {
@@ -2543,6 +2609,7 @@ function renderStudyGuide() {
  
   let html = '';
   selected.forEach((l, idx) => {
+    html += renderCoverageBar(l);
     const conceptsArray = l.concepts || [{ bold_stem: l.bold_stem, text: l.c }];
  
    // WITH:
@@ -2832,6 +2899,7 @@ function renderQuiz() {
         <div class="progress-bar"><i style="width:${((quizIndex + (answered ? 1 : 0)) / set.length) * 100}%"></i></div>
         <div class="card">
           <h3 style="font-size:16px"><span id="quizQText">${applyBionic(escText(cur.q))}</span> <button class="say btn-speak" data-target="quizQText">🔊</button></h3>
+          ${renderQuizSourceButtons(cur)}
           ${cur.options.map((opt, idx) => {
             let cls = '';
             if (answered && idx === cur.correct) cls = 'ok';
@@ -3902,44 +3970,194 @@ async function sgWriteMissing() {
   renderStudyGuideScreen();
 }
 
+/* Source file manifests are persisted before upload, and uploads can be retried
+   through the normal Sync button from the device holding the original files. */
+const lectureUploadTasks = new Map();
+
 async function uploadLectureFiles(l, docFiles, classCode) {
-  try {
-    const token = await getMsalToken();
-    const added = [];
-    for (const f of docFiles) {
-      const path = `${getStudentId()}/${classCode}/lectures/${l.id}/${f.name}`;
-      const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
-      await uploadToLibrary(path, new Blob([bytes], { type: f.mime }), token);
-      added.push({ name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'), mime: f.mime, path });
+  const incoming = docFiles.map(f => ({
+    name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
+    mime: f.mime, path: [getStudentId(), classCode, 'lectures', l.id, f.name.replace(/[\\/]/g, '_')].join('/'),
+    status: 'pending'
+  }));
+  l.libFiles = [...(l.libFiles || []).filter(x => !incoming.some(a => a.name === x.name)), ...incoming];
+  await persistLectureObj(l);
+
+  const task = (async () => {
+    let failed = 0;
+    try {
+      const token = await getMsalToken();
+      for (const f of docFiles) {
+        const item = incoming.find(x => x.name === f.name);
+        try {
+          const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+          await uploadToLibrary(item.path, new Blob([bytes], { type: f.mime }), token);
+          item.status = 'uploaded';
+          item.uploadedAt = new Date().toISOString();
+          delete item.error;
+        } catch (err) {
+          failed++;
+          item.status = 'pending';
+          item.error = String(err.message || err);
+          console.warn('Student_Library upload failed for', f.name, err);
+        }
+      }
+    } catch (err) {
+      failed = docFiles.length;
+      console.warn('Student_Library upload deferred:', err.message);
+    } finally {
+      await persistLectureObj(l);
+      if (failed) showToast(`${failed} original file(s) saved locally; use Sync on this device to retry the SharePoint upload.`);
+      if (document.getElementById('s-guide').classList.contains('on')) renderStudyGuide();
     }
-    l.libFiles = [...(l.libFiles || []).filter(x => !added.some(a => a.name === x.name)), ...added];
-    await persistLectureObj(l);
-  } catch (e) {
-    console.warn('Library upload skipped:', e.message);
+  })();
+
+  lectureUploadTasks.set(l.clientId, task);
+  try { await task; }
+  finally { if (lectureUploadTasks.get(l.clientId) === task) lectureUploadTasks.delete(l.clientId); }
+}
+
+// On Sync, retry only files known to have been saved locally but not uploaded.
+// Legacy manifests without a status are assumed to be already uploaded.
+async function retryPendingLectureFiles(token) {
+  await Promise.all([...lectureUploadTasks.values()].map(p => p.catch(() => {})));
+  let uploaded = 0, failed = 0;
+  const lectures = await idbGetAll('lectures');
+  for (const rec of lectures) {
+    if (!isMyRecord(rec) || !rec.studyPayload) continue;
+    const l = findLectureByClientId(rec.clientId) || JSON.parse(rec.studyPayload);
+    const pending = (l.libFiles || []).filter(f => f.status === 'pending');
+    if (!pending.length) continue;
+    const local = await idbGetByIndex('lectureFiles', 'byLecture', rec.clientId);
+    for (const meta of pending) {
+      const f = local.find(x => x.name === meta.name && x.base64);
+      if (!f) { failed++; continue; }
+      try {
+        const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+        await uploadToLibrary(meta.path, new Blob([bytes], { type: meta.mime || f.mime }), token);
+        meta.status = 'uploaded';
+        meta.uploadedAt = new Date().toISOString();
+        delete meta.error;
+        uploaded++;
+      } catch (err) {
+        meta.error = String(err.message || err);
+        failed++;
+        console.warn('Retry source upload failed:', meta.name, err);
+      }
+    }
+    rec.studyPayload = JSON.stringify(l);
+    rec.isDirty = true;
+    await idbPut('lectures', rec);
   }
+  if (uploaded) showToast(`📎 ${uploaded} original file(s) uploaded to Student_Library.`);
+  if (failed) showToast(`📎 ${failed} original file(s) still need upload from their original device.`);
 }
 
 async function sgOpenOriginal() {
   const { l, g } = sgFind();
-  const files = await idbGetByIndex('lectureFiles', 'byLecture', l.clientId).catch(() => []);
-  let f = files.find(x => x.name === g.name) || files.find(x => x.kind === 'guide');
-  let blob = null;
-  if (f) {
-    const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
-    blob = new Blob([bytes], { type: f.mime });
-  } else {
-    // not on this device: fetch it from Student_Library
-    const lf = (l.libFiles || []).find(x => x.name === g.name) || (l.libFiles || []).find(x => x.kind === 'guide');
-    if (!lf) { showToast('This worksheet was added before files were kept in Student_Library, or was typed in.'); return; }
-    showToast('Opening from Student_Library…');
-    try { const b = await downloadFromLibrary(lf.path, await getMsalToken()); if (b) blob = new Blob([b], { type: lf.mime || b.type }); } catch (e) {}
-    if (!blob) { showToast('Could not open it from Student_Library. Try Sync, then again.'); return; }
-  }
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, '_blank');
-  if (!w) showToast('Allow pop-ups to open the worksheet');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  if (l && g) await openSourceFile(l.clientId, g.name);
 }
+
+/* Original-file viewer shared by Study Guide, Teacher Guide and Practice Drill.
+   Use IndexedDB for this device, Student_Library for files on other devices. */
+let sourceViewerRequest = 0;
+let sourceViewerObjectUrl = null;
+
+function clearSourceViewerUrl() {
+  if (sourceViewerObjectUrl) URL.revokeObjectURL(sourceViewerObjectUrl);
+  sourceViewerObjectUrl = null;
+}
+
+function displaySourceBlob(blob, filename, mime) {
+  const body = document.getElementById('sourceViewerBody');
+  const btn = document.getElementById('sourceViewerNewTab');
+  clearSourceViewerUrl();
+  const type = mime || blob.type || '';
+  const name = String(filename || '').toLowerCase();
+  const finalBlob = type && blob.type !== type ? new Blob([blob], { type }) : blob;
+  sourceViewerObjectUrl = URL.createObjectURL(finalBlob);
+  body.replaceChildren();
+  if (type === 'application/pdf' || name.endsWith('.pdf')) {
+    const frame = document.createElement('iframe');
+    frame.title = filename;
+    frame.src = sourceViewerObjectUrl;
+    body.appendChild(frame);
+  } else if (type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(name)) {
+    const image = document.createElement('img');
+    image.alt = filename;
+    image.src = sourceViewerObjectUrl;
+    body.appendChild(image);
+  } else if (type.startsWith('text/') || /\.(txt|md|csv)$/i.test(name)) {
+    const pre = document.createElement('pre');
+    pre.textContent = 'Opening text…';
+    body.appendChild(pre);
+    finalBlob.text().then(t => { if (pre.isConnected) pre.textContent = t; });
+  } else {
+    const msg = document.createElement('p');
+    msg.textContent = 'This file cannot be previewed here. Use Open in new tab.';
+    body.appendChild(msg);
+  }
+  btn.disabled = false;
+  btn.onclick = () => {
+    // A separate URL keeps the external tab alive after this preview is closed.
+    const url = URL.createObjectURL(finalBlob);
+    const tab = window.open(url, '_blank');
+    if (tab) tab.opener = null;
+    else showToast('Allow pop-ups to open this source in a new tab.');
+    setTimeout(() => URL.revokeObjectURL(url), 15 * 60 * 1000);
+  };
+}
+
+async function openSourceFile(clientId, filename) {
+  const dlg = document.getElementById('sourceViewerDlg');
+  const body = document.getElementById('sourceViewerBody');
+  const openBtn = document.getElementById('sourceViewerNewTab');
+  const request = ++sourceViewerRequest;
+  openBtn.disabled = true;
+  openBtn.onclick = null;
+  document.getElementById('sourceViewerTitle').textContent = '📎 ' + filename;
+  body.textContent = 'Loading original source…';
+  if (!dlg.open) dlg.showModal();
+  try {
+    const l = findLectureByClientId(clientId);
+    if (!l) throw new Error('This lecture is not available on this device. Try Sync.');
+    const saved = await idbGetByIndex('lectureFiles', 'byLecture', clientId);
+    const local = saved.find(f => f.name === filename && f.base64);
+    let blob, mime = (local && local.mime) || '';
+    if (local) {
+      const bytes = Uint8Array.from(atob(local.base64), c => c.charCodeAt(0));
+      blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+    } else {
+      const lib = (l.libFiles || []).find(f => f.name === filename);
+      const record = (await idbGetAll('lectures')).find(r => r.clientId === clientId);
+      const classCode = (record && record.classCode) || activeClassCode;
+      const path = (lib && lib.path) ||
+        [l.studentId || getStudentId(), classCode, 'lectures', l.id, filename.replace(/[\\/]/g, '_')].join('/');
+      const token = await getMsalToken();
+      blob = await downloadFromLibrary(path, token);
+      mime = (lib && lib.mime) || '';
+      if (!blob) throw new Error('Original not found in Student_Library. It may have been added before originals were saved, or the upload may still be pending on the other device.');
+    }
+    if (request !== sourceViewerRequest || !dlg.open) return;
+    displaySourceBlob(blob, filename, mime);
+  } catch (err) {
+    if (request !== sourceViewerRequest || !dlg.open) return;
+    body.textContent = 'Could not open this source: ' + err.message;
+    console.warn('Source viewer:', err);
+  }
+}
+
+document.getElementById('sourceViewerClose').addEventListener('click', () => document.getElementById('sourceViewerDlg').close());
+document.getElementById('sourceViewerDlg').addEventListener('close', () => {
+  sourceViewerRequest++;
+  clearSourceViewerUrl();
+  document.getElementById('sourceViewerBody').replaceChildren();
+  document.getElementById('sourceViewerNewTab').disabled = true;
+});
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-open-source]');
+  if (btn) openSourceFile(btn.dataset.openSource, btn.dataset.sourceName);
+});
 
 function sgSuggestedPrintHtml(q) {
   if (q.sa) {
@@ -6934,6 +7152,17 @@ function mergeLectureRecs(localRec, remoteRec) {
   base.notesText = base.notesEntries.map(e => e.text).join('\n\n');
   base.studyGuides = mergeStudyGuides(L.studyGuides, R.studyGuides);
 
+  // Never lose original-file references when two devices edit the same lecture.
+  // A completed upload wins over a pending manifest for the same file.
+  const libraryFiles = new Map();
+  [...(R.libFiles || []), ...(L.libFiles || [])].forEach(f => {
+    const key = String(f.path || f.name || '').toLowerCase();
+    if (!key) return;
+    const old = libraryFiles.get(key);
+    if (!old || (f.status === 'uploaded' && old.status !== 'uploaded')) libraryFiles.set(key, f);
+  });
+  base.libFiles = [...libraryFiles.values()];
+
   const rec = { ...localRec };
   rec.studyPayload = JSON.stringify(base);
   rec.topicLabel = base.t; rec.topicIcon = base.i;
@@ -7093,6 +7322,9 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     try { const nb = await syncBooks(token); if (nb) showToast(`📚 ${nb} course book(s) from other devices`); renderChapterPicker(); }
     catch (bookErr) { console.warn('Book sync skipped:', bookErr.message); }
     await pullConfigFromSharePoint(siteId, token);
+
+    // Retry original source files before sending lecture metadata to SharePoint.
+    await retryPendingLectureFiles(token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
     showToast('Checking for changes from other devices…');
@@ -7900,13 +8132,21 @@ async function uploadToLibrary(path, blob, token, onProgress) {
   }
 }
 
+// Graph /content redirects and can fail browser CORS preflights with Authorization.
+// Fetch metadata first and then download from its short-lived preauthenticated URL.
 async function downloadFromLibrary(path, token) {
   const driveId = await getLibraryDrive(token);
-  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}:/content`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) return null;
-  return await r.blob();
+  const metaUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encPath(path)}?${new URLSearchParams({ '$select': 'id,name,@microsoft.graph.downloadUrl' })}`;
+  const response = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`SharePoint lookup failed (${response.status})`);
+  const item = await response.json();
+  const url = item['@microsoft.graph.downloadUrl'];
+  if (!url) throw new Error('SharePoint did not return a file download URL.');
+  const file = await fetch(url);
+  if (!file.ok) throw new Error(`SharePoint file download failed (${file.status})`);
+  return await file.blob();
 }
-
 async function uploadJsonToLibrary(path, obj, token) {
   await uploadToLibrary(path, new Blob([JSON.stringify(obj)], { type: 'application/json' }), token);
 }
