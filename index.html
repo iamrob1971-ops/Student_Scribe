@@ -3966,21 +3966,87 @@ async function sgWriteMissing() {
   renderStudyGuideScreen();
 }
 
+/* Source file manifests are persisted before upload, and uploads can be retried
+   through the normal Sync button from the device holding the original files. */
+const lectureUploadTasks = new Map();
+
 async function uploadLectureFiles(l, docFiles, classCode) {
-  try {
-    const token = await getMsalToken();
-    const added = [];
-    for (const f of docFiles) {
-      const path = `${getStudentId()}/${classCode}/lectures/${l.id}/${f.name}`;
-      const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
-      await uploadToLibrary(path, new Blob([bytes], { type: f.mime }), token);
-      added.push({ name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'), mime: f.mime, path });
+  const incoming = docFiles.map(f => ({
+    name: f.name, kind: f.role === 'guide' ? 'guide' : (f.type === 'pdf' ? 'pdf' : 'photo'),
+    mime: f.mime, path: [getStudentId(), classCode, 'lectures', l.id, f.name.replace(/[\\/]/g, '_')].join('/'),
+    status: 'pending'
+  }));
+  l.libFiles = [...(l.libFiles || []).filter(x => !incoming.some(a => a.name === x.name)), ...incoming];
+  await persistLectureObj(l);
+
+  const task = (async () => {
+    let failed = 0;
+    try {
+      const token = await getMsalToken();
+      for (const f of docFiles) {
+        const item = incoming.find(x => x.name === f.name);
+        try {
+          const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+          await uploadToLibrary(item.path, new Blob([bytes], { type: f.mime }), token);
+          item.status = 'uploaded';
+          item.uploadedAt = new Date().toISOString();
+          delete item.error;
+        } catch (err) {
+          failed++;
+          item.status = 'pending';
+          item.error = String(err.message || err);
+          console.warn('Student_Library upload failed for', f.name, err);
+        }
+      }
+    } catch (err) {
+      failed = docFiles.length;
+      console.warn('Student_Library upload deferred:', err.message);
+    } finally {
+      await persistLectureObj(l);
+      if (failed) showToast(`${failed} original file(s) saved locally; use Sync on this device to retry the SharePoint upload.`);
+      if (document.getElementById('s-guide').classList.contains('on')) renderStudyGuide();
     }
-    l.libFiles = [...(l.libFiles || []).filter(x => !added.some(a => a.name === x.name)), ...added];
-    await persistLectureObj(l);
-  } catch (e) {
-    console.warn('Library upload skipped:', e.message);
+  })();
+
+  lectureUploadTasks.set(l.clientId, task);
+  try { await task; }
+  finally { if (lectureUploadTasks.get(l.clientId) === task) lectureUploadTasks.delete(l.clientId); }
+}
+
+// On Sync, retry only files known to have been saved locally but not uploaded.
+// Legacy manifests without a status are assumed to be already uploaded.
+async function retryPendingLectureFiles(token) {
+  await Promise.all([...lectureUploadTasks.values()].map(p => p.catch(() => {})));
+  let uploaded = 0, failed = 0;
+  const lectures = await idbGetAll('lectures');
+  for (const rec of lectures) {
+    if (!isMyRecord(rec) || !rec.studyPayload) continue;
+    const l = findLectureByClientId(rec.clientId) || JSON.parse(rec.studyPayload);
+    const pending = (l.libFiles || []).filter(f => f.status === 'pending');
+    if (!pending.length) continue;
+    const local = await idbGetByIndex('lectureFiles', 'byLecture', rec.clientId);
+    for (const meta of pending) {
+      const f = local.find(x => x.name === meta.name && x.base64);
+      if (!f) { failed++; continue; }
+      try {
+        const bytes = Uint8Array.from(atob(f.base64), c => c.charCodeAt(0));
+        await uploadToLibrary(meta.path, new Blob([bytes], { type: meta.mime || f.mime }), token);
+        meta.status = 'uploaded';
+        meta.uploadedAt = new Date().toISOString();
+        delete meta.error;
+        uploaded++;
+      } catch (err) {
+        meta.error = String(err.message || err);
+        failed++;
+        console.warn('Retry source upload failed:', meta.name, err);
+      }
+    }
+    rec.studyPayload = JSON.stringify(l);
+    rec.isDirty = true;
+    await idbPut('lectures', rec);
   }
+  if (uploaded) showToast(`📎 ${uploaded} original file(s) uploaded to Student_Library.`);
+  if (failed) showToast(`📎 ${failed} original file(s) still need upload from their original device.`);
 }
 
 async function sgOpenOriginal() {
@@ -7241,6 +7307,9 @@ document.getElementById('spSyncBtn').addEventListener('click', async () => {
     try { const nb = await syncBooks(token); if (nb) showToast(`📚 ${nb} course book(s) from other devices`); renderChapterPicker(); }
     catch (bookErr) { console.warn('Book sync skipped:', bookErr.message); }
     await pullConfigFromSharePoint(siteId, token);
+
+    // Retry original source files before sending lecture metadata to SharePoint.
+    await retryPendingLectureFiles(token);
 
     // 0b. PULL FIRST: bring down lectures and chats changed on other devices, merge, then push
     showToast('Checking for changes from other devices…');
